@@ -96,32 +96,28 @@ def parse_property(
 
     python_type, nested_type, is_list, is_map = parse_cf_type(cf_type, primitive_type)
 
+    # Primitive type mapping (including Json)
+    primitive_type_map = {
+        "String": "str",
+        "Integer": "int",
+        "Long": "int",
+        "Double": "float",
+        "Boolean": "bool",
+        "Json": "dict[str, Any]",
+    }
+
     # Handle list item types
     if is_list and item_type:
-        if item_type in ("String", "Integer", "Long", "Double", "Boolean"):
-            type_map = {
-                "String": "str",
-                "Integer": "int",
-                "Long": "int",
-                "Double": "float",
-                "Boolean": "bool",
-            }
-            python_type = f"list[{type_map.get(item_type, 'Any')}]"
+        if item_type in primitive_type_map:
+            python_type = f"list[{primitive_type_map[item_type]}]"
         else:
             python_type = f"list[{item_type}]"
             nested_type = item_type
 
     # Handle map value types
     if is_map and item_type:
-        if item_type in ("String", "Integer", "Long", "Double", "Boolean"):
-            type_map = {
-                "String": "str",
-                "Integer": "int",
-                "Long": "int",
-                "Double": "float",
-                "Boolean": "bool",
-            }
-            python_type = f"dict[str, {type_map.get(item_type, 'Any')}]"
+        if item_type in primitive_type_map:
+            python_type = f"dict[str, {primitive_type_map[item_type]}]"
         else:
             python_type = f"dict[str, {item_type}]"
             nested_type = item_type

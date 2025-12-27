@@ -81,6 +81,22 @@ class PropertyType:
 
 
 @dataclass
+class Tag(PropertyType):
+    """
+    Standard AWS resource tag.
+
+    Most AWS resources support tagging via a list of Tag objects.
+    This is defined centrally to avoid generating 200+ identical copies.
+
+    Example:
+        >>> tags = [Tag(key="Environment", value="Production")]
+    """
+
+    key: str | None = None
+    value: str | None = None
+
+
+@dataclass
 class CloudFormationResource:
     """
     Base class for all CloudFormation resource types.

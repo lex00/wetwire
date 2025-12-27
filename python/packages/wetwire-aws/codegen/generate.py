@@ -73,9 +73,24 @@ def generate_file_header(
     service: str,
     cf_spec_version: str,
     generator_version: str,
+    import_tag: bool = True,
 ) -> str:
-    """Generate the file header with version info."""
+    """Generate the file header with version info.
+
+    Args:
+        service: Service name
+        cf_spec_version: CloudFormation spec version
+        generator_version: Generator version
+        import_tag: Whether to import Tag from base (False if service has a Tag resource)
+    """
     timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Build import line - only import Tag if no Tag resource exists in this service
+    if import_tag:
+        base_imports = "CloudFormationResource, PropertyType, Tag"
+    else:
+        base_imports = "CloudFormationResource, PropertyType"
+
     return f'''"""
 AWS {service.upper()} CloudFormation resources.
 
@@ -93,7 +108,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
-from wetwire_aws.base import CloudFormationResource, PropertyType
+from wetwire_aws.base import {base_imports}
 
 '''
 
@@ -106,13 +121,82 @@ def get_property_type_signature(nested: NestedTypeDef) -> str:
     return str(props)
 
 
-def generate_property_type(nested: NestedTypeDef) -> str:
-    """Generate a PropertyType class for a nested structure."""
+def get_unique_nested_name(
+    nested: NestedTypeDef,
+    duplicates: set[str],
+    resource_collisions: set[str],
+    enum_names: set[str] | None = None,
+) -> str:
+    """
+    Get a unique class name for a nested type.
+
+    Handles two cases:
+    1. Duplicate nested type names (same name, different structures)
+       -> Prefix with parent resource name: "LoggingConfiguration_FieldToMatch"
+    2. Nested type name collides with a Resource class name or reserved name
+       -> Add "Type" suffix: "SamplingRuleType"
+       -> If "Type" suffix also collides with enum, use "PropertyType" suffix
+
+    Args:
+        nested: The nested type definition
+        duplicates: Set of nested type names that appear multiple times
+        resource_collisions: Set of nested type names that match resource names
+        enum_names: Set of enum names to avoid collisions with
+
+    Returns:
+        Unique class name for the nested type
+    """
+    name = nested.name
+    enum_names = enum_names or set()
+
+    # Handle duplicates by prefixing with parent resource name
+    if name in duplicates:
+        # original_name = "AWS::WAFv2::LoggingConfiguration.FieldToMatch"
+        # Extract parent: "LoggingConfiguration"
+        if "." in nested.original_name:
+            parts = nested.original_name.split(".")
+            if len(parts) >= 2:
+                # Get the resource name part (before the last dot)
+                resource_part = parts[-2]  # e.g., "AWS::WAFv2::LoggingConfiguration"
+                parent = resource_part.split("::")[-1]  # e.g., "LoggingConfiguration"
+                name = f"{parent}_{name}"  # e.g., "LoggingConfiguration_FieldToMatch"
+
+    # Handle resource collisions by adding "Type" suffix
+    if name in resource_collisions or nested.name in resource_collisions:
+        new_name = f"{name}Type"
+        # If the "Type" suffix collides with an enum, use "PropertyType" instead
+        if new_name in enum_names:
+            name = f"{name}PropertyType"
+        else:
+            name = new_name
+
+    return name
+
+
+def generate_property_type(
+    nested: NestedTypeDef,
+    class_name: str | None = None,
+    name_mapping: dict[str, str] | None = None,
+    nested_type_names: set[str] | None = None,
+) -> str:
+    """Generate a PropertyType class for a nested structure.
+
+    Args:
+        nested: The nested type definition
+        class_name: Optional override for the class name
+        name_mapping: Optional mapping from short nested type names to unique names
+        nested_type_names: Set of all nested type names in this service
+    """
     lines = []
+    name_mapping = name_mapping or {}
+    nested_type_names = nested_type_names or set()
+
+    # Use provided class_name or default to nested.name
+    name = class_name if class_name else nested.name
 
     # Class definition
     lines.append("@dataclass")
-    lines.append(f"class {nested.name}(PropertyType):")
+    lines.append(f"class {name}(PropertyType):")
 
     # Skip URL-only docstrings to reduce file size
     # Documentation URLs can be derived from class name if needed
@@ -124,6 +208,16 @@ def generate_property_type(nested: NestedTypeDef) -> str:
     # Generate properties - all optional to avoid dataclass inheritance issues
     for prop in nested.properties:
         python_type = python_type_for_property(prop)
+
+        # Check if type is a nested type from this service - apply name mapping
+        if prop.nested_type and prop.nested_type in nested_type_names:
+            type_name = name_mapping.get(prop.nested_type, prop.nested_type)
+            if prop.is_list:
+                python_type = f"list[{type_name}]"
+            elif prop.is_map:
+                python_type = f"dict[str, {type_name}]"
+            else:
+                python_type = type_name
 
         # All fields are optional to avoid dataclass inheritance issues
         if python_type.startswith("list"):
@@ -191,9 +285,23 @@ def get_all_enums_for_service(
     return [(name, data) for name, data in sorted(all_enums.items())]
 
 
-def generate_resource_class(resource: ResourceDef, nested_types: set[str]) -> str:
-    """Generate a CloudFormationResource class."""
+def generate_resource_class(
+    resource: ResourceDef,
+    nested_types: set[str],
+    name_mapping: dict[str, str] | None = None,
+) -> str:
+    """Generate a CloudFormationResource class.
+
+    Args:
+        resource: The resource definition
+        nested_types: Set of original nested type names in this service
+        name_mapping: Optional mapping from original nested type names to unique names
+    """
+    # Field names reserved by CloudFormationResource base class (different types)
+    BASE_CLASS_FIELDS = {"update_policy", "creation_policy", "deletion_policy", "depends_on"}
+
     lines = []
+    name_mapping = name_mapping or {}
 
     # Class definition
     lines.append("@dataclass")
@@ -221,29 +329,36 @@ def generate_resource_class(resource: ResourceDef, nested_types: set[str]) -> st
     # Generate properties - all optional to avoid dataclass inheritance issues
     for prop in resource.properties:
         python_type = python_type_for_property(prop)
+        field_name = prop.name
+
+        # Rename fields that conflict with base class fields
+        if field_name in BASE_CLASS_FIELDS:
+            field_name = f"resource_{field_name}"
 
         # Check if type is a nested type from this service
         if prop.nested_type and prop.nested_type in nested_types:
+            # Use mapped name if available (handles duplicates and collisions)
+            type_name = name_mapping.get(prop.nested_type, prop.nested_type)
             if prop.is_list:
-                python_type = f"list[{prop.nested_type}]"
+                python_type = f"list[{type_name}]"
             elif prop.is_map:
-                python_type = f"dict[str, {prop.nested_type}]"
+                python_type = f"dict[str, {type_name}]"
             else:
-                python_type = prop.nested_type
+                python_type = type_name
 
         # All fields are optional to avoid dataclass inheritance issues
         if python_type.startswith("list"):
             lines.append(
-                f"    {prop.name}: {python_type} = field(default_factory=list)"
+                f"    {field_name}: {python_type} = field(default_factory=list)"
             )
         elif python_type.startswith("dict") and not python_type.startswith(
             "dict[str, Any]"
         ):
             lines.append(
-                f"    {prop.name}: {python_type} = field(default_factory=dict)"
+                f"    {field_name}: {python_type} = field(default_factory=dict)"
             )
         else:
-            lines.append(f"    {prop.name}: {python_type} | None = None")
+            lines.append(f"    {field_name}: {python_type} | None = None")
 
     # Generate attribute accessors if there are attributes
     if resource.attributes:
@@ -266,46 +381,141 @@ def generate_service_module(
     """Generate a complete service module."""
     lines = []
 
+    # Check if there's a Tag resource in this service (don't import Tag from base if so)
+    has_tag_resource = any(r.name == "Tag" for r in resources)
+
     # Header
-    lines.append(generate_file_header(service, cf_spec_version, GENERATOR_VERSION))
+    lines.append(generate_file_header(service, cf_spec_version, GENERATOR_VERSION, import_tag=not has_tag_resource))
 
     # Collect nested type names for this service
     nested_type_names = {n.name for n in nested_types}
 
+    # Detect name collisions
+    # 1. Duplicate nested type names (same name, different structures)
+    nested_name_counts: dict[str, int] = {}
+    for n in nested_types:
+        nested_name_counts[n.name] = nested_name_counts.get(n.name, 0) + 1
+    duplicates = {name for name, count in nested_name_counts.items() if count > 1}
+
+    # 2. Nested type names that collide with resource class names, imports, or enums
+    resource_names = {r.name for r in resources}
+    # Also include imported names that should never be shadowed
+    reserved_names = {"PropertyType", "Tag", "CloudFormationResource"}
+    # Get enum names to check for collisions
+    enum_names_set = {e[0] for e in service_enums} if service_enums else set()
+    resource_collisions = (nested_type_names & resource_names) | (nested_type_names & reserved_names) | (nested_type_names & enum_names_set)
+
+    # Build name mappings for property type resolution
+    # For duplicates, we need resource-specific mappings
+    # Map from (resource_name, nested_type_name) -> unique_class_name
+    nested_by_original: dict[str, NestedTypeDef] = {n.original_name: n for n in nested_types}
+
+    # For each resource, build a mapping of nested_type short name -> unique class name
+    # based on which nested types belong to that resource
+    resource_name_mappings: dict[str, dict[str, str]] = {}
+    for resource in resources:
+        resource_mapping: dict[str, str] = {}
+        for nested in nested_types:
+            # Check if this nested type belongs to this resource
+            # original_name format: "AWS::WAFv2::LoggingConfiguration.FieldToMatch"
+            if "." in nested.original_name:
+                parts = nested.original_name.split(".")
+                parent_resource = parts[-2].split("::")[-1]  # e.g., "LoggingConfiguration"
+                if parent_resource == resource.name:
+                    unique_name = get_unique_nested_name(nested, duplicates, resource_collisions, enum_names_set)
+                    resource_mapping[nested.name] = unique_name
+        resource_name_mappings[resource.name] = resource_mapping
+
+    # Also build a general mapping for non-duplicate types (used as fallback)
+    general_name_mapping: dict[str, str] = {}
+    for nested in nested_types:
+        if nested.name not in duplicates:
+            unique_name = get_unique_nested_name(nested, duplicates, resource_collisions, enum_names_set)
+            general_name_mapping[nested.name] = unique_name
+
     # Generate enum constants first (single blank line between)
+    # Reserved names that enums shouldn't shadow
+    reserved_enum_names = {"PropertyType", "Tag", "CloudFormationResource", "Any", "ClassVar"}
+    enum_names_set = {e[0] for e in service_enums} if service_enums else set()
+
     enum_names = []
     if service_enums:
         lines.append("# Constants")
         lines.append("# " + "=" * 60)
 
         for enum_name, enum_data in sorted(service_enums, key=lambda x: x[0]):
+            # Rename enums that conflict with imports, resources, or nested types
+            actual_name = enum_name
+            if enum_name in reserved_enum_names or enum_name in resource_names or enum_name in nested_type_names:
+                actual_name = f"{enum_name}Values"  # e.g., PropertyType -> PropertyTypeValues
             lines.append("")
-            lines.append(generate_enum_class(enum_name, enum_data))
-            enum_names.append(enum_name)
+            lines.append(generate_enum_class(actual_name, enum_data))
+            enum_names.append(actual_name)
         lines.append("")
 
-    # Generate nested types with deduplication
-    # Track signatures to detect duplicates
-    seen_signatures: dict[str, str] = {}  # signature -> first class name
-    aliases: list[tuple[str, str]] = []  # (alias_name, original_name)
+    # Build nested-type-specific name mappings (similar to resource mappings)
+    # Each nested type needs a mapping for its sibling types (from same parent)
+    nested_name_mappings: dict[str, dict[str, str]] = {}
+    for nested in nested_types:
+        # Extract parent from original_name: "AWS::WAFv2::RuleGroup.ByteMatchStatement"
+        if "." in nested.original_name:
+            parts = nested.original_name.split(".")
+            parent_resource = parts[-2].split("::")[-1]  # e.g., "RuleGroup"
+
+            # Build mapping for this nested type's parent
+            if parent_resource not in nested_name_mappings:
+                nested_mapping: dict[str, str] = {}
+                for other in nested_types:
+                    if "." in other.original_name:
+                        other_parts = other.original_name.split(".")
+                        other_parent = other_parts[-2].split("::")[-1]
+                        if other_parent == parent_resource:
+                            unique_name = get_unique_nested_name(other, duplicates, resource_collisions, enum_names_set)
+                            nested_mapping[other.name] = unique_name
+                nested_name_mappings[parent_resource] = nested_mapping
+
+    # Generate nested types with proper unique naming
+    # Track generated class names to create aliases for signature-identical types
+    seen_signatures: dict[str, str] = {}  # signature -> first generated class name
+    generated_names: set[str] = set()  # Track what we've generated
+    aliases: list[tuple[str, str]] = []  # (alias_name, target_name)
 
     if nested_types:
         lines.append("")
         lines.append("# Property Types")
         lines.append("# " + "=" * 60)
 
-        for nested in sorted(nested_types, key=lambda n: n.name):
+        for nested in sorted(nested_types, key=lambda n: n.original_name):
+            unique_name = get_unique_nested_name(nested, duplicates, resource_collisions, enum_names_set)
             sig = get_property_type_signature(nested)
-            if sig and sig in seen_signatures:
-                # Duplicate - create alias instead of full class
-                aliases.append((nested.name, seen_signatures[sig]))
-            else:
-                lines.append("")
-                lines.append(generate_property_type(nested))
-                if sig:
-                    seen_signatures[sig] = nested.name
 
-        # Generate aliases for duplicates
+            if unique_name in generated_names:
+                # Already generated this class (e.g., same unique name from same parent)
+                continue
+
+            if sig and sig in seen_signatures:
+                # Same signature as existing class - create alias
+                aliases.append((unique_name, seen_signatures[sig]))
+            else:
+                # Get the name mapping for this nested type's parent
+                parent_resource = ""
+                if "." in nested.original_name:
+                    parts = nested.original_name.split(".")
+                    parent_resource = parts[-2].split("::")[-1]
+
+                # Merge general and parent-specific mappings
+                combined_mapping = dict(general_name_mapping)
+                combined_mapping.update(nested_name_mappings.get(parent_resource, {}))
+
+                lines.append("")
+                lines.append(generate_property_type(
+                    nested, unique_name, combined_mapping, nested_type_names
+                ))
+                generated_names.add(unique_name)
+                if sig:
+                    seen_signatures[sig] = unique_name
+
+        # Generate aliases for signature-identical types
         if aliases:
             lines.append("")
             lines.append("")
@@ -320,8 +530,13 @@ def generate_service_module(
     lines.append("# " + "=" * 60)
 
     for resource in sorted(resources, key=lambda r: r.name):
+        # Merge resource-specific mapping with general mapping
+        # Resource-specific takes precedence for duplicates
+        combined_mapping = dict(general_name_mapping)
+        combined_mapping.update(resource_name_mappings.get(resource.name, {}))
+
         lines.append("")
-        lines.append(generate_resource_class(resource, nested_type_names))
+        lines.append(generate_resource_class(resource, nested_type_names, combined_mapping))
     lines.append("")
 
     # Dynamic __all__ generation

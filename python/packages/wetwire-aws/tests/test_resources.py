@@ -163,18 +163,18 @@ class TestDynamoDBTable:
     def test_table_creation(self):
         """DynamoDB Table can be instantiated."""
         from wetwire_aws.resources.dynamodb import (
-            AttributeDefinition,
-            KeySchema,
+            Table_AttributeDefinition,
+            Table_KeySchema,
             Table,
         )
 
         table = Table(
             table_name="my-table",
             attribute_definitions=[
-                AttributeDefinition(attribute_name="pk", attribute_type="S"),
+                Table_AttributeDefinition(attribute_name="pk", attribute_type="S"),
             ],
             key_schema=[
-                KeySchema(attribute_name="pk", key_type="HASH"),
+                Table_KeySchema(attribute_name="pk", key_type="HASH"),
             ],
             billing_mode="PAY_PER_REQUEST",
         )
