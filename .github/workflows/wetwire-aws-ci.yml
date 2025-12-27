@@ -121,15 +121,20 @@ jobs:
       - name: Install hatch
         run: pip install hatch
 
-      - name: Install wetwire dependency
+      - name: Install wetwire dependency with codegen extras
         working-directory: python/packages/wetwire
-        run: pip install -e .
+        run: pip install -e ".[codegen]"
 
-      - name: Build from scratch
+      - name: Install build dependencies
+        run: pip install jinja2 botocore
+
+      - name: Build from scratch (no isolation)
         run: |
           # Ensure no pre-existing resources
           rm -rf src/wetwire_aws/resources specs parsed.json
-          hatch build
+          # Use pip build with --no-isolation since wetwire isn't on PyPI yet
+          pip install build
+          python -m build --no-isolation
 
       - name: Verify wheel contents
         run: |
