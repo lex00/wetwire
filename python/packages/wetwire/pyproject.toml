@@ -34,6 +34,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+codegen = [
+    "requests>=2.28",
+    "black>=23.12",
+]
 dev = [
     "mypy>=1.8",
     "pyright>=1.1",

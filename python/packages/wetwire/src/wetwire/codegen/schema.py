@@ -1,8 +1,9 @@
 """
-Intermediate format definitions.
+Intermediate format definitions for code generation.
 
 These dataclasses represent the normalized schema used between
-the parse and generate stages.
+the parse and generate stages. They are cloud-agnostic and can
+be used for any infrastructure provider (AWS, GCP, Azure, etc.).
 """
 
 from dataclasses import dataclass, field
@@ -14,7 +15,7 @@ class PropertyDef:
     """Definition of a resource property."""
 
     name: str  # Python name (snake_case)
-    original_name: str  # CloudFormation name (PascalCase)
+    original_name: str  # Provider-specific name (e.g., PascalCase)
     type: str  # Python type string
     required: bool = False
     documentation: str = ""
@@ -28,7 +29,7 @@ class PropertyDef:
 
 @dataclass
 class AttributeDef:
-    """Definition of a resource attribute (GetAtt target)."""
+    """Definition of a resource attribute (output/return value)."""
 
     name: str
     type: str = "str"
@@ -37,11 +38,11 @@ class AttributeDef:
 
 @dataclass
 class ResourceDef:
-    """Definition of a CloudFormation resource type."""
+    """Definition of an infrastructure resource type."""
 
     name: str  # Python class name
-    service: str  # Service name (e.g., "s3")
-    full_type: str  # Full CF type (e.g., "AWS::S3::Bucket")
+    service: str  # Service name (e.g., "s3", "compute")
+    full_type: str  # Full provider type (e.g., "AWS::S3::Bucket")
     documentation: str = ""
     properties: list[PropertyDef] = field(default_factory=list)
     attributes: list[AttributeDef] = field(default_factory=list)
@@ -63,20 +64,25 @@ class NestedTypeDef:
 
     name: str  # Python class name
     service: str
-    original_name: str  # CloudFormation property type name
+    original_name: str  # Provider-specific property type name
     properties: list[PropertyDef] = field(default_factory=list)
     documentation: str = ""
 
 
 @dataclass
 class IntermediateSchema:
-    """The complete intermediate schema for code generation."""
+    """
+    The complete intermediate schema for code generation.
+
+    This is the normalized format that all provider-specific parsers
+    produce. The generator consumes this to produce Python code.
+    """
 
     schema_version: str
-    domain: str
+    domain: str  # e.g., "aws", "gcp", "azure"
     generated_at: str
-    cf_spec_version: str = ""
-    botocore_version: str = ""
+    source_version: str = ""  # Provider spec version (e.g., CloudFormation spec version)
+    sdk_version: str = ""  # SDK version used for enum extraction (e.g., botocore)
     resources: list[ResourceDef] = field(default_factory=list)
     enums: list[EnumDef] = field(default_factory=list)
     nested_types: list[NestedTypeDef] = field(default_factory=list)
@@ -87,14 +93,14 @@ class IntermediateSchema:
             "schema_version": self.schema_version,
             "domain": self.domain,
             "generated_at": self.generated_at,
-            "cf_spec_version": self.cf_spec_version,
-            "botocore_version": self.botocore_version,
+            "source_version": self.source_version,
+            "sdk_version": self.sdk_version,
             "resources": [self._resource_to_dict(r) for r in self.resources],
             "enums": [self._enum_to_dict(e) for e in self.enums],
             "nested_types": [self._nested_to_dict(n) for n in self.nested_types],
         }
 
-    def _resource_to_dict(self, r: ResourceDef) -> dict:
+    def _resource_to_dict(self, r: ResourceDef) -> dict[str, Any]:
         return {
             "name": r.name,
             "service": r.service,
@@ -107,7 +113,7 @@ class IntermediateSchema:
             ],
         }
 
-    def _prop_to_dict(self, p: PropertyDef) -> dict:
+    def _prop_to_dict(self, p: PropertyDef) -> dict[str, Any]:
         return {
             "name": p.name,
             "original_name": p.original_name,
@@ -122,7 +128,7 @@ class IntermediateSchema:
             "constraints": p.constraints,
         }
 
-    def _enum_to_dict(self, e: EnumDef) -> dict:
+    def _enum_to_dict(self, e: EnumDef) -> dict[str, Any]:
         return {
             "name": e.name,
             "service": e.service,
@@ -130,7 +136,7 @@ class IntermediateSchema:
             "documentation": e.documentation,
         }
 
-    def _nested_to_dict(self, n: NestedTypeDef) -> dict:
+    def _nested_to_dict(self, n: NestedTypeDef) -> dict[str, Any]:
         return {
             "name": n.name,
             "service": n.service,
@@ -140,14 +146,18 @@ class IntermediateSchema:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "IntermediateSchema":
+    def from_dict(cls, data: dict[str, Any]) -> "IntermediateSchema":
         """Load from JSON dict."""
+        # Support both old field names (cf_spec_version) and new (source_version)
+        source_version = data.get("source_version") or data.get("cf_spec_version", "")
+        sdk_version = data.get("sdk_version") or data.get("botocore_version", "")
+
         schema = cls(
             schema_version=data["schema_version"],
             domain=data["domain"],
             generated_at=data["generated_at"],
-            cf_spec_version=data.get("cf_spec_version", ""),
-            botocore_version=data.get("botocore_version", ""),
+            source_version=source_version,
+            sdk_version=sdk_version,
         )
 
         for r in data.get("resources", []):
@@ -183,7 +193,7 @@ class IntermediateSchema:
         return schema
 
     @staticmethod
-    def _prop_from_dict(p: dict) -> PropertyDef:
+    def _prop_from_dict(p: dict[str, Any]) -> PropertyDef:
         return PropertyDef(
             name=p["name"],
             original_name=p["original_name"],

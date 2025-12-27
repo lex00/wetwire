@@ -5,13 +5,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Agent Workflows
 
 **Key Tools:**
-- `cfn-dataclasses init -o <dir>/` - Create new project skeleton
-- `cfn-dataclasses import <template> -o <output>` - Import CloudFormation YAML/JSON
-- `cfn-dataclasses lint <path> [--fix]` - Lint and auto-fix code style issues
+- `wetwire-aws init -o <dir>/` - Create new project skeleton
+- `wetwire-aws import <template> -o <output>` - Import CloudFormation YAML/JSON
+- `wetwire-aws lint <path> [--fix]` - Lint and auto-fix code style issues
 
 **Always validate after generating code:**
 ```python
-template = Template.from_registry()
+template = CloudFormationTemplate.from_registry()
 errors = template.validate()
 assert errors == []
 ```
@@ -20,7 +20,7 @@ assert errors == []
 
 ## Project Overview
 
-`cloudformation_dataclasses` is a Python library that uses **dataclasses as a declarative interface** for AWS CloudFormation template synthesis. The library focuses solely on **generating CloudFormation JSON/YAML** from Python dataclasses.
+Wetwire is a unified framework for **declarative infrastructure-as-code** using native language constructs. The `wetwire-aws` package provides AWS CloudFormation synthesis using **dataclasses as a declarative interface**.
 
 **Core Innovation**: Wrapper dataclasses with declarative wiring where all infrastructure relationships are defined as typed field declarations, not imperative code.
 
@@ -31,13 +31,13 @@ assert errors == []
 Every CloudFormation resource is wrapped in a user-defined dataclass with a `resource:` field:
 
 ```python
-@cloudformation_dataclass
+@wetwire_aws
 class MyVPC:
     resource: VPC
     cidr_block: str = "10.0.0.0/16"
     enable_dns_hostnames: bool = True
 
-@cloudformation_dataclass
+@wetwire_aws
 class MySubnet:
     resource: Subnet
     cidr_block: str = "10.0.1.0/24"
@@ -48,14 +48,14 @@ class MySubnet:
 
 ### Code Generation Strategy
 
-All AWS resource classes are **pre-generated from CloudFormation specs** and **committed to git**. This is NOT runtime generation.
+All AWS resource classes are **generated at build time** from CloudFormation specs. Resources are NOT committed to git - they're generated when building the wheel.
 
 **Rationale**:
-- Minimal runtime dependencies (just pyyaml)
-- IDE autocomplete works immediately
-- Users can browse generated code on GitHub
-- No generation step during pip install
-- Tested, stable generated code
+- Clean git history (no 50MB+ of generated code)
+- Minimal runtime dependencies (wetwire + pyyaml)
+- IDE autocomplete works after local `./scripts/regenerate.sh`
+- Published wheels contain pre-generated resources
+- Reproducible builds from CloudFormation spec
 
 ### Type System
 
@@ -68,7 +68,7 @@ All AWS resource classes are **pre-generated from CloudFormation specs** and **c
 Use `ref()` and `get_att()` with direct class references:
 
 ```python
-@cloudformation_dataclass
+@wetwire_aws
 class BucketPolicy:
     resource: s3.BucketPolicy
     bucket = ref(MyBucket)  # Direct class reference
@@ -82,7 +82,7 @@ Auto-discovery via `setup_resources()` ensures all classes are available at runt
 When a wrapper class has the same name as the AWS resource class (e.g., `class Bucket` wrapping `s3.Bucket`), use the module-qualified type to avoid self-reference:
 
 ```python
-@cloudformation_dataclass
+@wetwire_aws
 class Bucket:
     resource: s3.Bucket  # NOT resource: Bucket (would be self-referential)
     bucket_name = ref(BucketName)
@@ -100,21 +100,44 @@ The codegen automatically detects these collisions and generates qualified names
 ## Project Structure
 
 ```
-src/cloudformation_dataclasses/
-├── core/                # Base classes
-│   ├── base.py         # CloudFormationResource, Tag, DeploymentContext
-│   └── template.py     # Template, Parameter, Output, Condition
-├── intrinsics/         # Type-safe CloudFormation functions
-│   └── functions.py    # Ref, GetAtt, Sub, Join, If, etc.
-├── codegen/            # Code generation tools (build-time only)
-│   ├── spec_parser.py  # Download and parse AWS CloudFormation specs
-│   └── generator.py    # Generate dataclass code from specs
-└── aws/                # GENERATED - All AWS resources (committed to git)
-    ├── s3.py          # ~5,000 lines
-    ├── ec2.py         # ~15,000 lines
-    ├── lambda_.py     # ~2,000 lines
-    └── ...            # ~300+ service modules
+python/packages/
+├── wetwire/                 # Core framework (cloud-agnostic)
+│   └── src/wetwire/
+│       ├── decorator.py     # @wetwire decorator
+│       ├── registry.py      # Resource registration
+│       ├── template.py      # Base template class
+│       └── codegen/         # Shared codegen utilities
+│           ├── schema.py    # IntermediateSchema, PropertyDef, etc.
+│           ├── transforms.py # to_snake_case, keyword escaping
+│           ├── fetcher.py   # HTTP fetching utilities
+│           └── generator.py # Code generation utilities
+│
+├── wetwire-aws/             # AWS domain package
+│   ├── src/wetwire_aws/
+│   │   ├── base.py          # CloudFormationResource base
+│   │   ├── decorator.py     # @wetwire_aws decorator
+│   │   ├── template.py      # CloudFormationTemplate
+│   │   ├── intrinsics/      # Ref, GetAtt, Sub, etc.
+│   │   └── resources/       # GENERATED at build time (not in git)
+│   │       ├── s3/
+│   │       ├── ec2/
+│   │       └── ...          # ~260 service modules
+│   ├── codegen/             # AWS-specific code generation
+│   │   ├── config.py        # CF spec URL, service priorities
+│   │   ├── fetch.py         # Download CloudFormation specs
+│   │   ├── parse.py         # Parse CF spec to intermediate format
+│   │   ├── extract_enums.py # Extract enums from botocore
+│   │   └── generate.py      # Generate Python dataclasses
+│   ├── scripts/
+│   │   ├── regenerate.sh    # Run codegen pipeline
+│   │   └── ci.sh            # Local CI checks
+│   └── hatch_build.py       # Build hook (runs codegen)
+│
+└── wetwire-gcp/             # GCP domain package (future)
 ```
+
+**wetwire.codegen** provides shared codegen utilities that can be reused by any domain package.
+Install with: `pip install wetwire[codegen]`
 
 ## Development Commands
 
@@ -129,15 +152,20 @@ uv sync --all-extras
 
 ```bash
 # Regenerate ALL AWS resource classes from latest CloudFormation spec
+cd python/packages/wetwire-aws
 ./scripts/regenerate.sh
 
-# Or manually:
-python -m cloudformation_dataclasses.codegen.spec_parser download
-python -m cloudformation_dataclasses.codegen.generator --all
-uv run black src/cloudformation_dataclasses/aws/
+# Or manually (4-stage pipeline):
+uv run python -m codegen.fetch        # Download CloudFormation spec
+uv run python -m codegen.parse        # Parse to intermediate format
+uv run python -m codegen.extract_enums # Extract enums from botocore
+uv run python -m codegen.generate     # Generate Python dataclasses
 
-# Regenerate specific service only
-python -m cloudformation_dataclasses.codegen.generator --service s3
+# Force re-fetch even if spec is fresh
+./scripts/regenerate.sh --force
+
+# Dry run (show what would be generated)
+./scripts/regenerate.sh --dry-run
 ```
 
 ### Testing
@@ -160,10 +188,10 @@ uv run pytest tests/test_s3.py::test_bucket_serialization -v
 
 ```bash
 # Type check entire codebase
-uv run mypy src/cloudformation_dataclasses/
+uv run mypy src/wetwire_aws/
 
 # Type check specific module
-uv run mypy src/cloudformation_dataclasses/core/
+uv run mypy src/wetwire_aws/core/
 ```
 
 ### Linting and Formatting
@@ -210,35 +238,39 @@ bucket = Bucket(bucket_name="my-bucket", versioning_configuration=...)
 
 CloudFormation resource names do NOT include service prefixes:
 - Class name: `Instance` (not `EC2Instance`)
-- Namespacing via module: `from cloudformation_dataclasses.aws.ec2 import Instance`
+- Namespacing via module: `from wetwire_aws.resources.ec2 import Instance`
 
 ### 3. Generated Code Management
 
-- Generated files in `src/cloudformation_dataclasses/aws/*.py` are **committed to git**
+- Generated files in `src/wetwire_aws/resources/` are **NOT committed to git** - generated at build time
 - Every generated file includes a header: `⚠️ AUTO-GENERATED FILE - DO NOT EDIT MANUALLY`
 - Never manually edit generated files - regenerate instead
-- Format generated code with Black before committing
+- Run `./scripts/regenerate.sh` for local development
 
 ### 4. Dependencies
 
 **Runtime dependencies**:
+- `wetwire` - Core framework
 - `pyyaml` - Required for YAML template parsing and serialization
-- Optional: `watchdog` for `cfn-dataclasses stubs --watch` via `pip install cloudformation_dataclasses[stubs]`
 
-**Development dependencies** (NOT shipped):
-- `black` - Format generated code (build-time only)
-- `mypy` - Static type checking
-- `pytest` - Testing
-- `ruff` - Linting
-- `requests` - Download CloudFormation specs (codegen only)
+**Codegen dependencies** (build-time only):
+- `requests` - Download CloudFormation specs
+- `jinja2` - Template rendering
+- `botocore` - Extract enum values from AWS SDK
+- `black` - Format generated code
+
+**Development dependencies**:
+- `mypy`, `pyright` - Static type checking
+- `pytest`, `pytest-cov` - Testing
+- `ruff` - Linting and formatting
 
 ### 5. Python Version
 
-Requires Python 3.10+ for union syntax (`X | Y`) and built-in generics.
+Requires Python 3.11+ for modern type annotation features.
 
 ## Code Generation Algorithm
 
-When modifying the code generator (`codegen/generator.py`):
+When modifying the code generator (`python/packages/wetwire-aws/codegen/generate.py`):
 
 1. **Parse CloudFormation spec** - JSON structure with ResourceTypes and PropertyTypes
 2. **Generate nested property classes first** - Complex property types become dataclasses
@@ -254,28 +286,33 @@ When modifying the code generator (`codegen/generator.py`):
 
 ### Build System
 
-- Uses **uv** as package manager and build system
-- No explicit `[build-system]` in pyproject.toml - uv handles it automatically
-- Src-layout: `src/cloudformation_dataclasses/` for proper isolation
+- Uses **hatch** as build backend with custom build hook
+- Build hook (`hatch_build.py`) runs codegen pipeline automatically during `hatch build`
+- Src-layout: `src/wetwire_aws/` for proper isolation
+- Uses **uv** for local development and dependency management
 
-### Pre-Generation Workflow
+### Build-Time Generation
 
-1. Download latest CloudFormation spec from AWS
-2. Generate all resource classes (~300 services)
-3. Format with Black
-4. Type check with mypy
-5. Run tests
-6. Build wheel
-7. Publish to PyPI
+Resources are generated at build time, not pre-committed:
 
-### Version Strategy
+1. `hatch build` triggers custom build hook
+2. Build hook runs 4-stage codegen pipeline (fetch → parse → extract_enums → generate)
+3. Generated resources are included in wheel via `force_include`
+4. Skip codegen with `WETWIRE_SKIP_CODEGEN=1` if resources already exist
 
-Semantic versioning with CloudFormation spec tracking:
-- `X.Y.Z` - Major.Minor.Patch for package version
-- CloudFormation spec date in YYYY.MM.DD format (from AWS Last-Modified header)
-- Spec file committed to `specs/` directory for reproducibility
-- Check for updates: `uv run python -m cloudformation_dataclasses.codegen.spec_parser check`
-- Update spec: `uv run python -m cloudformation_dataclasses.codegen.spec_parser update`
+### CI/CD Workflows
+
+- **CI** (`.github/workflows/wetwire-aws-ci.yml`): Generates resources once, shares via artifact, runs tests across Python 3.11-3.13
+- **Release** (`.github/workflows/wetwire-aws-release.yml`): Builds wheel, publishes to PyPI on tag
+
+### Local Development
+
+```bash
+cd python/packages/wetwire-aws
+./scripts/regenerate.sh    # Generate resources
+./scripts/ci.sh            # Run same checks as CI
+./scripts/ci.sh --quick    # Skip regeneration if already done
+```
 
 ## Understanding the Codebase
 
@@ -381,7 +418,7 @@ password = {"Fn::Sub": "${Secret}"}
 joined = {"Fn::Join": [",", [...]]}
 
 # ✅ CORRECT - typed helpers
-from cloudformation_dataclasses.intrinsics import Ref, Sub, Select, GetAZs, Join
+from wetwire_aws.intrinsics import Ref, Sub, Select, GetAZs, Join
 vpc_id = Ref("VpcId")
 availability_zone = Select(0, GetAZs())
 password = Sub("${Secret}")
@@ -395,7 +432,7 @@ region = {"Ref": "AWS::Region"}
 account_id = {"Ref": "AWS::AccountId"}
 
 # ✅ CORRECT
-from cloudformation_dataclasses.intrinsics import AWS_REGION, AWS_ACCOUNT_ID
+from wetwire_aws.intrinsics import AWS_REGION, AWS_ACCOUNT_ID
 region = AWS_REGION
 account_id = AWS_ACCOUNT_ID
 ```
@@ -408,13 +445,13 @@ security_group_ingress = [
 ]
 
 # ✅ CORRECT - separate wrapper class
-@cloudformation_dataclass
+@wetwire_aws
 class MySecurityGroupIngress:
     resource: ec2.security_group.Ingress
     ip_protocol = IpProtocol.TCP
     from_port = 443
 
-@cloudformation_dataclass
+@wetwire_aws
 class MySecurityGroup:
     resource: ec2.SecurityGroup
     security_group_ingress = [MySecurityGroupIngress]
@@ -429,18 +466,18 @@ assume_role_policy_document = {
 }
 
 # ✅ CORRECT - wrapper classes
-@cloudformation_dataclass
+@wetwire_aws
 class MyAssumeRoleStatement:
     resource: PolicyStatement
     principal = {"Service": "lambda.amazonaws.com"}
     action = "sts:AssumeRole"
 
-@cloudformation_dataclass
+@wetwire_aws
 class MyAssumeRolePolicy:
     resource: PolicyDocument
     statement = [MyAssumeRoleStatement]
 
-@cloudformation_dataclass
+@wetwire_aws
 class MyRole:
     resource: iam.Role
     assume_role_policy_document = MyAssumeRolePolicy
@@ -448,7 +485,7 @@ class MyRole:
 
 ### Available Intrinsic Functions
 
-Import from `cloudformation_dataclasses.intrinsics`:
+Import from `wetwire_aws.intrinsics`:
 - `Ref("ParameterName")` - Reference parameters
 - `ref(ResourceClass)` - Reference resources (lowercase)
 - `get_att(ResourceClass, "Attribute")` - Get resource attributes

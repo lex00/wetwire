@@ -11,35 +11,17 @@ import re
 import sys
 from datetime import UTC, datetime
 
-from codegen.config import PYTHON_KEYWORDS, SPECS_DIR
-from codegen.intermediate import (
+from codegen.config import SPECS_DIR
+from wetwire.codegen import (
+    PYTHON_KEYWORDS,
     AttributeDef,
     IntermediateSchema,
     NestedTypeDef,
     PropertyDef,
     ResourceDef,
+    escape_python_keyword,
+    to_snake_case,
 )
-
-
-def to_snake_case(name: str) -> str:
-    """Convert PascalCase or camelCase to snake_case."""
-    # Handle acronyms (e.g., VPCId -> vpc_id, not v_p_c_id)
-    s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
-    s2 = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1)
-    result = s2.lower()
-
-    # Handle Python keywords
-    if result in PYTHON_KEYWORDS:
-        result = PYTHON_KEYWORDS[result]
-
-    return result
-
-
-def to_class_name(name: str) -> str:
-    """Convert a name to a valid Python class name."""
-    # Remove any non-alphanumeric characters
-    name = re.sub(r"[^a-zA-Z0-9]", "", name)
-    return name
 
 
 def parse_cf_type(
@@ -301,13 +283,13 @@ def parse(validate: bool = False) -> IntermediateSchema:
     manifest = json.loads(manifest_path.read_text())
 
     # Get version info
-    cf_spec_version = ""
-    botocore_version = ""
+    source_version = ""
+    sdk_version = ""
     for source in manifest.get("sources", []):
         if source["name"] == "cloudformation-spec":
-            cf_spec_version = source.get("version", "")
+            source_version = source.get("version", "")
         elif source["name"] == "botocore":
-            botocore_version = source.get("version", "")
+            sdk_version = source.get("version", "")
 
     # Load CloudFormation spec
     cf_spec_path = SPECS_DIR / "CloudFormationResourceSpecification.json"
@@ -322,8 +304,8 @@ def parse(validate: bool = False) -> IntermediateSchema:
         schema_version="1.0",
         domain="aws",
         generated_at=datetime.now(UTC).isoformat(),
-        cf_spec_version=cf_spec_version,
-        botocore_version=botocore_version,
+        source_version=source_version,
+        sdk_version=sdk_version,
     )
 
     # Get property types for reference

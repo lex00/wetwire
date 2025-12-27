@@ -16,12 +16,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from codegen.config import GENERATOR_VERSION, RESOURCES_DIR, SPECS_DIR
-from codegen.intermediate import (
+from wetwire.codegen import (
     IntermediateSchema,
     NestedTypeDef,
     PropertyDef,
     ResourceDef,
 )
+from wetwire.codegen.generator import python_type_for_property, format_file
 
 # Use all available CPU cores for parallel generation
 NUM_WORKERS = os.cpu_count() or 4
@@ -95,34 +96,6 @@ from typing import Any, ClassVar
 from wetwire_aws.base import CloudFormationResource, PropertyType
 
 '''
-
-
-def python_type_for_property(prop: PropertyDef) -> str:
-    """Get the Python type annotation for a property."""
-    base_type = prop.type
-
-    # Handle common cases
-    if base_type in ("str", "int", "float", "bool"):
-        return base_type
-
-    if base_type.startswith("list[") or base_type.startswith("dict["):
-        return base_type
-
-    if base_type == "list":
-        if prop.item_type:
-            return f"list[{prop.item_type}]"
-        return "list[Any]"
-
-    if base_type == "dict":
-        if prop.item_type:
-            return f"dict[str, {prop.item_type}]"
-        return "dict[str, Any]"
-
-    # It's a nested type
-    if prop.nested_type:
-        return prop.nested_type
-
-    return "Any"
 
 
 def get_property_type_signature(nested: NestedTypeDef) -> str:
@@ -397,18 +370,6 @@ def generate_init_file(services: list[str], cf_spec_version: str) -> str:
     return "\n".join(lines)
 
 
-def format_file(path: Path) -> bool:
-    """Format a Python file using black."""
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "black", "--quiet", str(path)],
-            capture_output=True,
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
-
-
 def generate(
     format_code: bool = True, dry_run: bool = False, include_enums: bool = True
 ) -> None:
@@ -492,7 +453,7 @@ def generate(
             service,
             service_resources,
             service_nested,
-            schema.cf_spec_version,
+            schema.source_version,
             service_enums=service_enums,
         )
 
@@ -536,7 +497,7 @@ def generate(
                 print(f"  {service}: ERROR - {e}")
 
     # Generate main __init__.py (not parallelized - single file)
-    init_content = generate_init_file(services, schema.cf_spec_version)
+    init_content = generate_init_file(services, schema.source_version)
     init_path = RESOURCES_DIR / "__init__.py"
     init_path.write_text(init_content)
     generated_files.append(init_path)

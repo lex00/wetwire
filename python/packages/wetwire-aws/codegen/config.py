@@ -48,46 +48,4 @@ PRIORITY_SERVICES = [
     "apigateway",
 ]
 
-# Reserved Python keywords and builtins that need renaming
-PYTHON_KEYWORDS = {
-    # Python keywords
-    "and": "and_",
-    "as": "as_",
-    "assert": "assert_",
-    "async": "async_",
-    "await": "await_",
-    "break": "break_",
-    "class": "class_",
-    "continue": "continue_",
-    "def": "def_",
-    "del": "del_",
-    "elif": "elif_",
-    "else": "else_",
-    "except": "except_",
-    "finally": "finally_",
-    "for": "for_",
-    "from": "from_",
-    "global": "global_",
-    "if": "if_",
-    "import": "import_",
-    "in": "in_",
-    "is": "is_",
-    "lambda": "lambda_",
-    "None": "none_",
-    "nonlocal": "nonlocal_",
-    "not": "not_",
-    "or": "or_",
-    "pass": "pass_",
-    "raise": "raise_",
-    "return": "return_",
-    "True": "true_",
-    "False": "false_",
-    "try": "try_",
-    "type": "type_",
-    "while": "while_",
-    "with": "with_",
-    "yield": "yield_",
-    # Names that shadow our imports
-    "field": "field_",
-    "dataclass": "dataclass_",
-}
+# PYTHON_KEYWORDS moved to wetwire.codegen.transforms
