@@ -10,21 +10,33 @@ pip install wetwire-aws
 
 ## Quick Start
 
+Create a package for your infrastructure:
+
+```
+myapp/
+├── __init__.py
+└── infra.py
+```
+
+**myapp/__init__.py:**
 ```python
-from wetwire_aws import wetwire_aws, CloudFormationTemplate, get_att, ARN
-from wetwire_aws.resources.s3 import Bucket
-from wetwire_aws.resources.iam import Role
-from wetwire_aws.resources.lambda_ import Function, Runtime
+from wetwire_aws.loader import setup_resources
+setup_resources(__file__, __name__, globals())
+```
+
+**myapp/infra.py:**
+```python
+from . import *
 
 @wetwire_aws
 class DataBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "my-data-bucket"
     versioning_configuration = {"Status": "Enabled"}
 
 @wetwire_aws
 class ProcessorRole:
-    resource: Role
+    resource: iam.Role
     role_name = "data-processor"
     assume_role_policy_document = {
         "Version": "2012-10-17",
@@ -37,12 +49,15 @@ class ProcessorRole:
 
 @wetwire_aws
 class ProcessorFunction:
-    resource: Function
+    resource: lambda_.Function
     function_name = "data-processor"
-    runtime = Runtime.PYTHON3_12  # Type-safe constants
+    runtime = lambda_.Runtime.PYTHON3_12  # Type-safe constants
     role = get_att(ProcessorRole, ARN)  # Reference to role ARN
+```
 
-# Generate CloudFormation template
+**Generate template:**
+```python
+from myapp import CloudFormationTemplate
 template = CloudFormationTemplate.from_registry()
 print(template.to_yaml())
 ```

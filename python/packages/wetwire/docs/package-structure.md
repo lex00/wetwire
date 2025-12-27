@@ -40,51 +40,46 @@ That's it. `setup_resources()` handles:
 
 ### Step 2: Define Resources in Separate Files
 
-Each file uses `from . import *` (conceptually) - the classes are injected by `setup_resources()`.
+Each file uses `from . import *` to get all injected classes.
 
 ```python
 # src/myproject/resources/network.py
-from wetwire_aws import wetwire_aws
-from wetwire_aws.resources.ec2 import VPC, Subnet
-from graph_refs import Ref
+from . import *
 
 __all__ = ["AppVPC", "PublicSubnet"]
 
 
 @wetwire_aws
 class AppVPC:
-    resource: VPC
+    resource: ec2.VPC
     cidr_block = "10.0.0.0/16"
 
 
 @wetwire_aws
 class PublicSubnet:
-    resource: Subnet
+    resource: ec2.Subnet
     vpc: Ref[AppVPC]  # Reference resolved across files
     cidr_block = "10.0.1.0/24"
 ```
 
 ```python
 # src/myproject/resources/compute.py
-from wetwire_aws import wetwire_aws
-from wetwire_aws.resources.lambda_ import Function
-from wetwire_aws.resources.iam import Role
-from graph_refs import Attr
+from . import *
 
 __all__ = ["AppRole", "AppFunction"]
 
 
 @wetwire_aws
 class AppRole:
-    resource: Role
+    resource: iam.Role
     role_name = "app-role"
 
 
 @wetwire_aws
 class AppFunction:
-    resource: Function
+    resource: lambda_.Function
     function_name = "app-handler"
-    runtime = "python3.12"
+    runtime = lambda_.Runtime.PYTHON3_12
     # Cross-file reference using Attr annotation
     # AppRole is injected before this module loads
     role: Attr[AppRole, "Arn"] = None  # noqa: F821
@@ -95,7 +90,7 @@ class AppFunction:
 ```python
 # main.py
 from myproject.resources import AppVPC, PublicSubnet, AppRole, AppFunction
-from wetwire_aws import CloudFormationTemplate
+from myproject.resources import CloudFormationTemplate
 
 # All resources are available
 template = CloudFormationTemplate.from_registry()
@@ -121,6 +116,13 @@ Modules are imported in dependency order using Kahn's algorithm:
 ### 3. Namespace Injection
 
 Before each module executes, already-loaded classes are injected into its namespace. This makes `Attr[AppRole, "Arn"]` work even when `AppRole` is in another file.
+
+The injection includes:
+- All AWS service modules (`s3`, `ec2`, `iam`, `lambda_`, etc.)
+- The `@wetwire_aws` decorator
+- Reference types (`Ref`, `Attr`, `RefList`, `RefDict`)
+- Helper functions (`ref`, `get_att`, `ARN`)
+- Template classes (`CloudFormationTemplate`)
 
 ### 4. Stub Generation
 

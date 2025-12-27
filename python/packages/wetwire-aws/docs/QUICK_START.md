@@ -12,28 +12,35 @@ uv add wetwire-aws
 pip install wetwire-aws
 ```
 
-## Your First Resource
+## Your First Project
 
-Create a file `infra.py`:
+Create a package for your infrastructure:
 
+```
+myapp/
+├── __init__.py
+└── infra.py
+```
+
+**myapp/__init__.py:**
 ```python
-from wetwire_aws import wetwire_aws, CloudFormationTemplate
-from wetwire_aws.resources.s3 import Bucket
+from wetwire_aws.loader import setup_resources
+setup_resources(__file__, __name__, globals())
+```
+
+**myapp/infra.py:**
+```python
+from . import *
 
 @wetwire_aws
 class DataBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "my-data-bucket"
-
-# Generate template
-template = CloudFormationTemplate.from_registry()
-print(template.to_json())
 ```
 
-Run it:
-
+**Generate template:**
 ```bash
-python infra.py > template.json
+wetwire-aws build --module myapp > template.json
 ```
 
 That's it. Resources auto-register when the `@wetwire_aws` decorator is applied.
@@ -44,20 +51,18 @@ That's it. Resources auto-register when the `@wetwire_aws` decorator is applied.
 
 Reference other resources using `ref()` and `get_att()`:
 
+**myapp/infra.py:**
 ```python
-from wetwire_aws import wetwire_aws, CloudFormationTemplate, get_att, ARN
-from wetwire_aws.resources.s3 import Bucket
-from wetwire_aws.resources.iam import Role
-from wetwire_aws.resources.lambda_ import Function, Runtime
+from . import *
 
 @wetwire_aws
 class DataBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "data"
 
 @wetwire_aws
 class ProcessorRole:
-    resource: Role
+    resource: iam.Role
     role_name = "processor"
     assume_role_policy_document = {
         "Version": "2012-10-17",
@@ -70,14 +75,11 @@ class ProcessorRole:
 
 @wetwire_aws
 class ProcessorFunction:
-    resource: Function
+    resource: lambda_.Function
     function_name = "processor"
-    runtime = Runtime.PYTHON3_12
+    runtime = lambda_.Runtime.PYTHON3_12
     handler = "index.handler"
     role = get_att(ProcessorRole, ARN)  # Reference to role
-
-template = CloudFormationTemplate.from_registry()
-print(template.to_yaml())
 ```
 
 ---
@@ -87,21 +89,18 @@ print(template.to_yaml())
 For introspectable references, use type annotations:
 
 ```python
-from wetwire import Ref, Attr
-from wetwire_aws import wetwire_aws
-from wetwire_aws.resources.lambda_ import Function, Runtime
-from wetwire_aws.resources.iam import Role
+from . import *
 
 @wetwire_aws
 class ProcessorRole:
-    resource: Role
+    resource: iam.Role
     role_name = "processor"
 
 @wetwire_aws
 class ProcessorFunction:
-    resource: Function
+    resource: lambda_.Function
     function_name = "processor"
-    runtime = Runtime.PYTHON3_12
+    runtime = lambda_.Runtime.PYTHON3_12
     # Type annotation enables dependency introspection
     role: Attr[ProcessorRole, "Arn"] = None
 ```
@@ -118,23 +117,23 @@ The annotation `Attr[ProcessorRole, "Arn"]` tells graph-refs this resource depen
 
 ```bash
 # Generate template from a module
-wetwire-aws build --module infra > template.json
+wetwire-aws build --module myapp > template.json
 
 # Generate YAML
-wetwire-aws build --module infra --format yaml
+wetwire-aws build --module myapp --format yaml
 
 # List registered resources
-wetwire-aws list --module infra
+wetwire-aws list --module myapp
 
 # Validate references
-wetwire-aws validate --module infra
+wetwire-aws validate --module myapp
 ```
 
 ---
 
 ## Multi-File Organization
 
-Split resources across files using `setup_resources()` for automatic discovery:
+Split resources across files:
 
 ```
 myapp/
@@ -149,11 +148,10 @@ myapp/
 **__init__.py** (the key file):
 ```python
 from wetwire_aws.loader import setup_resources
-
 setup_resources(__file__, __name__, globals())
 ```
 
-That's it. `setup_resources()` automatically:
+`setup_resources()` automatically:
 - Discovers all `.py` files in the package
 - Parses them to find class definitions and references
 - Loads modules in dependency order (dependencies first)
@@ -162,30 +160,27 @@ That's it. `setup_resources()` automatically:
 
 **storage.py:**
 ```python
-from wetwire_aws import wetwire_aws
-from wetwire_aws.resources.s3 import Bucket
+from . import *
 
 __all__ = ["DataBucket"]
 
 @wetwire_aws
 class DataBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "data"
 ```
 
 **compute.py:**
 ```python
-from graph_refs import Ref
-from wetwire_aws import wetwire_aws
-from wetwire_aws.resources.lambda_ import Function, Runtime
+from . import *
 
 __all__ = ["ProcessorFunction"]
 
 @wetwire_aws
 class ProcessorFunction:
-    resource: Function
+    resource: lambda_.Function
     function_name = "processor"
-    runtime = Runtime.PYTHON3_12
+    runtime = lambda_.Runtime.PYTHON3_12
     # Cross-file reference - DataBucket is injected by setup_resources()
     bucket: Ref[DataBucket] = None  # noqa: F821
 ```
@@ -204,21 +199,20 @@ wetwire-aws build --module myapp
 Use generated enum classes for type safety:
 
 ```python
-from wetwire_aws.resources.lambda_ import Function, Runtime, Architecture
-from wetwire_aws.resources.dynamodb import Table, KeyType, ScalarAttributeType
+from . import *
 
 @wetwire_aws
 class MyFunction:
-    resource: Function
-    runtime = Runtime.PYTHON3_12    # Not "python3.12"
-    architectures = [Architecture.ARM64]
+    resource: lambda_.Function
+    runtime = lambda_.Runtime.PYTHON3_12    # Not "python3.12"
+    architectures = [lambda_.Architecture.ARM64]
 
 @wetwire_aws
 class MyTable:
-    resource: Table
-    key_schema = [{"AttributeName": "pk", "KeyType": KeyType.HASH}]
+    resource: dynamodb.Table
+    key_schema = [{"AttributeName": "pk", "KeyType": dynamodb.KeyType.HASH}]
     attribute_definitions = [
-        {"AttributeName": "pk", "AttributeType": ScalarAttributeType.S}
+        {"AttributeName": "pk", "AttributeType": dynamodb.ScalarAttributeType.S}
     ]
 ```
 
@@ -229,8 +223,7 @@ class MyTable:
 `CloudFormationTemplate.from_registry()` collects all registered resources:
 
 ```python
-from wetwire_aws import CloudFormationTemplate
-from wetwire_aws.template import Parameter, Output
+from myapp import CloudFormationTemplate
 
 template = CloudFormationTemplate.from_registry(
     description="My Application Stack",

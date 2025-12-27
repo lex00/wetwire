@@ -223,17 +223,16 @@ A Python dataclass with 5 typed fields is a better prompt than a 50-line YAML ex
 
 **wetwire-aws:**
 ```python
-from wetwire_aws import wetwire_aws
-from wetwire_aws.resources.s3 import Bucket, ServerSideEncryption
+from . import *
 
 @wetwire_aws
 class MyBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "my-app-data"
     bucket_encryption = {
         "ServerSideEncryptionConfiguration": [{
             "ServerSideEncryptionByDefault": {
-                "SSEAlgorithm": ServerSideEncryption.AES256
+                "SSEAlgorithm": s3.ServerSideEncryption.AES256
             }
         }]
     }
@@ -254,13 +253,11 @@ CDK is more concise here—the L2 construct handles encryption configuration.
 
 **wetwire-aws:**
 ```python
-from wetwire_aws import wetwire_aws, get_att, ARN
-from wetwire_aws.resources.iam import Role
-from wetwire_aws.resources.lambda_ import Function, Runtime
+from . import *
 
 @wetwire_aws
 class MyRole:
-    resource: Role
+    resource: iam.Role
     assume_role_policy_document = {
         "Version": "2012-10-17",
         "Statement": [{
@@ -275,9 +272,9 @@ class MyRole:
 
 @wetwire_aws
 class MyFunction:
-    resource: Function
+    resource: lambda_.Function
     function_name = "my-handler"
-    runtime = Runtime.PYTHON3_12
+    runtime = lambda_.Runtime.PYTHON3_12
     handler = "index.handler"
     role = get_att(MyRole, ARN)
 ```

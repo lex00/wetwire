@@ -153,12 +153,11 @@ uv run wetwire-aws list --module my_stack && echo "OK"
 
 Start with a resource file:
 ```python
-from wetwire_aws import wetwire_aws, get_att, ARN
-from wetwire_aws.resources.s3 import Bucket
+from . import *
 
 @wetwire_aws
 class DataBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "my-data"
 ```
 
@@ -175,13 +174,13 @@ Find something low-risk:
 # Before
 @wetwire_aws
 class MyBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "data"
 
 # After
 @wetwire_aws
 class MyBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "data"
     tags = [{"Key": "Environment", "Value": "dev"}]
 ```
@@ -194,12 +193,11 @@ Create a new file in the package:
 
 ```python
 # monitoring.py
-from wetwire_aws import wetwire_aws
-from wetwire_aws.resources.sns import Topic
+from . import *
 
 @wetwire_aws
 class AlertTopic:
-    resource: Topic
+    resource: sns.Topic
     topic_name = "alerts"
 ```
 
@@ -220,7 +218,7 @@ That's 90% of what you need.
 
 | Problem | Solution |
 |---------|----------|
-| "NameError: Bucket is not defined" | Import the resource class: `from wetwire_aws.resources.s3 import Bucket` |
+| "NameError: s3 is not defined" | Add `from . import *` at top of file |
 | "Resource not in template" | Ensure the decorator is applied and file is imported |
 | "Wrong property name" | Use IDE autocomplete, or check the AWS docs |
 
