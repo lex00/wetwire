@@ -75,7 +75,8 @@ class TestS3Bucket:
 
     def test_bucket_with_versioning(self):
         """S3 Bucket with versioning config."""
-        from wetwire_aws.resources.s3 import Bucket, VersioningConfiguration
+        from wetwire_aws.resources.s3 import Bucket
+        from wetwire_aws.resources.s3.bucket import VersioningConfiguration
 
         bucket = Bucket(
             bucket_name="versioned-bucket",
@@ -91,7 +92,8 @@ class TestLambdaFunction:
 
     def test_function_creation(self):
         """Lambda Function can be instantiated."""
-        from wetwire_aws.resources.lambda_ import Code, Function
+        from wetwire_aws.resources.lambda_ import Function
+        from wetwire_aws.resources.lambda_.function import Code
 
         func = Function(
             function_name="my-function",
@@ -106,7 +108,8 @@ class TestLambdaFunction:
 
     def test_function_to_dict(self):
         """Lambda Function converts to dict."""
-        from wetwire_aws.resources.lambda_ import Code, Function
+        from wetwire_aws.resources.lambda_ import Function
+        from wetwire_aws.resources.lambda_.function import Code
 
         func = Function(
             function_name="test-func",
@@ -162,19 +165,19 @@ class TestDynamoDBTable:
 
     def test_table_creation(self):
         """DynamoDB Table can be instantiated."""
-        from wetwire_aws.resources.dynamodb import (
-            Table_AttributeDefinition,
-            Table_KeySchema,
-            Table,
+        from wetwire_aws.resources.dynamodb import Table
+        from wetwire_aws.resources.dynamodb.table import (
+            AttributeDefinition,
+            KeySchema,
         )
 
         table = Table(
             table_name="my-table",
             attribute_definitions=[
-                Table_AttributeDefinition(attribute_name="pk", attribute_type="S"),
+                AttributeDefinition(attribute_name="pk", attribute_type="S"),
             ],
             key_schema=[
-                Table_KeySchema(attribute_name="pk", key_type="HASH"),
+                KeySchema(attribute_name="pk", key_type="HASH"),
             ],
             billing_mode="PAY_PER_REQUEST",
         )
@@ -188,14 +191,14 @@ class TestPropertyTypes:
 
     def test_property_type_instantiation(self):
         """Property types can be instantiated."""
-        from wetwire_aws.resources.s3 import VersioningConfiguration
+        from wetwire_aws.resources.s3.bucket import VersioningConfiguration
 
         config = VersioningConfiguration(status="Enabled")
         assert config.status == "Enabled"
 
     def test_property_type_to_dict(self):
         """Property types convert to dict."""
-        from wetwire_aws.resources.s3 import VersioningConfiguration
+        from wetwire_aws.resources.s3.bucket import VersioningConfiguration
 
         config = VersioningConfiguration(status="Enabled")
         result = config.to_dict()
@@ -204,7 +207,7 @@ class TestPropertyTypes:
 
     def test_nested_property_types(self):
         """Nested property types work correctly."""
-        from wetwire_aws.resources.s3 import (
+        from wetwire_aws.resources.s3.bucket import (
             BucketEncryption,
             ServerSideEncryptionByDefault,
             ServerSideEncryptionRule,
@@ -242,7 +245,8 @@ class TestResourceWithIntrinsics:
     def test_function_with_refs(self):
         """Lambda with Ref for role."""
         from wetwire_aws.intrinsics import GetAtt, Ref
-        from wetwire_aws.resources.lambda_ import Code, Function
+        from wetwire_aws.resources.lambda_ import Function
+        from wetwire_aws.resources.lambda_.function import Code
 
         func = Function(
             function_name="test",

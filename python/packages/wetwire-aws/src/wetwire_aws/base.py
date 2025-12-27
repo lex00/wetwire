@@ -116,7 +116,6 @@ class CloudFormationResource:
     condition: str | None = field(default=None, repr=False, kw_only=True)
     metadata: dict[str, Any] | None = field(default=None, repr=False, kw_only=True)
     deletion_policy: str | None = field(default=None, repr=False, kw_only=True)
-    update_policy: dict[str, Any] | None = field(default=None, repr=False, kw_only=True)
     update_replace_policy: str | None = field(default=None, repr=False, kw_only=True)
 
     def to_dict(self) -> dict[str, Any]:
@@ -137,7 +136,6 @@ class CloudFormationResource:
             "condition",
             "metadata",
             "deletion_policy",
-            "update_policy",
             "update_replace_policy",
         }
 
@@ -175,8 +173,6 @@ class CloudFormationResource:
             result["Metadata"] = self.metadata
         if self.deletion_policy:
             result["DeletionPolicy"] = self.deletion_policy
-        if self.update_policy:
-            result["UpdatePolicy"] = self.update_policy
         if self.update_replace_policy:
             result["UpdateReplacePolicy"] = self.update_replace_policy
 
