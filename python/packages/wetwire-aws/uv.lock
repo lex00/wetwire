@@ -285,6 +285,18 @@ wheels = [
 ]
 
 [[package]]
+name = "graph-refs-dataclasses"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "graph-refs" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/13/e4/87721f325b84604dd0651b3138722d70843803d72990706631843cd24b2b/graph_refs_dataclasses-0.1.0.tar.gz", hash = "sha256:30211045c0ac43e3286a6689d4b1d36124fb60e4779134a93a38596d9f8fdcf2", size = 35053 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/31/cb/e2d3b2bf42a7dd6499a60dc09d7565a98d52663f38e0abdee684aed217ee/graph_refs_dataclasses-0.1.0-py3-none-any.whl", hash = "sha256:39022a59032996d8acd9e35c2eca15822468fbb923c88f572aee1b99a501753b", size = 31834 },
+]
+
+[[package]]
 name = "identify"
 version = "2.6.15"
 source = { registry = "https://pypi.org/simple" }
@@ -847,54 +859,12 @@ wheels = [
 ]
 
 [[package]]
-name = "wetwire"
-version = "0.1.0"
-source = { editable = "../wetwire" }
-dependencies = [
-    { name = "graph-refs" },
-]
-
-[package.optional-dependencies]
-codegen = [
-    { name = "black" },
-    { name = "requests" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "black", marker = "extra == 'codegen'", specifier = ">=23.12" },
-    { name = "black", marker = "extra == 'dev'", specifier = ">=23.12" },
-    { name = "graph-refs", specifier = ">=0.1.0" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
-    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1" },
-    { name = "requests", marker = "extra == 'codegen'", specifier = ">=2.28" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1" },
-]
-provides-extras = ["codegen", "dev"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "black", specifier = ">=23.12" },
-    { name = "mypy", specifier = ">=1.8" },
-    { name = "pyright", specifier = ">=1.1" },
-    { name = "pytest", specifier = ">=7.4" },
-    { name = "pytest-cov", specifier = ">=4.1" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "ruff", specifier = ">=0.1" },
-    { name = "types-pyyaml", specifier = ">=6.0" },
-    { name = "types-requests", specifier = ">=2.28" },
-]
-docs = [{ name = "pdoc", specifier = ">=14.0" }]
-
-[[package]]
 name = "wetwire-aws"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "graph-refs-dataclasses" },
     { name = "pyyaml" },
-    { name = "wetwire" },
 ]
 
 [package.optional-dependencies]
@@ -917,7 +887,6 @@ dev = [
 codegen = [
     { name = "botocore" },
     { name = "jinja2" },
-    { name = "wetwire", extra = ["codegen"] },
 ]
 dev = [
     { name = "black" },
@@ -935,6 +904,7 @@ requires-dist = [
     { name = "black", marker = "extra == 'codegen'", specifier = ">=23.12" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.12" },
     { name = "botocore", marker = "extra == 'codegen'", specifier = ">=1.34" },
+    { name = "graph-refs-dataclasses", specifier = ">=0.1.0" },
     { name = "jinja2", marker = "extra == 'codegen'", specifier = ">=3.1" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1" },
@@ -943,7 +913,6 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", marker = "extra == 'codegen'", specifier = ">=2.28" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1" },
-    { name = "wetwire", editable = "../wetwire" },
 ]
 provides-extras = ["dev", "codegen"]
 
@@ -951,7 +920,6 @@ provides-extras = ["dev", "codegen"]
 codegen = [
     { name = "botocore", specifier = ">=1.34" },
     { name = "jinja2", specifier = ">=3.1" },
-    { name = "wetwire", extras = ["codegen"], editable = "../wetwire" },
 ]
 dev = [
     { name = "black", specifier = ">=23.12" },

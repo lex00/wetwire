@@ -1,11 +1,11 @@
 """
-AWS-specific stub configuration for wetwire.stubs.
+AWS-specific stub configuration for graph_refs_dataclasses.
 
 Provides AWS_STUB_CONFIG for generating .pyi stub files that work
 with wetwire-aws imports.
 """
 
-from wetwire.stubs import StubConfig
+from graph_refs_dataclasses import StubConfig
 
 # All names exported from wetwire_aws
 AWS_CORE_EXPORTS = [

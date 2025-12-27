@@ -3,10 +3,13 @@ Base classes for CloudFormation resources.
 
 CloudFormationResource is the base class for all AWS resource types.
 PropertyType is the base class for nested property structures.
+Context is the base class for environment-specific configuration.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
+
+from graph_refs import ContextRef
 
 
 def _serialize_value(value: Any) -> Any:
@@ -186,3 +189,64 @@ class CloudFormationResource:
             The CloudFormation resource type (e.g., "AWS::S3::Bucket").
         """
         return cls._resource_type
+
+
+@dataclass
+class Context:
+    """
+    Base context for environment-specific values.
+
+    Subclass to add domain-specific values:
+
+        @dataclass
+        class AWSContext(Context):
+            account_id: str = ""
+            region: str = ""
+            stack_name: str = ""
+
+    Example:
+        >>> ctx = Context(project="myapp", environment="production")
+        >>> ctx.get("project")
+        'myapp'
+    """
+
+    project: str = ""
+    environment: str = ""
+
+    def get(self, name: str, default: Any = None) -> Any:
+        """
+        Get a context value by name.
+
+        Args:
+            name: The context value name
+            default: Default value if not found
+
+        Returns:
+            The context value or default
+        """
+        return getattr(self, name, default)
+
+    def resolve(self, context_ref: object) -> Any:
+        """
+        Resolve a ContextRef to its value.
+
+        Args:
+            context_ref: The context reference to resolve
+
+        Returns:
+            The resolved value
+        """
+        # Extract the name from the ContextRef
+        # ContextRef["name"] has the name as the type argument
+        args = getattr(context_ref, "__args__", ())
+        if args:
+            name = args[0]
+            if isinstance(name, str):
+                return self.get(name)
+        return None
+
+
+# Type aliases for common context references
+# These are used as type annotations: field: PROJECT
+PROJECT = ContextRef[Literal["project"]]
+ENVIRONMENT = ContextRef[Literal["environment"]]

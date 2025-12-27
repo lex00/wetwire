@@ -9,7 +9,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from wetwire_aws.decorator import get_aws_registry
+from wetwire_aws.decorator import cf_registry
 from wetwire_aws.intrinsics.functions import IntrinsicFunction
 
 
@@ -120,12 +120,12 @@ class CloudFormationTemplate:
         Returns:
             CloudFormationTemplate with all registered resources
         """
-        registry = get_aws_registry()
+        registry = cf_registry
         resources: dict[str, Any] = {}
 
         from typing import get_type_hints
 
-        from wetwire import is_attr_ref, is_class_ref, topological_sort
+        from graph_refs_dataclasses import is_attr_ref, is_class_ref, topological_sort
 
         from wetwire_aws.intrinsics.functions import GetAtt
         from wetwire_aws.intrinsics.functions import Ref as RefIntrinsic
@@ -173,7 +173,7 @@ class CloudFormationTemplate:
                 # Handle no-parens pattern: class references (e.g., MyVPC)
                 elif is_class_ref(v):
                     props[k] = RefIntrinsic(v.__name__)
-                elif isinstance(v, type) and hasattr(v, "_wetwire_marker"):
+                elif isinstance(v, type) and hasattr(v, "_refs_marker"):
                     props[k] = RefIntrinsic(v.__name__)
                 else:
                     props[k] = v

@@ -1,59 +1,34 @@
 """
 The @wetwire_aws decorator.
 
-This decorator wraps the core @wetwire decorator with AWS-specific
-defaults and registration.
+This decorator uses graph-refs-dataclasses to create a CloudFormation-specific
+decorator with automatic resource registration.
 """
 
-from typing import TypeVar, cast
+from typing import Any
 
-from wetwire import wetwire
-from wetwire.registry import ResourceRegistry
+from graph_refs_dataclasses import ResourceRegistry, create_decorator
 
-T = TypeVar("T")
-
-# AWS-specific registry
-_aws_registry = ResourceRegistry()
+# AWS-specific registry for CloudFormation resources
+cf_registry = ResourceRegistry()
 
 
-def wetwire_aws(cls: type[T]) -> type[T]:
-    """
-    Decorator for AWS CloudFormation resources.
-
-    Transforms a class into a dataclass and registers it with the AWS resource
-    registry for template generation.
-
-    Args:
-        cls: The class to decorate. Must have a 'resource' annotation pointing
-            to a CloudFormationResource subclass.
-
-    Returns:
-        The decorated class, now a dataclass registered with the AWS registry.
-
-    Example:
-        >>> @wetwire_aws
-        ... class MyBucket:
-        ...     resource: s3.Bucket
-        ...     bucket_name = "my-bucket"
-    """
-    # Apply the core wetwire decorator
-    # Cast because wetwire() supports both @wetwire and @wetwire() syntax,
-    # but we always pass cls directly here
-    decorated = cast(type[T], wetwire(cls))
-
-    # Get the resource type from annotations
+def _get_resource_type(cls: type[Any]) -> type[Any] | str | None:
+    """Extract CF resource type from the 'resource' annotation."""
     annotations = getattr(cls, "__annotations__", {})
     resource_type = annotations.get("resource")
-
     if resource_type is not None:
-        # Register with resource type
-        resource_type_str = getattr(resource_type, "_resource_type", "")
-        _aws_registry.register(decorated, resource_type_str)
-    else:
-        # Register without resource type (might be a property type)
-        _aws_registry.register(decorated, "")
+        # Return the CF resource type string if available
+        return getattr(resource_type, "_resource_type", None)
+    return None
 
-    return decorated
+
+# Create the @wetwire_aws decorator using the factory
+wetwire_aws = create_decorator(
+    registry=cf_registry,
+    resource_field="resource",
+    get_resource_type=_get_resource_type,
+)
 
 
 def get_aws_registry() -> ResourceRegistry:
@@ -63,4 +38,4 @@ def get_aws_registry() -> ResourceRegistry:
         The global ResourceRegistry instance containing all classes
         decorated with @wetwire_aws.
     """
-    return _aws_registry
+    return cf_registry

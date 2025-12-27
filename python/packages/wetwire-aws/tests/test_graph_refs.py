@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 from graph_refs import Attr, ContextRef, Ref, RefList, get_dependencies, get_refs
-from wetwire import topological_sort
+from graph_refs_dataclasses import topological_sort
 
 from wetwire_aws import CloudFormationTemplate, get_att, wetwire_aws
 from wetwire_aws.decorator import get_aws_registry

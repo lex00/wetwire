@@ -11,7 +11,8 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from graph_refs import ContextRef
-from wetwire import Context
+
+from wetwire_aws.base import Context
 
 from wetwire_aws.intrinsics.functions import Ref
 

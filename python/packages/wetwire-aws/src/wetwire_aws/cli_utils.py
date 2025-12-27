@@ -1,32 +1,7 @@
 """
-Base CLI framework for wetwire domain packages.
+CLI utilities for wetwire-aws.
 
-This module provides reusable CLI utilities that domain packages
-(wetwire-aws, wetwire-k8s, etc.) can use to build their CLIs.
-
-Utilities provided:
-- discover_resources(): Import modules to trigger resource registration
-- add_common_args(): Add standard CLI arguments (--module, --scope, --verbose)
-- create_list_command(): Create a 'list' command handler
-- create_validate_command(): Create a 'validate' command handler
-
-Example usage in a domain package:
-    from wetwire.cli import (
-        discover_resources,
-        add_common_args,
-        create_list_command,
-        create_validate_command,
-    )
-    from my_domain.registry import get_registry
-
-    registry = get_registry()
-
-    def get_resource_type(cls: type) -> str:
-        # Domain-specific type extraction
-        return getattr(cls, "_resource_type", "Unknown")
-
-    list_command = create_list_command(registry, get_resource_type)
-    validate_command = create_validate_command(registry)
+Provides reusable CLI utilities for the wetwire-aws CLI.
 """
 
 from __future__ import annotations
@@ -38,7 +13,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from wetwire.registry import ResourceRegistry
+    from graph_refs_dataclasses import ResourceRegistry
 
 
 def discover_resources(
@@ -49,7 +24,7 @@ def discover_resources(
     """
     Import a module to trigger resource registration.
 
-    When a module is imported, any @wetwire decorated classes are
+    When a module is imported, any @wetwire_aws decorated classes are
     automatically registered with the registry. This function imports
     the module and returns the count of newly registered resources.
 
@@ -114,7 +89,7 @@ def create_list_command(
     get_resource_type: Callable[[type], str],
 ) -> Callable[[argparse.Namespace], None]:
     """
-    Create a 'list' command handler for a domain-specific CLI.
+    Create a 'list' command handler.
 
     The returned handler lists all registered resources with their
     resource types. It handles module discovery and scope filtering.
@@ -122,18 +97,10 @@ def create_list_command(
     Args:
         registry: The resource registry to list from
         get_resource_type: Function to extract the resource type string
-            from a registered class. This is domain-specific.
-            Example: lambda cls: cls._resource_type
+            from a registered class.
 
     Returns:
         A command handler function that takes argparse.Namespace
-
-    Example:
-        def get_cf_type(cls):
-            resource_cls = cls.__annotations__.get("resource")
-            return getattr(resource_cls, "_resource_type", "Unknown")
-
-        list_cmd = create_list_command(aws_registry, get_cf_type)
     """
 
     def list_command(args: argparse.Namespace) -> None:
@@ -161,7 +128,7 @@ def create_validate_command(
     registry: ResourceRegistry,
 ) -> Callable[[argparse.Namespace], None]:
     """
-    Create a 'validate' command handler for a domain-specific CLI.
+    Create a 'validate' command handler.
 
     The returned handler validates that all resource references point
     to resources that exist in the registry. Uses graph-refs for

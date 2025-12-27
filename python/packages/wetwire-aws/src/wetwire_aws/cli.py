@@ -27,7 +27,7 @@ Examples:
 import argparse
 import sys
 
-from wetwire import (
+from wetwire_aws.cli_utils import (
     add_common_args,
     create_list_command,
     create_validate_command,

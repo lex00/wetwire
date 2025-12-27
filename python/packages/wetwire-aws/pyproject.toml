@@ -1,8 +1,6 @@
 [build-system]
 requires = [
     "hatchling",
-    # Core wetwire with codegen utilities
-    "wetwire[codegen]>=0.1.0",
     # AWS-specific codegen dependencies
     "jinja2>=3.1",
     "botocore>=1.34",
@@ -37,7 +35,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "wetwire>=0.1.0",
+    "graph-refs-dataclasses>=0.1.0",
     "pyyaml>=6.0",
 ]
 
@@ -69,7 +67,6 @@ dev = [
     "types-PyYAML>=6.0",
 ]
 codegen = [
-    "wetwire[codegen]>=0.1.0",
     "jinja2>=3.1",
     "botocore>=1.34",
 ]
@@ -144,5 +141,3 @@ line-length = 88
 target-version = ['py311']
 include = '\.pyi?$'
 
-[tool.uv.sources]
-wetwire = { path = "../wetwire", editable = true }

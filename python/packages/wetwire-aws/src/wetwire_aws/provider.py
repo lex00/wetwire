@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, get_type_hints
 
-from wetwire import Provider, is_attr_ref, is_class_ref
+from graph_refs_dataclasses import Provider, is_attr_ref, is_class_ref
 
 from wetwire_aws.intrinsics.functions import GetAtt, IntrinsicFunction, Ref
 
@@ -145,8 +145,8 @@ class CloudFormationProvider(Provider):
             elif is_class_ref(value):
                 # MyBucket -> {"Ref": "MyBucket"}
                 props[name] = Ref(value.__name__)
-            elif isinstance(value, type) and hasattr(value, "_wetwire_marker"):
-                # Fallback for wetwire classes without explicit is_class_ref
+            elif isinstance(value, type) and hasattr(value, "_refs_marker"):
+                # Fallback for refs classes without explicit is_class_ref
                 props[name] = Ref(value.__name__)
             else:
                 props[name] = value
@@ -184,7 +184,7 @@ class CloudFormationProvider(Provider):
         # Handle no-parens pattern: class references
         if is_class_ref(value):
             return Ref(value.__name__).to_dict()
-        if isinstance(value, type) and hasattr(value, "_wetwire_marker"):
+        if isinstance(value, type) and hasattr(value, "_refs_marker"):
             return Ref(value.__name__).to_dict()
         if isinstance(value, IntrinsicFunction):
             return value.to_dict()

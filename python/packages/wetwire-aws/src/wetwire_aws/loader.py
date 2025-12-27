@@ -1,8 +1,8 @@
 """
 AWS CloudFormation resource loader.
 
-Convenience wrapper around wetwire.loader.setup_resources with
-AWS-specific stub configuration.
+Convenience wrapper around graph_refs_dataclasses.setup_resources with
+AWS-specific namespace injection and stub configuration.
 
 Usage in a resources package __init__.py:
     from wetwire_aws.loader import setup_resources
@@ -13,9 +13,102 @@ from __future__ import annotations
 
 from typing import Any
 
-from wetwire.loader import setup_resources as _setup_resources
+from graph_refs_dataclasses import Attr, Ref, RefDict, RefList
+from graph_refs_dataclasses import setup_resources as _setup_resources
 
 from wetwire_aws.stubs import AWS_STUB_CONFIG
+
+
+def _get_aws_namespace() -> dict[str, Any]:
+    """Get the AWS-specific namespace to inject into resource modules.
+
+    This includes all the decorators, types, service modules, and helpers
+    that resource files need when using `from . import *`.
+    """
+    # Import here to avoid circular imports
+    from wetwire_aws import resources
+    from wetwire_aws.base import CloudFormationResource, PropertyType, Tag
+    from wetwire_aws.decorator import wetwire_aws
+    from wetwire_aws.intrinsics import ref, get_att, ARN
+    from wetwire_aws.intrinsics.functions import (
+        Ref as RefIntrinsic,
+        GetAtt,
+        Sub,
+        Join,
+        Select,
+        If,
+        Equals,
+        And,
+        Or,
+        Not,
+        Base64,
+        GetAZs,
+        ImportValue,
+    )
+    from wetwire_aws.intrinsics.pseudo import (
+        AWS_ACCOUNT_ID,
+        AWS_NOTIFICATION_ARNS,
+        AWS_NO_VALUE,
+        AWS_PARTITION,
+        AWS_REGION,
+        AWS_STACK_ID,
+        AWS_STACK_NAME,
+        AWS_URL_SUFFIX,
+    )
+    from wetwire_aws.template import CloudFormationTemplate
+
+    # Build namespace with all service modules
+    namespace: dict[str, Any] = {
+        # Decorator
+        "wetwire_aws": wetwire_aws,
+        # Base classes
+        "CloudFormationResource": CloudFormationResource,
+        "PropertyType": PropertyType,
+        "Tag": Tag,
+        # Template
+        "CloudFormationTemplate": CloudFormationTemplate,
+        # Reference types from graph-refs
+        "Ref": Ref,
+        "Attr": Attr,
+        "RefList": RefList,
+        "RefDict": RefDict,
+        # Reference helpers
+        "ref": ref,
+        "get_att": get_att,
+        "ARN": ARN,
+        # Intrinsic functions (CF intrinsics)
+        "RefIntrinsic": RefIntrinsic,
+        "GetAtt": GetAtt,
+        "Sub": Sub,
+        "Join": Join,
+        "Select": Select,
+        "If": If,
+        "Equals": Equals,
+        "And": And,
+        "Or": Or,
+        "Not": Not,
+        "Base64": Base64,
+        "GetAZs": GetAZs,
+        "ImportValue": ImportValue,
+        # Pseudo-parameters
+        "AWS_ACCOUNT_ID": AWS_ACCOUNT_ID,
+        "AWS_NOTIFICATION_ARNS": AWS_NOTIFICATION_ARNS,
+        "AWS_NO_VALUE": AWS_NO_VALUE,
+        "AWS_PARTITION": AWS_PARTITION,
+        "AWS_REGION": AWS_REGION,
+        "AWS_STACK_ID": AWS_STACK_ID,
+        "AWS_STACK_NAME": AWS_STACK_NAME,
+        "AWS_URL_SUFFIX": AWS_URL_SUFFIX,
+    }
+
+    # Add all service modules from resources package
+    for attr_name in dir(resources):
+        if not attr_name.startswith("_"):
+            module = getattr(resources, attr_name)
+            if hasattr(module, "__file__"):  # It's a module
+                namespace[attr_name] = module
+
+    return namespace
 
 
 def setup_resources(
@@ -27,15 +120,15 @@ def setup_resources(
 ) -> None:
     """Set up AWS CloudFormation resource imports.
 
-    Wrapper around wetwire.loader.setup_resources with AWS-specific
-    stub configuration pre-applied.
+    Wrapper around graph_refs_dataclasses.setup_resources with AWS-specific
+    namespace injection and stub configuration pre-applied.
 
     This function:
     1. Finds all .py files in the package directory
     2. Parses them to find class definitions and Ref/Attr annotations
     3. Builds a dependency graph from the annotations
     4. Imports modules in topological order
-    5. Injects previously-loaded classes into each module's namespace
+    5. Injects AWS decorators, types, and service modules into each module's namespace
     6. Generates .pyi stubs with AWS-specific imports for IDE support
 
     Args:
@@ -55,4 +148,5 @@ def setup_resources(
         package_globals,
         stub_config=AWS_STUB_CONFIG,
         generate_stubs=generate_stubs,
+        extra_namespace=_get_aws_namespace(),
     )
