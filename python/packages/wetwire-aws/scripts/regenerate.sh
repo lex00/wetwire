@@ -50,26 +50,26 @@ echo ""
 
 # Stage 1: Fetch
 echo "Stage 1/4: Fetching CloudFormation spec..."
-python -m codegen.fetch $FORCE
+uv run python -m codegen.fetch $FORCE
 echo ""
 
 # Stage 2: Parse
 echo "Stage 2/4: Parsing spec..."
-python -m codegen.parse $VALIDATE
+uv run python -m codegen.parse $VALIDATE
 echo ""
 
 # Stage 3: Extract enums
 echo "Stage 3/4: Extracting enums from botocore..."
-python -m codegen.extract_enums
+uv run python -m codegen.extract_enums
 echo ""
 
 # Stage 4: Generate
 if [ -n "$DRY_RUN" ]; then
     echo "Stage 4/4: Generating Python classes (dry run)..."
-    python -m codegen.generate --dry-run
+    uv run python -m codegen.generate --dry-run
 else
     echo "Stage 4/4: Generating Python classes..."
-    python -m codegen.generate
+    uv run python -m codegen.generate
 fi
 echo ""
 
