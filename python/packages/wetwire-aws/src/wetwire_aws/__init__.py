@@ -13,7 +13,6 @@ This package provides:
 from wetwire_aws.base import CloudFormationResource, PropertyType
 from wetwire_aws.context import AWSContext
 from wetwire_aws.decorator import wetwire_aws
-from wetwire_aws.provider import CloudFormationProvider
 from wetwire_aws.intrinsics import (
     ARN,
     # Pseudo-parameters
@@ -51,6 +50,7 @@ from wetwire_aws.intrinsics import (
     get_refs,
     ref,
 )
+from wetwire_aws.provider import CloudFormationProvider
 from wetwire_aws.template import CloudFormationTemplate
 
 __version__ = "0.1.0"

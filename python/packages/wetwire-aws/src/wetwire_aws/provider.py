@@ -96,7 +96,8 @@ class CloudFormationProvider(Provider):
             annotations = getattr(wrapper_cls, "__annotations__", {})
             resource_type_cls = annotations.get("resource")
 
-        if resource_type_cls is None or not hasattr(resource_type_cls, "_resource_type"):
+        has_resource_type = hasattr(resource_type_cls, "_resource_type")
+        if resource_type_cls is None or not has_resource_type:
             raise ValueError(
                 f"Wrapper class {wrapper_cls.__name__} must have a 'resource' "
                 "annotation pointing to a CloudFormationResource subclass"
@@ -128,7 +129,6 @@ class CloudFormationProvider(Provider):
         Returns:
             Dict of CloudFormation properties (PascalCase keys)
         """
-        from wetwire_aws.base import _serialize_value, _to_cf_name
         from wetwire_aws.intrinsics.refs import resolve_refs_from_annotations
 
         # Collect non-private, non-None attributes
