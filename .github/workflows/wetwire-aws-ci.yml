@@ -1,0 +1,122 @@
+name: wetwire-aws CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'python/packages/wetwire-aws/**'
+      - 'python/packages/wetwire/**'
+      - '.github/workflows/wetwire-aws-ci.yml'
+  pull_request:
+    paths:
+      - 'python/packages/wetwire-aws/**'
+      - 'python/packages/wetwire/**'
+      - '.github/workflows/wetwire-aws-ci.yml'
+
+defaults:
+  run:
+    working-directory: python/packages/wetwire-aws
+
+jobs:
+  test:
+    name: Test Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: |
+          uv sync --group dev --group codegen
+
+      - name: Generate resources
+        run: |
+          ./scripts/regenerate.sh
+
+      - name: Run tests
+        run: |
+          uv run pytest --cov-report=xml
+
+      - name: Type check
+        run: |
+          uv run mypy src/wetwire_aws --exclude resources
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: |
+          uv sync --group dev
+
+      - name: Run ruff
+        run: |
+          uv run ruff check src/wetwire_aws --exclude resources
+
+      - name: Check formatting
+        run: |
+          uv run ruff format --check src/wetwire_aws --exclude resources
+
+  build-test:
+    name: Test Build Process
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install hatch
+        run: pip install hatch
+
+      - name: Install wetwire dependency
+        working-directory: python/packages/wetwire
+        run: pip install -e .
+
+      - name: Build from scratch
+        run: |
+          # Ensure no pre-existing resources
+          rm -rf src/wetwire_aws/resources specs parsed.json
+          hatch build
+
+      - name: Verify wheel contents
+        run: |
+          pip install dist/*.whl
+          python -c "
+          from wetwire_aws.resources import s3, lambda_, ec2, iam
+          print('Successfully imported generated resources')
+          print(f'  s3.Bucket: {s3.Bucket}')
+          print(f'  lambda_.Function: {lambda_.Function}')
+          print(f'  ec2.Instance: {ec2.Instance}')
+          print(f'  iam.Role: {iam.Role}')
+          "
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel
+          path: python/packages/wetwire-aws/dist/*.whl

@@ -1,0 +1,101 @@
+name: wetwire-aws Release
+
+on:
+  push:
+    tags:
+      - 'wetwire-aws-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.2.0)'
+        required: true
+
+defaults:
+  run:
+    working-directory: python/packages/wetwire-aws
+
+jobs:
+  build:
+    name: Build Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install hatch
+        run: pip install hatch
+
+      - name: Install wetwire dependency
+        working-directory: python/packages/wetwire
+        run: pip install -e .
+
+      - name: Build wheel and sdist
+        run: |
+          # Ensure clean state
+          rm -rf src/wetwire_aws/resources specs parsed.json dist
+          hatch build
+
+      - name: Verify wheel contents
+        run: |
+          pip install dist/*.whl
+          python -c "
+          from wetwire_aws.resources import s3, lambda_, ec2, iam, dynamodb
+          print('Successfully imported generated resources')
+          print(f'  Total services verified: 5')
+          "
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: python/packages/wetwire-aws/dist/
+
+  test-install:
+    name: Test Installation
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.11', '3.12', '3.13']
+    steps:
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Install wheel
+        run: pip install dist/*.whl
+
+      - name: Verify import
+        run: |
+          python -c "from wetwire_aws.resources import s3; print('OK')"
+
+  publish:
+    name: Publish to PyPI
+    needs: [build, test-install]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # For trusted publishing
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
