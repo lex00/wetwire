@@ -51,7 +51,8 @@ def get_cf_resource_type(cls: type) -> str:
     annotations = getattr(cls, "__annotations__", {})
     resource_type_cls = annotations.get("resource")
     if resource_type_cls and hasattr(resource_type_cls, "_resource_type"):
-        return resource_type_cls._resource_type
+        resource_type: str = resource_type_cls._resource_type
+        return resource_type
     return "Unknown"
 
 

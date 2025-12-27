@@ -165,7 +165,8 @@ class CloudFormationProvider(Provider):
         result = resource_instance.to_dict()
 
         # Return just the Properties portion
-        return result.get("Properties", {})
+        properties: dict[str, Any] = result.get("Properties", {})
+        return properties
 
     def _serialize_value(self, value: Any) -> Any:
         """

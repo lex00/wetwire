@@ -56,7 +56,8 @@ def _apply_metaclass(cls: type[T], metaclass: type) -> type[T]:
     new_cls.__module__ = cls.__module__
     new_cls.__qualname__ = cls.__qualname__
 
-    return new_cls  # type: ignore[return-value]
+    # The metaclass call returns Any, but we know it's the same shape as T
+    return new_cls  # type: ignore[no-any-return]
 
 
 @dataclass_transform()
@@ -132,18 +133,28 @@ def wetwire(
             if isinstance(attr_value, list):
                 # Convert to field(default_factory=...) with a copy
                 default_list = list(attr_value)
+
+                def make_list_factory(val: list[Any]) -> Callable[[], list[Any]]:
+                    return lambda: list(val)
+
                 setattr(
                     cls,
                     attr_name,
-                    dc_field(default_factory=lambda v=default_list: list(v)),
+                    dc_field(default_factory=make_list_factory(default_list)),
                 )
             elif isinstance(attr_value, dict):
                 # Convert to field(default_factory=...) with a copy
                 default_dict = dict(attr_value)
+
+                def make_dict_factory(
+                    val: dict[str, Any],
+                ) -> Callable[[], dict[str, Any]]:
+                    return lambda: dict(val)
+
                 setattr(
                     cls,
                     attr_name,
-                    dc_field(default_factory=lambda v=default_dict: dict(v)),
+                    dc_field(default_factory=make_dict_factory(default_dict)),
                 )
             elif isinstance(attr_value, AttrRef):
                 # AttrRef is immutable, use directly as default
@@ -154,17 +165,25 @@ def wetwire(
                 # Complex object - use copy if possible
                 import copy
 
+                def make_copy_factory(val: Any) -> Callable[[], Any]:
+                    return lambda: copy.copy(val)
+
+                def make_identity_factory(val: Any) -> Callable[[], Any]:
+                    return lambda: val
+
                 try:
                     default_copy = copy.copy(attr_value)
                     setattr(
                         cls,
                         attr_name,
-                        dc_field(default_factory=lambda v=default_copy: copy.copy(v)),
+                        dc_field(default_factory=make_copy_factory(default_copy)),
                     )
                 except Exception:
                     # If copy fails, fall back to returning the same instance
                     setattr(
-                        cls, attr_name, dc_field(default_factory=lambda v=attr_value: v)
+                        cls,
+                        attr_name,
+                        dc_field(default_factory=make_identity_factory(attr_value)),
                     )
 
         # Add a default to the 'resource' field
@@ -203,7 +222,7 @@ def wetwire(
         cls.__post_init__ = _wetwire_post_init  # type: ignore[attr-defined]
 
         # Apply @dataclass decorator
-        cls = make_dataclass(cls)  # type: ignore[assignment]
+        cls = make_dataclass(cls)
 
         # Apply WetWireMeta metaclass to enable no-parens attribute access
         # (e.g., MyRole.Arn returns AttrRef(MyRole, "Arn"))

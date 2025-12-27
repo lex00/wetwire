@@ -327,7 +327,7 @@ def generate_service_module(
     # Dynamic __all__ generation
     lines.append("")
     lines.append("# Export all public classes dynamically")
-    lines.append("def _get_all():")
+    lines.append("def _get_all() -> list[str]:")
     lines.append("    import sys")
     lines.append("    return [")
     lines.append("        name for name, obj in vars(sys.modules[__name__]).items()")

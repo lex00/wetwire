@@ -8,7 +8,7 @@ to resources at serialization time.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from graph_refs import ContextRef
 
@@ -48,7 +48,7 @@ class Context:
         """
         return getattr(self, name, default)
 
-    def resolve(self, context_ref: ContextRef[str]) -> Any:  # type: ignore[type-arg]
+    def resolve(self, context_ref: object) -> Any:
         """
         Resolve a ContextRef to its value.
 
@@ -68,6 +68,7 @@ class Context:
         return None
 
 
-# Pre-built context references for common values
-PROJECT: ContextRef[str] = ContextRef["project"]  # type: ignore[assignment,type-arg]
-ENVIRONMENT: ContextRef[str] = ContextRef["environment"]  # type: ignore[assignment,type-arg]
+# Type aliases for common context references
+# These are used as type annotations: field: PROJECT
+PROJECT = ContextRef[Literal["project"]]
+ENVIRONMENT = ContextRef[Literal["environment"]]

@@ -237,7 +237,8 @@ class CloudFormationTemplate:
 
     def _resolve_resources(self, resources: dict[str, Any]) -> dict[str, Any]:
         """Resolve any intrinsic functions in resources."""
-        return self._resolve_value(resources)
+        resolved: dict[str, Any] = self._resolve_value(resources)
+        return resolved
 
     def _resolve_conditions(self, conditions: dict[str, Any]) -> dict[str, Any]:
         """Resolve any intrinsic functions in conditions."""

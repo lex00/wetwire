@@ -66,6 +66,7 @@ dev = [
     "pytest-cov>=4.1",
     "ruff>=0.1",
     "black>=23.12",
+    "types-PyYAML>=6.0",
 ]
 codegen = [
     "wetwire[codegen]>=0.1.0",
@@ -109,8 +110,10 @@ packages = ["src/wetwire_aws"]
 
 [tool.mypy]
 python_version = "3.11"
+strict = true
+warn_return_any = true
 warn_unused_configs = true
-ignore_missing_imports = true
+exclude = ["src/wetwire_aws/resources"]
 
 [tool.pyright]
 pythonVersion = "3.11"

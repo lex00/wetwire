@@ -13,13 +13,14 @@ import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Callable
 
 # Import requests lazily to avoid requiring it at import time
-_requests = None
+_requests: ModuleType | None = None
 
 
-def _get_requests():
+def _get_requests() -> ModuleType:
     """Lazily import requests."""
     global _requests
     if _requests is None:

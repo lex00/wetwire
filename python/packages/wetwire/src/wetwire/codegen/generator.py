@@ -8,14 +8,15 @@ including formatting and type annotation helpers.
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
 from wetwire.codegen.schema import PropertyDef
 
 # Import black lazily to avoid requiring it at import time
-_black = None
+_black: ModuleType | None = None
 
 
-def _get_black():
+def _get_black() -> ModuleType:
     """Lazily import black."""
     global _black
     if _black is None:
@@ -101,7 +102,9 @@ def format_code(code: str) -> str:
     """
     black = _get_black()
     try:
-        return black.format_str(code, mode=black.Mode())
+        # black.format_str returns str
+        result: str = black.format_str(code, mode=black.Mode())
+        return result
     except Exception:
         return code
 

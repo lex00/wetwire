@@ -8,7 +8,7 @@ resolved at runtime or used in CloudFormation templates.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from graph_refs import ContextRef
 from wetwire import Context
@@ -77,7 +77,7 @@ class AWSContext(Context):
         # Return a Ref intrinsic for CloudFormation to resolve
         return Ref(name)
 
-    def resolve(self, context_ref: ContextRef[str]) -> Any:  # type: ignore[type-arg]
+    def resolve(self, context_ref: object) -> Any:
         """
         Resolve a ContextRef to its value.
 
@@ -102,10 +102,10 @@ class AWSContext(Context):
         return None
 
 
-# Pre-built context references for AWS pseudo-parameters
-AWS_REGION: ContextRef[str] = ContextRef["AWS::Region"]  # type: ignore[assignment,type-arg]
-AWS_ACCOUNT_ID: ContextRef[str] = ContextRef["AWS::AccountId"]  # type: ignore[assignment,type-arg]
-AWS_STACK_NAME: ContextRef[str] = ContextRef["AWS::StackName"]  # type: ignore[assignment,type-arg]
-AWS_STACK_ID: ContextRef[str] = ContextRef["AWS::StackId"]  # type: ignore[assignment,type-arg]
-AWS_PARTITION: ContextRef[str] = ContextRef["AWS::Partition"]  # type: ignore[assignment,type-arg]
-AWS_URL_SUFFIX: ContextRef[str] = ContextRef["AWS::URLSuffix"]  # type: ignore[assignment,type-arg]
+# Type aliases for AWS pseudo-parameters
+AWS_REGION = ContextRef[Literal["AWS::Region"]]
+AWS_ACCOUNT_ID = ContextRef[Literal["AWS::AccountId"]]
+AWS_STACK_NAME = ContextRef[Literal["AWS::StackName"]]
+AWS_STACK_ID = ContextRef[Literal["AWS::StackId"]]
+AWS_PARTITION = ContextRef[Literal["AWS::Partition"]]
+AWS_URL_SUFFIX = ContextRef[Literal["AWS::URLSuffix"]]

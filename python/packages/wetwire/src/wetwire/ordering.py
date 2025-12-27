@@ -7,7 +7,7 @@ topological sort and dependency graphs.
 
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import MISSING, fields
 from typing import Any
 
 from graph_refs import get_dependencies as _get_graph_refs_dependencies
@@ -42,6 +42,9 @@ def get_all_dependencies(cls: type[Any]) -> set[type[Any]]:
     try:
         for field in fields(cls):
             default = field.default
+            # Skip if no default value
+            if default is MISSING:
+                continue
             # Check for AttrRef (no-parens pattern like MyRole.Arn)
             if is_attr_ref(default):
                 deps.add(default.target)

@@ -5,7 +5,7 @@ This decorator wraps the core @wetwire decorator with AWS-specific
 defaults and registration.
 """
 
-from typing import TypeVar
+from typing import TypeVar, cast
 
 from wetwire import wetwire
 from wetwire.registry import ResourceRegistry
@@ -37,7 +37,9 @@ def wetwire_aws(cls: type[T]) -> type[T]:
         ...     bucket_name = "my-bucket"
     """
     # Apply the core wetwire decorator
-    decorated = wetwire(cls)
+    # Cast because wetwire() supports both @wetwire and @wetwire() syntax,
+    # but we always pass cls directly here
+    decorated = cast(type[T], wetwire(cls))
 
     # Get the resource type from annotations
     annotations = getattr(cls, "__annotations__", {})
