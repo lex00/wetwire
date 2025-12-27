@@ -102,7 +102,6 @@ exclude = [
     "/__pycache__",
     "*.pyc",
     "/specs",
-    "/src/wetwire_aws/resources",
 ]
 
 [tool.hatch.build.targets.wheel]

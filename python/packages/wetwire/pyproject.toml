@@ -116,5 +116,3 @@ line-length = 88
 target-version = ['py311']
 include = '\.pyi?$'
 
-[tool.uv.sources]
-graph-refs = { path = "../../../../graph-refs", editable = true }

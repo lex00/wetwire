@@ -155,29 +155,11 @@ toml = [
 [[package]]
 name = "graph-refs"
 version = "0.1.0"
-source = { editable = "../../../../graph-refs" }
-
-[package.metadata]
-requires-dist = [
-    { name = "black", marker = "extra == 'dev'", specifier = ">=23.12" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
-    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.1" },
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/fd/43a51b7f5e90debe2efdec3609778810d693967539350930722bc1379f8b/graph_refs-0.1.0.tar.gz", hash = "sha256:59a1f455d5f7c71036b405a54e2584cd27b2d36a5173d129b6179c584f09ff18", size = 23630 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/be/6d/0edcad07758ddee14c41feddfff292745081fe605fedec9e52f216aaf55b/graph_refs-0.1.0-py3-none-any.whl", hash = "sha256:f56b39bb03294dae7e7212a69a165563c7098f768a9ca1ce14f696caea5500fc", size = 16016 },
 ]
-provides-extras = ["dev"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "black", specifier = ">=23.12" },
-    { name = "mypy", specifier = ">=1.8" },
-    { name = "pyright", specifier = ">=1.1" },
-    { name = "pytest", specifier = ">=7.4" },
-    { name = "pytest-cov", specifier = ">=4.1" },
-    { name = "ruff", specifier = ">=0.1" },
-]
-docs = [{ name = "pdoc", specifier = ">=14.0" }]
 
 [[package]]
 name = "iniconfig"
@@ -689,7 +671,7 @@ docs = [
 [package.metadata]
 requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.12" },
-    { name = "graph-refs", editable = "../../../../graph-refs" },
+    { name = "graph-refs", specifier = ">=0.1.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4" },
