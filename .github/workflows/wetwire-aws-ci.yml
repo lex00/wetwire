@@ -18,8 +18,36 @@ defaults:
     working-directory: python/packages/wetwire-aws
 
 jobs:
+  generate:
+    name: Generate Resources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --group codegen
+
+      - name: Generate resources
+        run: ./scripts/regenerate.sh
+
+      - name: Upload resources
+        uses: actions/upload-artifact@v4
+        with:
+          name: resources
+          path: python/packages/wetwire-aws/src/wetwire_aws/resources/
+          retention-days: 1
+
   test:
     name: Test Python ${{ matrix.python-version }}
+    needs: generate
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -37,22 +65,21 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
-      - name: Install dependencies
-        run: |
-          uv sync --group dev --group codegen
+      - name: Download resources
+        uses: actions/download-artifact@v4
+        with:
+          name: resources
+          path: python/packages/wetwire-aws/src/wetwire_aws/resources/
 
-      - name: Generate resources
-        run: |
-          ./scripts/regenerate.sh
+      - name: Install dependencies
+        run: uv sync --group dev
 
       - name: Run tests
-        run: |
-          uv run pytest --cov-report=xml
+        run: uv run pytest --cov-report=xml
 
       # TODO: Fix type errors and re-enable
       # - name: Type check
-      #   run: |
-      #     uv run mypy src/wetwire_aws --exclude resources
+      #   run: uv run mypy src/wetwire_aws --exclude resources
 
   lint:
     name: Lint
