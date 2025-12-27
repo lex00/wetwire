@@ -270,57 +270,64 @@ class AttributeType:
 
 ### Generated Output
 
+The generator produces a service package with:
+- `__init__.py` - Resources and enum constants
+- `{resource}.py` - PropertyTypes for each resource (e.g., `table.py`)
+
+**dynamodb/__init__.py** (resources and enums):
 ```python
-"""
-AWS DynamoDB CloudFormation resources.
+"""AWS DYNAMODB CloudFormation resources."""
 
-Auto-generated from CloudFormation spec version X.X.X
-Generator version: 1.0.0
-
-DO NOT EDIT MANUALLY
-"""
-
-from dataclasses import dataclass, field
-from typing import Any, Optional, Union
-
-from wetwire_aws.base import CloudFormationResource, PropertyType
-from wetwire_aws.intrinsics.functions import Ref, GetAtt, Sub
+from wetwire_aws.base import CloudFormationResource, PropertyType, Tag
+from . import table as _table  # Submodule alias
 
 # Enums from botocore
 class KeyType:
     HASH = "HASH"
     RANGE = "RANGE"
 
-class AttributeType:
+class ScalarAttributeType:
     S = "S"
     N = "N"
     B = "B"
 
-# Property types
-@dataclass
-class KeySchema(PropertyType):
-    attribute_name: str
-    key_type: Union[str, KeyType]
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "AttributeName": self.attribute_name,
-            "KeyType": self.key_type if isinstance(self.key_type, str) else self.key_type,
-        }
-
-# Resources
+# Resources reference PropertyTypes via submodule
 @dataclass
 class Table(CloudFormationResource):
-    _resource_type = "AWS::DynamoDB::Table"
+    _resource_type: ClassVar[str] = "AWS::DynamoDB::Table"
 
-    key_schema: list[KeySchema]
-    attribute_definitions: list[AttributeDefinition]
-    table_name: Optional[str] = None
-    billing_mode: Optional[Union[str, BillingMode]] = None
+    key_schema: list[_table.KeySchema] = field(default_factory=list)
+    attribute_definitions: list[_table.AttributeDefinition] = field(default_factory=list)
+    table_name: str | None = None
+    billing_mode: str | None = None
+```
 
-    def to_dict(self) -> dict[str, Any]:
-        # Serialization logic
-        ...
+**dynamodb/table.py** (PropertyTypes):
+```python
+"""PropertyTypes for AWS::DynamoDB::Table."""
+
+from wetwire_aws.base import PropertyType
+
+@dataclass
+class KeySchema(PropertyType):
+    attribute_name: str | None = None
+    key_type: str | None = None
+
+@dataclass
+class AttributeDefinition(PropertyType):
+    attribute_name: str | None = None
+    attribute_type: str | None = None
+```
+
+**Usage:**
+```python
+from wetwire_aws.resources.dynamodb import Table, KeyType
+from wetwire_aws.resources.dynamodb.table import KeySchema, AttributeDefinition
+
+table = Table(
+    key_schema=[KeySchema(attribute_name="pk", key_type=KeyType.HASH)],
+    attribute_definitions=[AttributeDefinition(attribute_name="pk", attribute_type="S")],
+)
 ```
 
 ### Regeneration

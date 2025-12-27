@@ -205,7 +205,7 @@ Use generated enum classes for type safety:
 
 ```python
 from wetwire_aws.resources.lambda_ import Function, Runtime, Architecture
-from wetwire_aws.resources.dynamodb import Table, KeyType, AttributeType
+from wetwire_aws.resources.dynamodb import Table, KeyType, ScalarAttributeType
 
 @wetwire_aws
 class MyFunction:
@@ -218,7 +218,7 @@ class MyTable:
     resource: Table
     key_schema = [{"AttributeName": "pk", "KeyType": KeyType.HASH}]
     attribute_definitions = [
-        {"AttributeName": "pk", "AttributeType": AttributeType.S}
+        {"AttributeName": "pk", "AttributeType": ScalarAttributeType.S}
     ]
 ```
 

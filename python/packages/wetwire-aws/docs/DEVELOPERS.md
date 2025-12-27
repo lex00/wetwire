@@ -161,43 +161,50 @@ This provides type-safe constants instead of magic strings.
 
 ### Generated Output
 
-For each service, the generator produces:
+For each service, the generator produces a package with:
+- `__init__.py` - Resources and enum constants
+- `{resource}.py` - PropertyTypes for each resource
 
+**s3/__init__.py** (resources and enums):
 ```python
-"""
-AWS S3 CloudFormation resources.
+"""AWS S3 CloudFormation resources."""
 
-Auto-generated from CloudFormation spec version X.X.X
-Generator version: 1.0.0
-Generated: 2025-12-26
-
-DO NOT EDIT MANUALLY
-"""
-
-from dataclasses import dataclass, field
-from typing import Any, Optional, Union
-
-from wetwire_aws.base import CloudFormationResource, PropertyType
-from wetwire_aws.intrinsics.functions import Ref, GetAtt, Sub
+from wetwire_aws.base import CloudFormationResource, PropertyType, Tag
+from . import bucket as _bucket  # Submodule alias
 
 # Enum classes from botocore
 class ServerSideEncryption:
     AES256 = "AES256"
     AWS_KMS = "aws:kms"
 
-# Property type dataclasses
-@dataclass
-class BucketEncryption(PropertyType):
-    server_side_encryption_configuration: list[dict[str, Any]]
-
-# Resource dataclasses
+# Resources reference PropertyTypes via submodule
 @dataclass
 class Bucket(CloudFormationResource):
-    _resource_type = "AWS::S3::Bucket"
+    _resource_type: ClassVar[str] = "AWS::S3::Bucket"
 
-    bucket_name: Optional[str] = None
-    bucket_encryption: Optional[BucketEncryption] = None
-    # ... more properties
+    bucket_name: str | None = None
+    bucket_encryption: _bucket.BucketEncryption | None = None
+```
+
+**s3/bucket.py** (PropertyTypes):
+```python
+"""PropertyTypes for AWS::S3::Bucket."""
+
+from wetwire_aws.base import PropertyType
+
+@dataclass
+class BucketEncryption(PropertyType):
+    server_side_encryption_configuration: list[ServerSideEncryptionRule] = field(default_factory=list)
+
+@dataclass
+class ServerSideEncryptionRule(PropertyType):
+    server_side_encryption_by_default: ServerSideEncryptionByDefault | None = None
+```
+
+**Usage:**
+```python
+from wetwire_aws.resources.s3 import Bucket
+from wetwire_aws.resources.s3.bucket import BucketEncryption, ServerSideEncryptionRule
 ```
 
 ---
