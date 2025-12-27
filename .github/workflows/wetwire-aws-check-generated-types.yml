@@ -1,0 +1,42 @@
+name: Check Generated Types
+
+on:
+  workflow_dispatch:
+    inputs:
+      output_mode:
+        description: 'Output mode'
+        required: true
+        default: 'summary'
+        type: choice
+        options:
+          - summary
+          - full
+          - count
+
+defaults:
+  run:
+    working-directory: python/packages/wetwire-aws
+
+jobs:
+  check-types:
+    name: Check Generated Resource Types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --group dev --group codegen
+
+      - name: Generate resources
+        run: ./scripts/regenerate.sh
+
+      - name: Check generated types
+        run: ./scripts/check-generated-types.sh --${{ inputs.output_mode }}

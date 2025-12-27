@@ -77,9 +77,8 @@ jobs:
       - name: Run tests
         run: uv run pytest --cov-report=xml
 
-      # TODO: Fix type errors and re-enable
-      # - name: Type check
-      #   run: uv run mypy src/wetwire_aws --exclude resources
+      - name: Type check
+        run: uv run mypy src/wetwire_aws
 
   lint:
     name: Lint
