@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from graph_refs import Attr
-
 from wetwire_aws import wetwire_aws
-from wetwire_aws.intrinsics.refs import ARN
 from wetwire_aws.resources.lambda_ import Function
 
 __all__ = ["AppFunction"]
@@ -19,6 +16,6 @@ class AppFunction:
     function_name = "app-function"
     runtime = "python3.12"
     handler = "index.handler"
-    # Cross-file reference using Attr annotation
+    # Cross-file reference using no-parens pattern
     # AppRole is injected by setup_resources() before this module executes
-    role: Attr[AppRole, ARN] = None  # noqa: F821
+    role = AppRole.Arn  # noqa: F821

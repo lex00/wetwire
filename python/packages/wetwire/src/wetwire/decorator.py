@@ -9,6 +9,14 @@ This module provides the decorator that enables the wetwire pattern:
         bucket_name = "my-bucket"
 
     bucket = MyBucket()  # No parameters needed!
+
+The decorator also enables the no-parens attribute access pattern:
+
+    @wetwire
+    class MyFunction:
+        resource: Function
+        role = MyRole.Arn    # Returns AttrRef(MyRole, "Arn")
+        vpc = MyVPC          # Class reference (already works)
 """
 
 from __future__ import annotations
@@ -20,9 +28,35 @@ from dataclasses import field as dc_field
 from typing import Any, TypeVar, dataclass_transform, get_type_hints
 
 from wetwire._internal.wrapper_utils import get_wrapped_type, is_wrapper_class
+from wetwire.refs import AttrRef, WetWireMeta
 from wetwire.registry import registry
 
 T = TypeVar("T")
+
+
+def _apply_metaclass(cls: type[T], metaclass: type) -> type[T]:
+    """
+    Apply a metaclass to an existing class.
+
+    This creates a new class with the same name, bases, and attributes,
+    but with the specified metaclass. Useful for adding metaclass behavior
+    to a class after @dataclass has been applied.
+    """
+    # Get the class dict, excluding __dict__ and __weakref__
+    class_dict = {}
+    for key, value in cls.__dict__.items():
+        if key in ("__dict__", "__weakref__"):
+            continue
+        class_dict[key] = value
+
+    # Create new class with the metaclass
+    new_cls = metaclass(cls.__name__, cls.__bases__, class_dict)
+
+    # Preserve module and qualname
+    new_cls.__module__ = cls.__module__
+    new_cls.__qualname__ = cls.__qualname__
+
+    return new_cls  # type: ignore[return-value]
 
 
 @dataclass_transform()
@@ -88,6 +122,9 @@ def wetwire(
                     # This is a class reference (the no-parens pattern)
                     # We'll handle this specially but still need an annotation
                     cls.__annotations__[attr_name] = type[Any]
+                elif isinstance(attr_value, AttrRef):
+                    # This is an attribute reference (MyRole.Arn pattern)
+                    cls.__annotations__[attr_name] = AttrRef
                 else:
                     cls.__annotations__[attr_name] = type(attr_value)
 
@@ -108,6 +145,9 @@ def wetwire(
                     attr_name,
                     dc_field(default_factory=lambda v=default_dict: dict(v)),
                 )
+            elif isinstance(attr_value, AttrRef):
+                # AttrRef is immutable, use directly as default
+                pass
             elif hasattr(attr_value, "__class__") and not isinstance(
                 attr_value, (str, int, float, bool, type(None), type)
             ):
@@ -164,6 +204,13 @@ def wetwire(
 
         # Apply @dataclass decorator
         cls = make_dataclass(cls)  # type: ignore[assignment]
+
+        # Apply WetWireMeta metaclass to enable no-parens attribute access
+        # (e.g., MyRole.Arn returns AttrRef(MyRole, "Arn"))
+        cls = _apply_metaclass(cls, WetWireMeta)
+
+        # Mark as a wetwire class
+        cls._wetwire_marker = True  # type: ignore[attr-defined]
 
         # Auto-register if requested
         if register:

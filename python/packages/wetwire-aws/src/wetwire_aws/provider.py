@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, get_type_hints
 
-from wetwire import Provider
+from wetwire import Provider, is_attr_ref, is_class_ref
 
 from wetwire_aws.intrinsics.functions import GetAtt, IntrinsicFunction, Ref
 
@@ -136,12 +136,27 @@ class CloudFormationProvider(Provider):
         for name, value in wrapper_instance.__dict__.items():
             if name.startswith("_") or name == "resource" or value is None:
                 continue
-            props[name] = value
 
-        # Resolve graph-refs annotations to intrinsics
+            # Handle no-parens pattern: runtime AttrRef markers
+            if is_attr_ref(value):
+                # MyRole.Arn -> {"Fn::GetAtt": ["MyRole", "Arn"]}
+                props[name] = GetAtt(value.target.__name__, value.attr)
+            # Handle no-parens pattern: class references
+            elif is_class_ref(value):
+                # MyBucket -> {"Ref": "MyBucket"}
+                props[name] = Ref(value.__name__)
+            elif isinstance(value, type) and hasattr(value, "_wetwire_marker"):
+                # Fallback for wetwire classes without explicit is_class_ref
+                props[name] = Ref(value.__name__)
+            else:
+                props[name] = value
+
+        # Resolve graph-refs annotations to intrinsics (for type annotation pattern)
         resolved_refs = resolve_refs_from_annotations(wrapper_instance)
         for field_name, ref_value in resolved_refs.items():
-            props[field_name] = ref_value
+            # Only use annotation-based resolution if not already resolved
+            if field_name not in props:
+                props[field_name] = ref_value
 
         # Create resource instance and serialize
         resource_instance = resource_type_cls(**props)
@@ -162,6 +177,14 @@ class CloudFormationProvider(Provider):
         Returns:
             Serialized value suitable for CloudFormation JSON
         """
+        # Handle no-parens pattern: AttrRef markers
+        if is_attr_ref(value):
+            return GetAtt(value.target.__name__, value.attr).to_dict()
+        # Handle no-parens pattern: class references
+        if is_class_ref(value):
+            return Ref(value.__name__).to_dict()
+        if isinstance(value, type) and hasattr(value, "_wetwire_marker"):
+            return Ref(value.__name__).to_dict()
         if isinstance(value, IntrinsicFunction):
             return value.to_dict()
         if hasattr(value, "to_dict"):

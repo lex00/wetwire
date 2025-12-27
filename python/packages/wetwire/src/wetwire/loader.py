@@ -31,19 +31,25 @@ from wetwire.stubs import StubConfig, find_class_definitions, generate_stub_file
 
 
 def find_wetwire_refs_in_source(source: str) -> set[str]:
-    """Extract class names from Ref[T], Attr[T, ...] type annotations.
+    """Extract class names from wetwire reference patterns.
 
-    Matches type annotation patterns used by wetwire/graph-refs:
+    Matches patterns used by wetwire/graph-refs:
+
+    Type annotation patterns:
     - Ref[ClassName]
     - Attr[ClassName, ...]
     - RefList[ClassName]
     - RefDict[..., ClassName]
 
+    No-parens patterns (value assignments):
+    - ClassName.Attribute (e.g., MyRole.Arn)
+    - = ClassName  (direct class reference, e.g., vpc = MyVPC)
+
     Args:
         source: Python source code text
 
     Returns:
-        Set of class names referenced in type annotations
+        Set of class names referenced in patterns
     """
     refs: set[str] = set()
 
@@ -61,6 +67,18 @@ def find_wetwire_refs_in_source(source: str) -> set[str]:
 
     # Match RefDict[..., ClassName] - class name is second type argument
     for match in re.finditer(r"\bRefDict\[[^,]+,\s*([A-Za-z_]\w*)\]", source):
+        refs.add(match.group(1))
+
+    # Match no-parens attribute pattern: ClassName.Attribute
+    # e.g., role = MyRole.Arn
+    # Must be PascalCase to avoid matching module.function patterns
+    for match in re.finditer(r"\b([A-Z][A-Za-z0-9]*)\.[A-Z][A-Za-z0-9]*\b", source):
+        refs.add(match.group(1))
+
+    # Match no-parens class reference: = ClassName (at end of line or before comment)
+    # e.g., vpc = MyVPC
+    # Must be PascalCase to avoid matching = some_variable
+    for match in re.finditer(r"=\s+([A-Z][A-Za-z0-9]*)\s*(?:#|$)", source, re.MULTILINE):
         refs.add(match.group(1))
 
     return refs

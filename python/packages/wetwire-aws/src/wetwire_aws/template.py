@@ -125,8 +125,10 @@ class CloudFormationTemplate:
 
         from typing import get_type_hints
 
-        from wetwire import topological_sort
+        from wetwire import is_attr_ref, is_class_ref, topological_sort
 
+        from wetwire_aws.intrinsics.functions import GetAtt
+        from wetwire_aws.intrinsics.functions import Ref as RefIntrinsic
         from wetwire_aws.intrinsics.refs import resolve_refs_from_annotations
 
         # Get all wrapper classes
@@ -160,17 +162,29 @@ class CloudFormationTemplate:
 
             # Collect properties from wrapper (excluding 'resource' and private attrs)
             # Also exclude fields that are None (annotation-only placeholders)
-            props = {
-                k: v
-                for k, v in wrapper_instance.__dict__.items()
-                if not k.startswith("_") and k != "resource" and v is not None
-            }
+            props: dict[str, Any] = {}
+            for k, v in wrapper_instance.__dict__.items():
+                if k.startswith("_") or k == "resource" or v is None:
+                    continue
+
+                # Handle no-parens pattern: AttrRef markers (e.g., MyRole.Arn)
+                if is_attr_ref(v):
+                    props[k] = GetAtt(v.target.__name__, v.attr)
+                # Handle no-parens pattern: class references (e.g., MyVPC)
+                elif is_class_ref(v):
+                    props[k] = RefIntrinsic(v.__name__)
+                elif isinstance(v, type) and hasattr(v, "_wetwire_marker"):
+                    props[k] = RefIntrinsic(v.__name__)
+                else:
+                    props[k] = v
 
             # Merge resolved refs - these are the graph-refs annotations resolved
             # to CloudFormation intrinsics. Only include refs that resolve to
             # fields the resource actually accepts.
             for field_name, ref_value in resolved_refs.items():
-                props[field_name] = ref_value
+                # Don't overwrite already-resolved no-parens refs
+                if field_name not in props:
+                    props[field_name] = ref_value
 
             # Create resource instance with collected properties
             resource_instance = resource_type_cls(**props)

@@ -12,7 +12,7 @@ This is the recommended user pattern and MUST work.
 from __future__ import annotations
 
 import pytest
-from graph_refs import get_dependencies
+from wetwire import AttrRef, is_attr_ref
 
 from wetwire_aws import CloudFormationTemplate
 from wetwire_aws.decorator import get_aws_registry
@@ -36,7 +36,7 @@ class TestCrossFileReferences:
         This simulates a user project structure:
         - resources/__init__.py: `from . import *`
         - resources/role.py: defines AppRole
-        - resources/function.py: defines AppFunction with Attr[AppRole, ARN]
+        - resources/function.py: defines AppFunction with role = AppRole.Arn
         """
         # Import the test package - this uses `from . import *` pattern
         from tests.cross_file_test import AppFunction, AppRole
@@ -45,9 +45,12 @@ class TestCrossFileReferences:
         assert AppRole is not None
         assert AppFunction is not None
 
-        # Verify the cross-file dependency is detected
-        deps = get_dependencies(AppFunction)
-        assert AppRole in deps, "AppFunction should depend on AppRole"
+        # Verify the no-parens cross-file reference is detected
+        # With no-parens pattern, the value is an AttrRef at the class level
+        role_default = AppFunction.__dataclass_fields__["role"].default
+        assert is_attr_ref(role_default), "role should be an AttrRef (no-parens pattern)"
+        assert role_default.target is AppRole, "AttrRef should reference AppRole"
+        assert role_default.attr == "Arn", "AttrRef should reference 'Arn' attribute"
 
     def test_cross_file_serialization(self):
         """Test that cross-file references serialize correctly to CloudFormation."""
@@ -68,9 +71,10 @@ class TestCrossFileReferences:
         assert "AppFunction" in output["Resources"]
 
         # Verify the cross-file reference is serialized correctly
+        # The no-parens pattern (role = AppRole.Arn) should serialize to GetAtt
         func_props = output["Resources"]["AppFunction"]["Properties"]
         assert func_props["Role"] == {"Fn::GetAtt": ["AppRole", "Arn"]}, \
-            "Cross-file Attr[AppRole, ARN] should serialize to GetAtt"
+            "Cross-file no-parens reference (AppRole.Arn) should serialize to GetAtt"
 
     def test_cross_file_dependency_order(self):
         """Test that cross-file dependencies are ordered correctly."""

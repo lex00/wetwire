@@ -1,14 +1,60 @@
 """
 Dependency ordering utilities for wetwire resources.
 
-Uses graph-refs introspection to compute topological sort and dependency graphs.
+Uses graph-refs introspection and runtime AttrRef detection to compute
+topological sort and dependency graphs.
 """
 
 from __future__ import annotations
 
+from dataclasses import fields
 from typing import Any
 
-from graph_refs import get_dependencies
+from graph_refs import get_dependencies as _get_graph_refs_dependencies
+
+from wetwire.refs import is_attr_ref, is_class_ref
+
+
+def get_all_dependencies(cls: type[Any]) -> set[type[Any]]:
+    """
+    Get all dependencies of a class, from both type annotations and runtime values.
+
+    Combines:
+    1. graph-refs dependencies from Ref[T], Attr[T, name] type annotations
+    2. Runtime AttrRef dependencies from no-parens pattern (e.g., role = MyRole.Arn)
+    3. Runtime class reference dependencies (e.g., vpc = MyVPC)
+
+    Args:
+        cls: The wrapper class to analyze
+
+    Returns:
+        Set of classes this class depends on
+    """
+    deps: set[type[Any]] = set()
+
+    # Get graph-refs dependencies from type annotations
+    try:
+        deps.update(_get_graph_refs_dependencies(cls))
+    except Exception:
+        pass  # Ignore errors from graph-refs
+
+    # Get runtime dependencies from dataclass fields
+    try:
+        for field in fields(cls):
+            default = field.default
+            # Check for AttrRef (no-parens pattern like MyRole.Arn)
+            if is_attr_ref(default):
+                deps.add(default.target)
+            # Check for class reference (no-parens pattern like MyVPC)
+            elif is_class_ref(default):
+                deps.add(default)
+            elif isinstance(default, type) and hasattr(default, "_wetwire_marker"):
+                deps.add(default)
+    except TypeError:
+        # Not a dataclass, skip
+        pass
+
+    return deps
 
 
 def topological_sort(classes: list[type[Any]]) -> list[type[Any]]:
@@ -56,7 +102,7 @@ def topological_sort(classes: list[type[Any]]) -> list[type[Any]]:
         ready = [
             cls
             for cls in remaining
-            if get_dependencies(cls).issubset(
+            if get_all_dependencies(cls).issubset(
                 set(sorted_result) | (set(classes) - class_set)
             )
         ]
@@ -138,7 +184,7 @@ def detect_cycles(classes: list[type[Any]]) -> list[tuple[type[Any], ...]]:
     class_set = set(classes)
     graph: dict[type[Any], set[type[Any]]] = {}
     for cls in classes:
-        deps = get_dependencies(cls)
+        deps = get_all_dependencies(cls)
         graph[cls] = deps & class_set  # Only consider deps within our set
 
     # Tarjan's algorithm for finding SCCs
@@ -202,4 +248,4 @@ def get_dependency_graph(classes: list[type[Any]]) -> dict[type[Any], set[type[A
         set()
     """
     class_set = set(classes)
-    return {cls: get_dependencies(cls) & class_set for cls in classes}
+    return {cls: get_all_dependencies(cls) & class_set for cls in classes}

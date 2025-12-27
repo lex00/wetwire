@@ -62,9 +62,13 @@ from wetwire.conditions import match, when
 from wetwire.context import ENVIRONMENT, PROJECT, Context
 from wetwire.decorator import wetwire
 
+# Runtime reference markers (for no-parens pattern)
+from wetwire.refs import AttrRef, is_attr_ref, is_class_ref
+
 # Ordering utilities
 from wetwire.ordering import (
     detect_cycles,
+    get_all_dependencies,
     get_creation_order,
     get_deletion_order,
     get_dependency_graph,
@@ -107,6 +111,7 @@ __all__ = [
     "get_deletion_order",
     "detect_cycles",
     "get_dependency_graph",
+    "get_all_dependencies",
     # CLI utilities
     "discover_resources",
     "add_common_args",
@@ -125,4 +130,8 @@ __all__ = [
     "setup_resources",
     # Stub generation
     "StubConfig",
+    # Runtime reference markers
+    "AttrRef",
+    "is_attr_ref",
+    "is_class_ref",
 ]
