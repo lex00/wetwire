@@ -31,15 +31,17 @@ Wetwire is a unified framework for **declarative infrastructure-as-code** using 
 Every CloudFormation resource is wrapped in a user-defined dataclass with a `resource:` field:
 
 ```python
+from . import *
+
 @wetwire_aws
 class MyVPC:
-    resource: VPC
+    resource: ec2.VPC
     cidr_block: str = "10.0.0.0/16"
     enable_dns_hostnames: bool = True
 
 @wetwire_aws
 class MySubnet:
-    resource: Subnet
+    resource: ec2.Subnet
     cidr_block: str = "10.0.1.0/24"
     vpc_id = ref(MyVPC)  # Cross-resource reference via ref() helper
 ```
@@ -69,6 +71,8 @@ Two reference patterns are available:
 
 **1. Function calls (`ref()`, `get_att()`)** - Simple, direct references:
 ```python
+from . import *
+
 @wetwire_aws
 class BucketPolicy:
     resource: s3.BucketPolicy
@@ -78,11 +82,11 @@ class BucketPolicy:
 
 **2. Type annotations (`Ref[T]`, `Attr[T, name]`)** - Enables graph-refs introspection:
 ```python
-from graph_refs import Ref, Attr
+from . import *
 
 @wetwire_aws
 class ProcessorFunction:
-    resource: Function
+    resource: lambda_.Function
     bucket: Ref[DataBucket] = None       # Reference to resource
     role: Attr[ProcessorRole, "Arn"] = None  # GetAtt reference
 ```
@@ -108,19 +112,17 @@ This automatically:
 - Injects classes into each module's namespace before it loads
 - Generates `.pyi` stubs for IDE autocomplete
 
-**Resource files use injected references:**
+**Resource files use the single import pattern:**
 ```python
 # myapp/compute.py
-from graph_refs import Attr
-from wetwire_aws import wetwire_aws
-from wetwire_aws.resources.lambda_ import Function
+from . import *
 
 __all__ = ["ProcessorFunction"]
 
 @wetwire_aws
 class ProcessorFunction:
-    resource: Function
-    # DataBucket is injected by setup_resources() - defined in another file
+    resource: lambda_.Function
+    # ProcessorRole is injected by setup_resources() - defined in another file
     role: Attr[ProcessorRole, "Arn"] = None  # noqa: F821
 ```
 
@@ -128,16 +130,18 @@ See `python/packages/wetwire/docs/package-structure.md` for complete documentati
 
 **Qualified resource types for name collisions:**
 
-When a wrapper class has the same name as the AWS resource class (e.g., `class Bucket` wrapping `s3.Bucket`), use the module-qualified type to avoid self-reference:
+When a wrapper class has the same name as the AWS resource class (e.g., `class Bucket` wrapping `s3.Bucket`), the module-qualified type avoids self-reference:
 
 ```python
+from . import *
+
 @wetwire_aws
 class Bucket:
     resource: s3.Bucket  # NOT resource: Bucket (would be self-referential)
-    bucket_name = ref(BucketName)
+    bucket_name = "my-bucket"
 ```
 
-The codegen automatically detects these collisions and generates qualified names.
+All resource types should use module-qualified names: `s3.Bucket`, `ec2.Instance`, `lambda_.Function`, etc.
 
 ### Validation Strategy (Two-Layer)
 
@@ -274,24 +278,25 @@ uv build
 **ALWAYS use wrapper dataclasses** - never use imperative instantiation:
 
 ```python
+from . import *
+
 # ✅ CORRECT - Block syntax with wrapper
-@dataclass
+@wetwire_aws
 class MyBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name: str = "my-bucket"
-    versioning_configuration: VersioningConfiguration
 
 my_bucket = MyBucket()
 
 # ❌ WRONG - Imperative syntax
-bucket = Bucket(bucket_name="my-bucket", versioning_configuration=...)
+bucket = s3.Bucket(bucket_name="my-bucket")
 ```
 
 ### 2. Resource Naming
 
 CloudFormation resource names do NOT include service prefixes:
 - Class name: `Instance` (not `EC2Instance`)
-- Namespacing via module: `from wetwire_aws.resources.ec2 import Instance`
+- Namespacing via module qualification: `ec2.Instance`, `s3.Bucket`
 
 ### 3. Generated Code Management
 
@@ -440,10 +445,12 @@ class ResourceClass(CloudFormationResource):
 ### Example Test Pattern
 
 ```python
+from wetwire_aws.resources import s3
+
 # Define wrapper dataclasses at module level
-@dataclass
+@wetwire_aws
 class TestBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name: str = "test-bucket"
 
 def test_serialization():
@@ -492,16 +499,18 @@ account_id = AWS_ACCOUNT_ID
 
 ### 3. Inline PropertyType Constructors
 ```python
+from . import *
+
 # ❌ WRONG - inline constructor in list
 security_group_ingress = [
-    ec2.security_group.Ingress(ip_protocol=IpProtocol.TCP, from_port=443)
+    ec2.security_group.Ingress(ip_protocol=ec2.IpProtocol.TCP, from_port=443)
 ]
 
 # ✅ CORRECT - separate wrapper class
 @wetwire_aws
 class MySecurityGroupIngress:
     resource: ec2.security_group.Ingress
-    ip_protocol = IpProtocol.TCP
+    ip_protocol = ec2.IpProtocol.TCP
     from_port = 443
 
 @wetwire_aws
@@ -512,6 +521,8 @@ class MySecurityGroup:
 
 ### 4. Inline IAM Policies
 ```python
+from . import *
+
 # ❌ WRONG - inline dict
 assume_role_policy_document = {
     "Version": "2012-10-17",
@@ -521,13 +532,13 @@ assume_role_policy_document = {
 # ✅ CORRECT - wrapper classes
 @wetwire_aws
 class MyAssumeRoleStatement:
-    resource: PolicyStatement
+    resource: iam.PolicyStatement
     principal = {"Service": "lambda.amazonaws.com"}
     action = "sts:AssumeRole"
 
 @wetwire_aws
 class MyAssumeRolePolicy:
-    resource: PolicyDocument
+    resource: iam.PolicyDocument
     statement = [MyAssumeRoleStatement]
 
 @wetwire_aws
