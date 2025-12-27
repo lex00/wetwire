@@ -134,21 +134,38 @@ wetwire-aws validate --module infra
 
 ## Multi-File Organization
 
-Split resources across files - they all register automatically:
+Split resources across files using `setup_resources()` for automatic discovery:
 
 ```
 myapp/
-├── __init__.py      # Import all modules to trigger registration
+├── __init__.py      # Uses setup_resources() for auto-discovery
+├── __init__.pyi     # Auto-generated for IDE support
 ├── storage.py       # S3, EFS
 ├── compute.py       # Lambda, EC2
 ├── network.py       # VPC, Subnets
 └── database.py      # DynamoDB, RDS
 ```
 
+**__init__.py** (the key file):
+```python
+from wetwire_aws.loader import setup_resources
+
+setup_resources(__file__, __name__, globals())
+```
+
+That's it. `setup_resources()` automatically:
+- Discovers all `.py` files in the package
+- Parses them to find class definitions and references
+- Loads modules in dependency order (dependencies first)
+- Makes cross-file references work via namespace injection
+- Generates `.pyi` stubs for IDE autocomplete
+
 **storage.py:**
 ```python
 from wetwire_aws import wetwire_aws
 from wetwire_aws.resources.s3 import Bucket
+
+__all__ = ["DataBucket"]
 
 @wetwire_aws
 class DataBucket:
@@ -158,35 +175,27 @@ class DataBucket:
 
 **compute.py:**
 ```python
-from wetwire import Ref
+from graph_refs import Ref
 from wetwire_aws import wetwire_aws
 from wetwire_aws.resources.lambda_ import Function, Runtime
 
-# Import to access DataBucket
-from .storage import DataBucket
+__all__ = ["ProcessorFunction"]
 
 @wetwire_aws
 class ProcessorFunction:
     resource: Function
     function_name = "processor"
     runtime = Runtime.PYTHON3_12
-    # Reference across files
-    bucket: Ref[DataBucket] = None
-```
-
-**__init__.py:**
-```python
-# Import all modules to trigger registration
-from . import storage
-from . import compute
-from . import network
-from . import database
+    # Cross-file reference - DataBucket is injected by setup_resources()
+    bucket: Ref[DataBucket] = None  # noqa: F821
 ```
 
 **Generate:**
 ```bash
 wetwire-aws build --module myapp
 ```
+
+> **Note:** The `# noqa: F821` comment silences linter warnings about `DataBucket` being undefined. It's actually injected by `setup_resources()` before this module loads. The generated `.pyi` stub ensures IDE autocomplete still works.
 
 ---
 
@@ -264,6 +273,7 @@ aws cloudformation deploy \
 
 ## Next Steps
 
+- See the [Package Structure Guide](../../wetwire/docs/package-structure.md) for advanced multi-file patterns
 - See the full [CLI Reference](CLI.md)
 - Learn about [migration strategies](ADOPTION.md)
 - Understand [how it compares](COMPARISON.md) to CDK and Terraform

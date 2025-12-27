@@ -145,7 +145,7 @@ uv run wetwire-aws list --module my_stack && echo "OK"
 ```
 
 **What to check:**
-- Python 3.10+ installed
+- Python 3.11+ installed
 - uv or pip available
 - AWS credentials configured (for deployment)
 

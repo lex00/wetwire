@@ -65,17 +65,66 @@ All AWS resource classes are **generated at build time** from CloudFormation spe
 
 ### Cross-Resource References
 
-Use `ref()` and `get_att()` with direct class references:
+Two reference patterns are available:
 
+**1. Function calls (`ref()`, `get_att()`)** - Simple, direct references:
 ```python
 @wetwire_aws
 class BucketPolicy:
     resource: s3.BucketPolicy
     bucket = ref(MyBucket)  # Direct class reference
-    policy_document = BucketPolicyPolicyDocument
+    policy_document = get_att(MyRole, ARN)
 ```
 
-Auto-discovery via `setup_resources()` ensures all classes are available at runtime regardless of which file they're defined in.
+**2. Type annotations (`Ref[T]`, `Attr[T, name]`)** - Enables graph-refs introspection:
+```python
+from graph_refs import Ref, Attr
+
+@wetwire_aws
+class ProcessorFunction:
+    resource: Function
+    bucket: Ref[DataBucket] = None       # Reference to resource
+    role: Attr[ProcessorRole, "Arn"] = None  # GetAtt reference
+```
+
+**When to use each:**
+- Use `ref()`/`get_att()` for simple cases and inline values
+- Use `Ref[T]`/`Attr[T, name]` when you need dependency introspection, topological sorting, or cross-file references with `setup_resources()`
+
+### Multi-File Organization with setup_resources()
+
+For multi-file projects, use `setup_resources()` for automatic discovery:
+
+```python
+# myapp/__init__.py
+from wetwire_aws.loader import setup_resources
+setup_resources(__file__, __name__, globals())
+```
+
+This automatically:
+- Discovers all `.py` files in the package
+- Parses them to find class definitions and `Ref[T]`/`Attr[T, ...]` references
+- Loads modules in dependency order (dependencies first)
+- Injects classes into each module's namespace before it loads
+- Generates `.pyi` stubs for IDE autocomplete
+
+**Resource files use injected references:**
+```python
+# myapp/compute.py
+from graph_refs import Attr
+from wetwire_aws import wetwire_aws
+from wetwire_aws.resources.lambda_ import Function
+
+__all__ = ["ProcessorFunction"]
+
+@wetwire_aws
+class ProcessorFunction:
+    resource: Function
+    # DataBucket is injected by setup_resources() - defined in another file
+    role: Attr[ProcessorRole, "Arn"] = None  # noqa: F821
+```
+
+See `python/packages/wetwire/docs/package-structure.md` for complete documentation.
 
 **Qualified resource types for name collisions:**
 
@@ -106,6 +155,8 @@ python/packages/
 │       ├── decorator.py     # @wetwire decorator
 │       ├── registry.py      # Resource registration
 │       ├── template.py      # Base template class
+│       ├── loader.py        # setup_resources() for multi-file packages
+│       ├── stubs.py         # StubConfig, .pyi generation for IDE support
 │       └── codegen/         # Shared codegen utilities
 │           ├── schema.py    # IntermediateSchema, PropertyDef, etc.
 │           ├── transforms.py # to_snake_case, keyword escaping
@@ -117,6 +168,8 @@ python/packages/
 │   │   ├── base.py          # CloudFormationResource base
 │   │   ├── decorator.py     # @wetwire_aws decorator
 │   │   ├── template.py      # CloudFormationTemplate
+│   │   ├── loader.py        # AWS-specific setup_resources() wrapper
+│   │   ├── stubs.py         # AWS_STUB_CONFIG for stub generation
 │   │   ├── intrinsics/      # Ref, GetAtt, Sub, etc.
 │   │   └── resources/       # GENERATED at build time (not in git)
 │   │       ├── s3/

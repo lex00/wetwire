@@ -50,6 +50,7 @@ from wetwire_aws.intrinsics import (
     get_refs,
     ref,
 )
+from wetwire_aws.loader import setup_resources
 from wetwire_aws.provider import CloudFormationProvider
 from wetwire_aws.template import CloudFormationTemplate
 
@@ -104,4 +105,6 @@ __all__ = [
     "AWS_STACK_ID",
     "AWS_STACK_NAME",
     "AWS_URL_SUFFIX",
+    # Resource loader
+    "setup_resources",
 ]

@@ -46,6 +46,12 @@ from wetwire.cli import (
     discover_resources,
 )
 
+# Resource loader
+from wetwire.loader import setup_resources
+
+# Stub generation
+from wetwire.stubs import StubConfig
+
 # Computed fields
 from wetwire.computed import computed
 
@@ -115,4 +121,8 @@ __all__ = [
     "RefInfo",
     "get_refs",
     "get_ref_dependencies",
+    # Resource loader
+    "setup_resources",
+    # Stub generation
+    "StubConfig",
 ]
