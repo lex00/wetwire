@@ -5,12 +5,10 @@ on:
     branches: [main]
     paths:
       - 'python/packages/wetwire-aws/**'
-      - 'python/packages/wetwire/**'
       - '.github/workflows/wetwire-aws-ci.yml'
   pull_request:
     paths:
       - 'python/packages/wetwire-aws/**'
-      - 'python/packages/wetwire/**'
       - '.github/workflows/wetwire-aws-ci.yml'
 
 defaults:
@@ -119,10 +117,6 @@ jobs:
 
       - name: Install hatch
         run: pip install hatch
-
-      - name: Install wetwire dependency with codegen extras
-        working-directory: python/packages/wetwire
-        run: pip install -e ".[codegen]"
 
       - name: Install build dependencies
         run: pip install jinja2 botocore

@@ -7,6 +7,7 @@ This module provides utilities for fetching source materials
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import urllib.request
@@ -96,6 +97,10 @@ def fetch_http(
     print(f"  Downloading {url}...")
     with urllib.request.urlopen(url) as response:
         content = response.read()
+
+    # Handle gzip-compressed content
+    if content[:2] == b'\x1f\x8b':  # gzip magic number
+        content = gzip.decompress(content)
 
     # Calculate hash
     sha256 = hashlib.sha256(content).hexdigest()
