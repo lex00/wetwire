@@ -80,6 +80,29 @@ class Output:
 
 
 @dataclass
+class Mapping:
+    """CloudFormation template mapping.
+
+    A mapping is a two-level lookup table used with Fn::FindInMap.
+    """
+
+    map_data: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, dict[str, Any]]:
+        return self.map_data
+
+
+class Condition:
+    """CloudFormation template condition.
+
+    Represents a condition definition in the Conditions section.
+    Note: This is different from the Condition intrinsic function.
+    """
+
+    pass
+
+
+@dataclass
 class CloudFormationTemplate:
     """
     CloudFormation template container.

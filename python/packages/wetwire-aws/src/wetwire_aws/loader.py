@@ -29,26 +29,27 @@ def _get_aws_namespace() -> dict[str, Any]:
     from wetwire_aws import resources
     from wetwire_aws.base import CloudFormationResource, PropertyType, Tag
     from wetwire_aws.decorator import wetwire_aws
-    from wetwire_aws.intrinsics import ref, get_att, ARN
+    from wetwire_aws.intrinsics import ARN, get_att, ref
     from wetwire_aws.intrinsics.functions import (
-        Ref as RefIntrinsic,
-        GetAtt,
-        Sub,
-        Join,
-        Select,
-        If,
-        Equals,
         And,
-        Or,
-        Not,
         Base64,
+        Cidr,
+        Equals,
+        FindInMap,
+        GetAtt,
         GetAZs,
+        If,
         ImportValue,
+        Join,
+        Not,
+        Or,
     )
+    from wetwire_aws.intrinsics.functions import Ref as RefIntrinsic
+    from wetwire_aws.intrinsics.functions import Select, Split, Sub, Transform
     from wetwire_aws.intrinsics.pseudo import (
         AWS_ACCOUNT_ID,
-        AWS_NOTIFICATION_ARNS,
         AWS_NO_VALUE,
+        AWS_NOTIFICATION_ARNS,
         AWS_PARTITION,
         AWS_REGION,
         AWS_STACK_ID,
@@ -82,6 +83,7 @@ def _get_aws_namespace() -> dict[str, Any]:
         "Sub": Sub,
         "Join": Join,
         "Select": Select,
+        "Split": Split,
         "If": If,
         "Equals": Equals,
         "And": And,
@@ -90,6 +92,9 @@ def _get_aws_namespace() -> dict[str, Any]:
         "Base64": Base64,
         "GetAZs": GetAZs,
         "ImportValue": ImportValue,
+        "FindInMap": FindInMap,
+        "Transform": Transform,
+        "Cidr": Cidr,
         # Pseudo-parameters
         "AWS_ACCOUNT_ID": AWS_ACCOUNT_ID,
         "AWS_NOTIFICATION_ARNS": AWS_NOTIFICATION_ARNS,
@@ -125,8 +130,8 @@ def setup_resources(
 
     This function:
     1. Finds all .py files in the package directory
-    2. Parses them to find class definitions and Ref/Attr annotations
-    3. Builds a dependency graph from the annotations
+    2. Parses them to find class definitions and ref()/get_att() calls
+    3. Builds a dependency graph from the references
     4. Imports modules in topological order
     5. Injects AWS decorators, types, and service modules into each module's namespace
     6. Generates .pyi stubs with AWS-specific imports for IDE support

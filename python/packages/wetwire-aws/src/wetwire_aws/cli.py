@@ -5,6 +5,7 @@ Usage:
     wetwire-aws build [OPTIONS]
     wetwire-aws validate [OPTIONS]
     wetwire-aws list [OPTIONS]
+    wetwire-aws import TEMPLATE [-o OUTPUT]
     wetwire-aws --help
 
 Examples:
@@ -22,10 +23,14 @@ Examples:
 
     # List registered resources
     wetwire-aws list --module myapp.infra
+
+    # Import a CloudFormation template to Python
+    wetwire-aws import template.yaml -o my_stack/
 """
 
 import argparse
 import sys
+from pathlib import Path
 
 from wetwire_aws.cli_utils import (
     add_common_args,
@@ -54,6 +59,106 @@ def get_cf_resource_type(cls: type) -> str:
         resource_type: str = resource_type_cls._resource_type
         return resource_type
     return "Unknown"
+
+
+def lint_command(args: argparse.Namespace) -> None:
+    """Lint Python code for wetwire-aws issues."""
+    from wetwire_aws.linter import fix_file, lint_file
+
+    path = Path(args.path)
+    if not path.exists():
+        print(f"Error: Path not found: {path}", file=sys.stderr)
+        sys.exit(1)
+
+    # Collect Python files
+    if path.is_file():
+        files = [path]
+    else:
+        files = list(path.rglob("*.py"))
+
+    if not files:
+        print(f"No Python files found in {path}", file=sys.stderr)
+        sys.exit(0)
+
+    total_issues = 0
+    files_with_issues = 0
+
+    for filepath in files:
+        try:
+            if args.fix:
+                # Read original to check if we made changes
+                original = filepath.read_text()
+                fixed = fix_file(str(filepath), write=True)
+                if fixed != original:
+                    print(f"Fixed: {filepath}")
+                    files_with_issues += 1
+            else:
+                issues = lint_file(str(filepath))
+                if issues:
+                    files_with_issues += 1
+                    for issue in issues:
+                        print(f"{filepath}:{issue.line}:{issue.column}: {issue.rule_id} {issue.message}")
+                        total_issues += 1
+        except Exception as e:
+            if args.verbose:
+                print(f"Error processing {filepath}: {e}", file=sys.stderr)
+
+    if not args.fix:
+        if total_issues:
+            print(f"\nFound {total_issues} issues in {files_with_issues} files", file=sys.stderr)
+            sys.exit(1)
+        else:
+            if args.verbose:
+                print(f"No issues found in {len(files)} files", file=sys.stderr)
+            sys.exit(0)
+
+
+def import_command(args: argparse.Namespace) -> None:
+    """Import a CloudFormation template and generate Python code."""
+    from wetwire_aws.importer import import_template
+
+    source = Path(args.template)
+    if not source.exists():
+        print(f"Error: Template file not found: {source}", file=sys.stderr)
+        sys.exit(1)
+
+    # Determine output directory
+    if args.output:
+        output_dir = Path(args.output)
+    else:
+        output_dir = Path.cwd()
+
+    # Determine package name
+    if args.name:
+        package_name = args.name
+    else:
+        package_name = source.stem.replace("-", "_").replace(".", "_")
+
+    # Generate code
+    try:
+        files = import_template(
+            source,
+            package_name=package_name,
+            single_file=args.single_file,
+        )
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Write files
+    for filepath, content in files.items():
+        full_path = output_dir / filepath
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if full_path.exists() and not args.force:
+            print(f"Skipping (exists): {full_path}", file=sys.stderr)
+            continue
+
+        full_path.write_text(content)
+        if args.verbose:
+            print(f"Created: {full_path}", file=sys.stderr)
+
+    print(f"Imported {len(files)} files to {output_dir / package_name}", file=sys.stderr)
 
 
 def build_command(args: argparse.Namespace) -> None:
@@ -166,6 +271,66 @@ def main() -> None:
     )
     add_common_args(list_parser)
     list_parser.set_defaults(func=create_list_command(registry, get_cf_resource_type))
+
+    # Import command
+    import_parser = subparsers.add_parser(
+        "import",
+        help="Import CloudFormation template to Python code",
+    )
+    import_parser.add_argument(
+        "template",
+        help="Path to CloudFormation template (YAML or JSON)",
+    )
+    import_parser.add_argument(
+        "--output",
+        "-o",
+        help="Output directory (default: current directory)",
+    )
+    import_parser.add_argument(
+        "--name",
+        "-n",
+        help="Package name (default: derived from template filename)",
+    )
+    import_parser.add_argument(
+        "--single-file",
+        action="store_true",
+        help="Generate a single Python file instead of a package",
+    )
+    import_parser.add_argument(
+        "--force",
+        "-f",
+        action="store_true",
+        help="Overwrite existing files",
+    )
+    import_parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Verbose output",
+    )
+    import_parser.set_defaults(func=import_command)
+
+    # Lint command
+    lint_parser = subparsers.add_parser(
+        "lint",
+        help="Lint wetwire-aws code for issues",
+    )
+    lint_parser.add_argument(
+        "path",
+        help="Path to Python file or directory to lint",
+    )
+    lint_parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Auto-fix detected issues",
+    )
+    lint_parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Verbose output",
+    )
+    lint_parser.set_defaults(func=lint_command)
 
     args = parser.parse_args()
 
