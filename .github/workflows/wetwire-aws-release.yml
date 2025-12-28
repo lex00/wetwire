@@ -29,9 +29,8 @@ jobs:
       - name: Install hatch
         run: pip install hatch
 
-      - name: Install wetwire dependency
-        working-directory: python/packages/wetwire
-        run: pip install -e .
+      - name: Install build dependencies
+        run: pip install jinja2 botocore
 
       - name: Build wheel and sdist
         run: |
@@ -63,8 +62,6 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ['3.11', '3.12', '3.13']
     steps:
-      - uses: actions/checkout@v4
-
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -75,9 +72,6 @@ jobs:
         with:
           name: dist
           path: dist/
-
-      - name: Install wetwire dependency
-        run: pip install -e python/packages/wetwire
 
       - name: Install wheel
         run: pip install dist/*.whl
