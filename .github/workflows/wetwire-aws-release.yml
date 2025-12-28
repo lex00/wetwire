@@ -10,12 +10,11 @@ on:
         description: 'Version to release (e.g., 0.2.0)'
         required: true
 
-defaults:
-  run:
-    working-directory: python/packages/wetwire-aws
-
 jobs:
   build:
+    defaults:
+      run:
+        working-directory: python/packages/wetwire-aws
     name: Build Package
     runs-on: ubuntu-latest
     steps:
