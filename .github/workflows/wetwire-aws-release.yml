@@ -73,11 +73,12 @@ jobs:
           path: dist/
 
       - name: Install wheel
+        shell: bash
         run: pip install dist/*.whl
 
       - name: Verify import
-        run: |
-          python -c "from wetwire_aws.resources import s3; print('OK')"
+        shell: bash
+        run: python -c "from wetwire_aws.resources import s3; print('OK')"
 
   publish:
     name: Publish to PyPI
