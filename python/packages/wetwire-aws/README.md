@@ -36,37 +36,24 @@ setup_resources(__file__, __name__, globals())
 from . import *  # Everything you need, injected by setup_resources
 
 @wetwire_aws
-class DataBucket:
-    resource: s3.Bucket
-    bucket_name = "my-data-bucket"
-    # Type-safe nested property types
-    versioning_configuration = s3.bucket.VersioningConfiguration(
-        status="Enabled"
-    )
+class MyVPC:
+    resource: ec2.VPC
+    cidr_block = "10.0.0.0/16"
+    enable_dns_hostnames = True
 
 @wetwire_aws
-class DataQueue:
-    resource: sqs.Queue
-    queue_name = "data-queue"
-    visibility_timeout = 300
-    # Type-safe encryption config
-    sqs_managed_sse_enabled = True
+class WebSubnet:
+    resource: ec2.Subnet
+    vpc_id = MyVPC                     # Reference — no parens, no strings
+    cidr_block = "10.0.1.0/24"
+    availability_zone = "us-east-1a"
 
 @wetwire_aws
-class ProcessorFunction:
-    resource: lambda_.Function
-    function_name = "data-processor"
-    runtime = lambda_.Runtime.PYTHON3_12    # Type-safe enum constants
-    handler = "index.handler"
-    code = lambda_.function.Code(
-        s3_bucket = DataBucket,             # Reference — no parens needed
-        s3_key = "code.zip"
-    )
-    environment = lambda_.function.Environment(
-        variables = {
-            "QUEUE_URL": get_att(DataQueue, sqs.Queue.QUEUE_URL)  # Get attribute
-        }
-    )
+class WebServer:
+    resource: ec2.Instance
+    subnet_id = WebSubnet              # Another reference
+    instance_type = "t3.medium"
+    image_id = "ami-12345678"
 ```
 
 **Generate template:**
