@@ -1,14 +1,23 @@
-"""Tests for graph-refs integration.
+"""Tests for dataclass-dsl integration.
 
-Note: Classes must be defined at module level for graph-refs introspection
+Note: Classes must be defined at module level for dataclass-dsl introspection
 to work correctly with PEP 563 (from __future__ import annotations).
 """
 
 from __future__ import annotations
 
+from typing import Annotated
+
 import pytest
-from graph_refs import Attr, ContextRef, Ref, RefList, get_dependencies, get_refs
-from wetwire import topological_sort
+from dataclass_dsl import (
+    Attr,
+    ContextRef,
+    Ref,
+    RefList,
+    get_dependencies,
+    get_refs,
+    topological_sort,
+)
 
 from wetwire_aws import CloudFormationTemplate, get_att, wetwire_aws
 from wetwire_aws.decorator import get_aws_registry
@@ -27,7 +36,7 @@ def clear_registry():
 
 
 # ============================================================================
-# Module-level wrapper classes for graph-refs introspection tests
+# Module-level wrapper classes for dataclass-dsl introspection tests
 # ============================================================================
 
 
@@ -47,9 +56,9 @@ class TestRole:
 class TestFunctionWithRef:
     resource: Function
     function_name = "test-with-ref"
-    # Using Ref[T] annotation for introspection
+    # Using Annotated[T, Ref()] annotation for introspection
     # Note: bucket isn't a real Function field, this tests the mechanism
-    bucket: Ref[TestBucket] = None
+    bucket: Annotated[TestBucket, Ref()] = None
 
 
 @wetwire_aws
@@ -57,14 +66,14 @@ class TestFunctionWithAttr:
     resource: Function
     function_name = "test-with-attr"
     # role IS a real Function field
-    role: Attr[TestRole, ARN] = None
+    role: Annotated[str, Attr(TestRole, ARN)] = None
 
 
 @wetwire_aws
 class TestFunctionWithBoth:
     resource: Function
     function_name = "test-with-both"
-    role: Attr[TestRole, ARN] = None
+    role: Annotated[str, Attr(TestRole, ARN)] = None
 
 
 # For dependency chain test
@@ -78,14 +87,14 @@ class NetworkBucket:
 class SubnetBucket:
     resource: Bucket
     bucket_name = "subnet"
-    network: Ref[NetworkBucket] = None
+    network: Annotated[NetworkBucket, Ref()] = None
 
 
 @wetwire_aws
 class InstanceBucket:
     resource: Bucket
     bucket_name = "instance"
-    subnet: Ref[SubnetBucket] = None
+    subnet: Annotated[SubnetBucket, Ref()] = None
 
 
 # For direct ref() pattern test
@@ -112,7 +121,7 @@ class AnnotationPatternRole:
 class AnnotationPatternFunction:
     resource: Function
     function_name = "annotated"
-    role: Attr[AnnotationPatternRole, ARN] = None
+    role: Annotated[str, Attr(AnnotationPatternRole, ARN)] = None
 
 
 # ============================================================================
@@ -121,16 +130,16 @@ class AnnotationPatternFunction:
 
 
 class TestGraphRefsIntrospection:
-    """Test that graph-refs can introspect wrapper classes."""
+    """Test that dataclass-dsl can introspect wrapper classes."""
 
     def test_ref_detected(self):
-        """Test that Ref[T] annotations are detected by graph-refs."""
+        """Test that Annotated[T, Ref()] annotations are detected by dataclass-dsl."""
         refs = get_refs(TestFunctionWithRef)
         assert "bucket" in refs
         assert refs["bucket"].target == TestBucket
 
     def test_attr_detected(self):
-        """Test that Attr[T, 'name'] annotations are detected by graph-refs."""
+        """Test that Annotated[str, Attr(T, 'name')] annotations are detected by dataclass-dsl."""
         refs = get_refs(TestFunctionWithAttr)
         assert "role" in refs
         assert refs["role"].target == TestRole
@@ -155,10 +164,10 @@ class TestGraphRefsIntrospection:
 
 
 class TestGraphRefsSerialization:
-    """Test that graph-refs annotations are serialized to CloudFormation."""
+    """Test that dataclass-dsl annotations are serialized to CloudFormation."""
 
     def test_attr_serializes_to_cf_getatt(self):
-        """Test that Attr[T, 'name'] serializes to {"Fn::GetAtt": ["T", "name"]}."""
+        """Test that Annotated[str, Attr(T, 'name')] serializes to {"Fn::GetAtt": ["T", "name"]}."""
         # Re-register the classes since autouse fixture cleared them
         registry = get_aws_registry()
         registry.register(TestRole, "AWS::IAM::Role")
@@ -181,7 +190,7 @@ class TestGraphRefsSerialization:
 
 
 class TestMixedPatterns:
-    """Test mixing graph-refs annotations with direct ref() calls."""
+    """Test mixing dataclass-dsl annotations with direct ref() calls."""
 
     def test_direct_ref_still_works(self):
         """Test that ref(Class) pattern still works."""
@@ -216,7 +225,7 @@ class ResourceWithContext:
     resource: Bucket
     bucket_name = "context-test"
     # Use ContextRef for pseudo-parameters
-    region: ContextRef["AWS::Region"] = None  # noqa: F722
+    region: Annotated[str, ContextRef("AWS::Region")] = None
 
 
 # ============================================================================
@@ -234,14 +243,14 @@ class SecurityGroupBucket:
 class InstanceWithSecurityGroups:
     resource: Bucket  # Using Bucket as placeholder
     bucket_name = "instance-bucket"
-    security_groups: RefList[SecurityGroupBucket] = None
+    security_groups: Annotated[list[SecurityGroupBucket], RefList()] = None
 
 
 class TestContextRef:
     """Test ContextRef for pseudo-parameters."""
 
     def test_context_ref_detected(self):
-        """Test that ContextRef annotations are detected by graph-refs."""
+        """Test that ContextRef annotations are detected by dataclass-dsl."""
         refs = get_refs(ResourceWithContext)
         assert "region" in refs
         assert refs["region"].is_context is True
@@ -260,7 +269,7 @@ class TestRefList:
     """Test RefList for list references."""
 
     def test_reflist_detected(self):
-        """Test that RefList annotations are detected by graph-refs."""
+        """Test that RefList annotations are detected by dataclass-dsl."""
         refs = get_refs(InstanceWithSecurityGroups)
         assert "security_groups" in refs
         assert refs["security_groups"].is_list is True

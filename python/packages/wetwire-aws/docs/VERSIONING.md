@@ -172,9 +172,9 @@ head -10 src/wetwire_aws/resources/s3/__init__.py
 
 ## Version Compatibility
 
-| wetwire-aws | wetwire (core) | graph-refs |
-|-------------|----------------|------------|
-| 0.1.x | 0.1.x | 0.1.x |
+| wetwire-aws | dataclass-dsl |
+|-------------|---------------|
+| 0.1.x | 0.1.x |
 
 The packages are versioned together during early development. API stability will be established at 1.0.0.
 

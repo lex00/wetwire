@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, get_type_hints
 
-from wetwire import Provider
+from dataclass_dsl import Provider, is_attr_ref, is_class_ref
 
 from wetwire_aws.intrinsics.functions import GetAtt, IntrinsicFunction, Ref
 
@@ -18,7 +18,7 @@ class CloudFormationProvider(Provider):
     """
     CloudFormation-specific serialization provider.
 
-    Converts graph-refs Ref[T] and Attr[T, name] annotations to
+    Converts dataclass-dsl Ref and Attr annotations to
     CloudFormation intrinsic functions {"Ref": "..."} and
     {"Fn::GetAtt": ["...", "..."]}.
 
@@ -96,7 +96,8 @@ class CloudFormationProvider(Provider):
             annotations = getattr(wrapper_cls, "__annotations__", {})
             resource_type_cls = annotations.get("resource")
 
-        if resource_type_cls is None or not hasattr(resource_type_cls, "_resource_type"):
+        has_resource_type = hasattr(resource_type_cls, "_resource_type")
+        if resource_type_cls is None or not has_resource_type:
             raise ValueError(
                 f"Wrapper class {wrapper_cls.__name__} must have a 'resource' "
                 "annotation pointing to a CloudFormationResource subclass"
@@ -128,7 +129,6 @@ class CloudFormationProvider(Provider):
         Returns:
             Dict of CloudFormation properties (PascalCase keys)
         """
-        from wetwire_aws.base import _serialize_value, _to_cf_name
         from wetwire_aws.intrinsics.refs import resolve_refs_from_annotations
 
         # Collect non-private, non-None attributes
@@ -136,12 +136,27 @@ class CloudFormationProvider(Provider):
         for name, value in wrapper_instance.__dict__.items():
             if name.startswith("_") or name == "resource" or value is None:
                 continue
-            props[name] = value
 
-        # Resolve graph-refs annotations to intrinsics
+            # Handle no-parens pattern: runtime AttrRef markers
+            if is_attr_ref(value):
+                # MyRole.Arn -> {"Fn::GetAtt": ["MyRole", "Arn"]}
+                props[name] = GetAtt(value.target.__name__, value.attr)
+            # Handle no-parens pattern: class references
+            elif is_class_ref(value):
+                # MyBucket -> {"Ref": "MyBucket"}
+                props[name] = Ref(value.__name__)
+            elif isinstance(value, type) and hasattr(value, "_refs_marker"):
+                # Fallback for refs classes without explicit is_class_ref
+                props[name] = Ref(value.__name__)
+            else:
+                props[name] = value
+
+        # Resolve dataclass-dsl annotations to intrinsics (for type annotation pattern)
         resolved_refs = resolve_refs_from_annotations(wrapper_instance)
         for field_name, ref_value in resolved_refs.items():
-            props[field_name] = ref_value
+            # Only use annotation-based resolution if not already resolved
+            if field_name not in props:
+                props[field_name] = ref_value
 
         # Create resource instance and serialize
         resource_instance = resource_type_cls(**props)
@@ -150,7 +165,8 @@ class CloudFormationProvider(Provider):
         result = resource_instance.to_dict()
 
         # Return just the Properties portion
-        return result.get("Properties", {})
+        properties: dict[str, Any] = result.get("Properties", {})
+        return properties
 
     def _serialize_value(self, value: Any) -> Any:
         """
@@ -162,6 +178,14 @@ class CloudFormationProvider(Provider):
         Returns:
             Serialized value suitable for CloudFormation JSON
         """
+        # Handle no-parens pattern: AttrRef markers
+        if is_attr_ref(value):
+            return GetAtt(value.target.__name__, value.attr).to_dict()
+        # Handle no-parens pattern: class references
+        if is_class_ref(value):
+            return Ref(value.__name__).to_dict()
+        if isinstance(value, type) and hasattr(value, "_refs_marker"):
+            return Ref(value.__name__).to_dict()
         if isinstance(value, IntrinsicFunction):
             return value.to_dict()
         if hasattr(value, "to_dict"):

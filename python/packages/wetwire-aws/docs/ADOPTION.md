@@ -145,7 +145,7 @@ uv run wetwire-aws list --module my_stack && echo "OK"
 ```
 
 **What to check:**
-- Python 3.10+ installed
+- Python 3.11+ installed
 - uv or pip available
 - AWS credentials configured (for deployment)
 
@@ -153,12 +153,11 @@ uv run wetwire-aws list --module my_stack && echo "OK"
 
 Start with a resource file:
 ```python
-from wetwire_aws import wetwire_aws, get_att, ARN
-from wetwire_aws.resources.s3 import Bucket
+from . import *
 
 @wetwire_aws
 class DataBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "my-data"
 ```
 
@@ -175,13 +174,13 @@ Find something low-risk:
 # Before
 @wetwire_aws
 class MyBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "data"
 
 # After
 @wetwire_aws
 class MyBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "data"
     tags = [{"Key": "Environment", "Value": "dev"}]
 ```
@@ -194,12 +193,11 @@ Create a new file in the package:
 
 ```python
 # monitoring.py
-from wetwire_aws import wetwire_aws
-from wetwire_aws.resources.sns import Topic
+from . import *
 
 @wetwire_aws
 class AlertTopic:
-    resource: Topic
+    resource: sns.Topic
     topic_name = "alerts"
 ```
 
@@ -211,7 +209,7 @@ By now you've seen:
 - `@wetwire_aws` decorator
 - `resource: <type>` to specify the CloudFormation type
 - `ref()` and `get_att()` for references
-- `Ref[T]` and `Attr[T, "name"]` type annotations for introspection
+- `Annotated[T, Ref()]` and `Annotated[str, Attr(T, "name")]` type annotations for introspection
 - Class attributes for properties
 
 That's 90% of what you need.
@@ -220,7 +218,7 @@ That's 90% of what you need.
 
 | Problem | Solution |
 |---------|----------|
-| "NameError: Bucket is not defined" | Import the resource class: `from wetwire_aws.resources.s3 import Bucket` |
+| "NameError: s3 is not defined" | Add `from . import *` at top of file |
 | "Resource not in template" | Ensure the decorator is applied and file is imported |
 | "Wrong property name" | Use IDE autocomplete, or check the AWS docs |
 
@@ -229,7 +227,7 @@ That's 90% of what you need.
 Decide these early:
 - **File organization**: By service (network.py, compute.py) or by feature?
 - **Naming**: PascalCase for classes, snake_case for files?
-- **Reference style**: Direct `ref(MyBucket)` or annotation `bucket: Ref[MyBucket]`?
+- **Reference style**: Direct `ref(MyBucket)` or annotation `bucket: Annotated[MyBucket, Ref()]`?
 
 Document in your repo's README.
 

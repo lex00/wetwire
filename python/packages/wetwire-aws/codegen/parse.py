@@ -11,35 +11,16 @@ import re
 import sys
 from datetime import UTC, datetime
 
-from codegen.config import PYTHON_KEYWORDS, SPECS_DIR
-from codegen.intermediate import (
+from codegen.config import SPECS_DIR
+from codegen.schema import (
+    PYTHON_KEYWORDS,
     AttributeDef,
     IntermediateSchema,
     NestedTypeDef,
     PropertyDef,
     ResourceDef,
+    to_snake_case,
 )
-
-
-def to_snake_case(name: str) -> str:
-    """Convert PascalCase or camelCase to snake_case."""
-    # Handle acronyms (e.g., VPCId -> vpc_id, not v_p_c_id)
-    s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
-    s2 = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1)
-    result = s2.lower()
-
-    # Handle Python keywords
-    if result in PYTHON_KEYWORDS:
-        result = PYTHON_KEYWORDS[result]
-
-    return result
-
-
-def to_class_name(name: str) -> str:
-    """Convert a name to a valid Python class name."""
-    # Remove any non-alphanumeric characters
-    name = re.sub(r"[^a-zA-Z0-9]", "", name)
-    return name
 
 
 def parse_cf_type(
@@ -114,32 +95,28 @@ def parse_property(
 
     python_type, nested_type, is_list, is_map = parse_cf_type(cf_type, primitive_type)
 
+    # Primitive type mapping (including Json)
+    primitive_type_map = {
+        "String": "str",
+        "Integer": "int",
+        "Long": "int",
+        "Double": "float",
+        "Boolean": "bool",
+        "Json": "dict[str, Any]",
+    }
+
     # Handle list item types
     if is_list and item_type:
-        if item_type in ("String", "Integer", "Long", "Double", "Boolean"):
-            type_map = {
-                "String": "str",
-                "Integer": "int",
-                "Long": "int",
-                "Double": "float",
-                "Boolean": "bool",
-            }
-            python_type = f"list[{type_map.get(item_type, 'Any')}]"
+        if item_type in primitive_type_map:
+            python_type = f"list[{primitive_type_map[item_type]}]"
         else:
             python_type = f"list[{item_type}]"
             nested_type = item_type
 
     # Handle map value types
     if is_map and item_type:
-        if item_type in ("String", "Integer", "Long", "Double", "Boolean"):
-            type_map = {
-                "String": "str",
-                "Integer": "int",
-                "Long": "int",
-                "Double": "float",
-                "Boolean": "bool",
-            }
-            python_type = f"dict[str, {type_map.get(item_type, 'Any')}]"
+        if item_type in primitive_type_map:
+            python_type = f"dict[str, {primitive_type_map[item_type]}]"
         else:
             python_type = f"dict[str, {item_type}]"
             nested_type = item_type
@@ -301,13 +278,13 @@ def parse(validate: bool = False) -> IntermediateSchema:
     manifest = json.loads(manifest_path.read_text())
 
     # Get version info
-    cf_spec_version = ""
-    botocore_version = ""
+    source_version = ""
+    sdk_version = ""
     for source in manifest.get("sources", []):
         if source["name"] == "cloudformation-spec":
-            cf_spec_version = source.get("version", "")
+            source_version = source.get("version", "")
         elif source["name"] == "botocore":
-            botocore_version = source.get("version", "")
+            sdk_version = source.get("version", "")
 
     # Load CloudFormation spec
     cf_spec_path = SPECS_DIR / "CloudFormationResourceSpecification.json"
@@ -322,8 +299,8 @@ def parse(validate: bool = False) -> IntermediateSchema:
         schema_version="1.0",
         domain="aws",
         generated_at=datetime.now(UTC).isoformat(),
-        cf_spec_version=cf_spec_version,
-        botocore_version=botocore_version,
+        source_version=source_version,
+        sdk_version=sdk_version,
     )
 
     # Get property types for reference

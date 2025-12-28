@@ -13,7 +13,6 @@ This package provides:
 from wetwire_aws.base import CloudFormationResource, PropertyType
 from wetwire_aws.context import AWSContext
 from wetwire_aws.decorator import wetwire_aws
-from wetwire_aws.provider import CloudFormationProvider
 from wetwire_aws.intrinsics import (
     ARN,
     # Pseudo-parameters
@@ -28,8 +27,11 @@ from wetwire_aws.intrinsics import (
     And,
     AttrType,
     Base64,
+    Cidr,
+    Condition,  # Intrinsic function for referencing conditions by name
     ContextRef,
     Equals,
+    FindInMap,
     GetAtt,
     GetAZs,
     If,
@@ -42,16 +44,44 @@ from wetwire_aws.intrinsics import (
     RefDict,
     RefInfo,
     RefList,
-    # graph-refs types for type annotations
+    # dataclass-dsl types for type annotations
     RefType,
     Select,
+    Split,
     Sub,
+    Transform,
     get_att,
     get_dependencies,
     get_refs,
     ref,
 )
-from wetwire_aws.template import CloudFormationTemplate
+from wetwire_aws.loader import setup_resources
+from wetwire_aws.params import (
+    AMI_ID,
+    AVAILABILITY_ZONE,
+    COMMA_DELIMITED_LIST,
+    HOSTED_ZONE_ID,
+    INSTANCE_ID,
+    KEY_PAIR,
+    LIST_AVAILABILITY_ZONE,
+    LIST_NUMBER,
+    LIST_SECURITY_GROUP_ID,
+    LIST_SUBNET_ID,
+    NUMBER,
+    SECURITY_GROUP_ID,
+    SSM_PARAMETER_STRING,
+    SSM_PARAMETER_STRING_LIST,
+    STRING,
+    SUBNET_ID,
+    VOLUME_ID,
+    VPC_ID,
+)
+from wetwire_aws.provider import CloudFormationProvider
+from wetwire_aws.template import CloudFormationTemplate, Mapping, Output, Parameter
+from wetwire_aws.template import Condition as TemplateCondition
+
+# Condition is already imported above from intrinsics
+ConditionIntrinsic = Condition  # Alias for backward compatibility
 
 __version__ = "0.1.0"
 
@@ -67,12 +97,37 @@ __all__ = [
     "AWSContext",
     # Template
     "CloudFormationTemplate",
+    # Template components (for importer)
+    "Parameter",
+    "Output",
+    "Mapping",
+    "Condition",
+    "TemplateCondition",
+    # Parameter type constants
+    "STRING",
+    "NUMBER",
+    "LIST_NUMBER",
+    "COMMA_DELIMITED_LIST",
+    "SSM_PARAMETER_STRING",
+    "SSM_PARAMETER_STRING_LIST",
+    "AVAILABILITY_ZONE",
+    "LIST_AVAILABILITY_ZONE",
+    "AMI_ID",
+    "INSTANCE_ID",
+    "KEY_PAIR",
+    "SECURITY_GROUP_ID",
+    "LIST_SECURITY_GROUP_ID",
+    "SUBNET_ID",
+    "LIST_SUBNET_ID",
+    "VPC_ID",
+    "VOLUME_ID",
+    "HOSTED_ZONE_ID",
     # Reference helpers
     "ref",
     "get_att",
     # Attribute constants
     "ARN",
-    # graph-refs types for type annotations
+    # dataclass-dsl types for type annotations
     "RefType",
     "AttrType",
     "RefList",
@@ -87,6 +142,7 @@ __all__ = [
     "Sub",
     "Join",
     "Select",
+    "Split",
     "If",
     "Equals",
     "And",
@@ -95,6 +151,10 @@ __all__ = [
     "Base64",
     "GetAZs",
     "ImportValue",
+    "FindInMap",
+    "Transform",
+    "Cidr",
+    "ConditionIntrinsic",
     # Pseudo-parameters
     "AWS_ACCOUNT_ID",
     "AWS_NOTIFICATION_ARNS",
@@ -104,4 +164,6 @@ __all__ = [
     "AWS_STACK_ID",
     "AWS_STACK_NAME",
     "AWS_URL_SUFFIX",
+    # Resource loader
+    "setup_resources",
 ]

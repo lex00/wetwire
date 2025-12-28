@@ -5,12 +5,10 @@ on:
     branches: [main]
     paths:
       - 'python/packages/wetwire-aws/**'
-      - 'python/packages/wetwire/**'
       - '.github/workflows/wetwire-aws-ci.yml'
   pull_request:
     paths:
       - 'python/packages/wetwire-aws/**'
-      - 'python/packages/wetwire/**'
       - '.github/workflows/wetwire-aws-ci.yml'
 
 defaults:
@@ -18,8 +16,36 @@ defaults:
     working-directory: python/packages/wetwire-aws
 
 jobs:
+  generate:
+    name: Generate Resources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --group codegen
+
+      - name: Generate resources
+        run: ./scripts/regenerate.sh
+
+      - name: Upload resources
+        uses: actions/upload-artifact@v4
+        with:
+          name: resources
+          path: python/packages/wetwire-aws/src/wetwire_aws/resources/
+          retention-days: 1
+
   test:
     name: Test Python ${{ matrix.python-version }}
+    needs: generate
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -37,21 +63,20 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
-      - name: Install dependencies
-        run: |
-          uv sync --group dev --group codegen
+      - name: Download resources
+        uses: actions/download-artifact@v4
+        with:
+          name: resources
+          path: python/packages/wetwire-aws/src/wetwire_aws/resources/
 
-      - name: Generate resources
-        run: |
-          ./scripts/regenerate.sh
+      - name: Install dependencies
+        run: uv sync --group dev
 
       - name: Run tests
-        run: |
-          uv run pytest --cov-report=xml
+        run: uv run pytest --cov-report=xml
 
       - name: Type check
-        run: |
-          uv run mypy src/wetwire_aws --exclude resources
+        run: uv run mypy src/wetwire_aws
 
   lint:
     name: Lint
@@ -93,15 +118,16 @@ jobs:
       - name: Install hatch
         run: pip install hatch
 
-      - name: Install wetwire dependency
-        working-directory: python/packages/wetwire
-        run: pip install -e .
+      - name: Install build dependencies
+        run: pip install jinja2 botocore
 
-      - name: Build from scratch
+      - name: Build from scratch (no isolation)
         run: |
           # Ensure no pre-existing resources
           rm -rf src/wetwire_aws/resources specs parsed.json
-          hatch build
+          # Use pip build with --no-isolation since wetwire isn't on PyPI yet
+          pip install build
+          python -m build --no-isolation
 
       - name: Verify wheel contents
         run: |
@@ -120,3 +146,57 @@ jobs:
         with:
           name: wheel
           path: python/packages/wetwire-aws/dist/*.whl
+
+  docs:
+    name: Build & Publish Docs
+    needs: generate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Download resources
+        uses: actions/download-artifact@v4
+        with:
+          name: resources
+          path: python/packages/wetwire-aws/src/wetwire_aws/resources/
+
+      - name: Install dependencies
+        run: |
+          uv sync --group dev
+          uv pip install pdoc
+
+      - name: Build API docs
+        run: |
+          uv run pdoc wetwire_aws \
+            --output-dir docs \
+            --docformat google \
+            --no-show-source
+        env:
+          PYTHONPATH: src
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: python/packages/wetwire-aws/docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

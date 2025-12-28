@@ -152,7 +152,7 @@ validate_cmd = create_validate_command(registry)
 
 **Returns:** Command handler function
 
-Uses graph-refs `get_dependencies()` to find all references and validates they exist in the registry.
+Uses `get_dependencies()` to find all references and validates they exist in the registry.
 
 **Output (success):**
 ```

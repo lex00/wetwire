@@ -1,0 +1,246 @@
+"""Tests for the code generator."""
+
+from pathlib import Path
+
+import pytest
+
+from wetwire_aws.importer.codegen import generate_code, generate_package
+from wetwire_aws.importer.parser import parse_template
+
+TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+
+class TestGenerateSimpleBucket:
+    """Tests for generating code from simple_bucket.yaml."""
+
+    @pytest.fixture
+    def code(self):
+        template = parse_template(TEMPLATES_DIR / "simple_bucket.yaml")
+        return generate_code(template)
+
+    def test_has_docstring(self, code):
+        assert '"""' in code
+        assert "Simple S3 bucket" in code
+
+    def test_has_imports(self, code):
+        assert "from wetwire_aws" in code
+
+    def test_has_resource_class(self, code):
+        assert "@wetwire_aws" in code
+        assert "class MyBucket:" in code
+        # Bucket exists in multiple modules, so qualified name may be used
+        assert "resource:" in code
+        assert "bucket_name = 'my-test-bucket'" in code
+
+    def test_has_output_class(self, code):
+        assert "class BucketNameOutput:" in code
+        assert "resource: Output" in code
+        assert "ref(MyBucket)" in code
+
+    def test_uses_template_from_registry(self, code):
+        # Template class is no longer generated - resources auto-register
+        # and we use CloudFormationTemplate.from_registry() to build the template
+        assert "CloudFormationTemplate.from_registry(" in code
+        assert "class SimpleBucketTemplate:" not in code
+
+    def test_has_build_function(self, code):
+        assert "def build_template()" in code
+
+    def test_has_main_block(self, code):
+        assert 'if __name__ == "__main__":' in code
+
+    def test_generated_code_is_valid_python(self, code):
+        # This will raise SyntaxError if invalid
+        compile(code, "<test>", "exec")
+
+
+class TestGenerateBucketWithRef:
+    """Tests for generating code from bucket_with_ref.yaml."""
+
+    @pytest.fixture
+    def code(self):
+        template = parse_template(TEMPLATES_DIR / "bucket_with_ref.yaml")
+        return generate_code(template)
+
+    def test_has_parameter_class(self, code):
+        assert "class BucketNameParam:" in code
+        assert "resource: Parameter" in code
+        # Uses constant or string for type
+        assert "type =" in code
+        assert "default = 'my-default-bucket'" in code
+
+    def test_has_ref_to_parameter(self, code):
+        assert "ref(BucketNameParam)" in code
+
+    def test_has_getatt(self, code):
+        # Output values now use class refs
+        assert 'get_att(MyBucket, "Arn")' in code
+
+    def test_generated_code_is_valid_python(self, code):
+        compile(code, "<test>", "exec")
+
+
+class TestGenerateIntrinsics:
+    """Tests for generating code with intrinsic functions."""
+
+    @pytest.fixture
+    def code(self):
+        template = parse_template(TEMPLATES_DIR / "intrinsics.yaml")
+        return generate_code(template)
+
+    def test_has_sub(self, code):
+        assert "Sub(" in code
+        assert "${AWS::StackName}" in code
+
+    def test_has_join(self, code):
+        assert "Join(" in code
+
+    def test_uses_pseudo_parameter_constant(self, code):
+        # !Ref AWS::StackName should become AWS_STACK_NAME constant
+        assert "AWS_STACK_NAME" in code
+
+    def test_has_if(self, code):
+        assert "If(" in code
+        assert "IsProd" in code
+
+    def test_has_condition_class(self, code):
+        assert "class IsProdCondition:" in code
+        assert "Equals(" in code
+
+    def test_generated_code_is_valid_python(self, code):
+        compile(code, "<test>", "exec")
+
+
+class TestGenerateNoMain:
+    """Tests for generating code without main block."""
+
+    def test_no_main_block(self):
+        template = parse_template(TEMPLATES_DIR / "simple_bucket.yaml")
+        code = generate_code(template, include_main=False)
+        assert 'if __name__ == "__main__":' not in code
+
+
+class TestGenerateFromJSON:
+    """Tests for generating code from JSON templates."""
+
+    @pytest.fixture
+    def code(self):
+        template = parse_template(TEMPLATES_DIR / "simple_bucket.json")
+        return generate_code(template)
+
+    def test_has_resource(self, code):
+        assert "class MyBucket:" in code
+
+    def test_generated_code_is_valid_python(self, code):
+        compile(code, "<test>", "exec")
+
+
+class TestBlockModeWithTags:
+    """Tests for code generation with tags."""
+
+    @pytest.fixture
+    def code(self):
+        template = parse_template(TEMPLATES_DIR / "bucket_with_tags.yaml")
+        return generate_code(template)
+
+    def test_has_wrapper_classes(self, code):
+        # Block mode uses wrapper classes for PropertyTypes
+        assert "@wetwire_aws" in code
+        assert "class ProdBucket:" in code
+
+    def test_all_resources_present(self, code):
+        assert "class ProdBucket:" in code
+        assert "class StagingBucket:" in code
+        assert "class DevBucket:" in code
+
+    def test_generated_code_is_valid_python(self, code):
+        compile(code, "<test>", "exec")
+
+
+class TestBlockModeWithPolicies:
+    """Tests for code generation with IAM policies."""
+
+    @pytest.fixture
+    def code(self):
+        template = parse_template(TEMPLATES_DIR / "bucket_with_policy.yaml")
+        return generate_code(template)
+
+    def test_has_wrapper_classes_for_policy(self, code):
+        # Should have wrapper classes for policy structures
+        assert "@wetwire_aws" in code
+
+    def test_generated_code_is_valid_python(self, code):
+        compile(code, "<test>", "exec")
+
+
+class TestGeneratePackage:
+    """Tests for generate_package with flat structure."""
+
+    @pytest.fixture
+    def files(self):
+        template = parse_template(TEMPLATES_DIR / "simple_bucket.yaml")
+        return generate_package(template, package_name="my_stack")
+
+    def test_files_have_package_prefix(self, files):
+        """All files should be prefixed with package_name/."""
+        for filename in files:
+            assert filename.startswith("my_stack/"), f"{filename} missing prefix"
+
+    def test_has_init_py(self, files):
+        assert "my_stack/__init__.py" in files
+
+    def test_has_resource_files(self, files):
+        """Should have resource files (either main.py or categorized files like storage.py)."""
+        # Check for at least one resource file (besides __init__.py, __main__.py, params.py, outputs.py)
+        resource_files = [f for f in files.keys() if f.endswith('.py') and
+                         not f.endswith('__init__.py') and
+                         not f.endswith('__main__.py') and
+                         not f.endswith('params.py') and
+                         not f.endswith('outputs.py')]
+        assert len(resource_files) > 0, "Should have at least one resource file"
+
+    def test_has_dunder_main(self, files):
+        """Should have __main__.py for python -m support."""
+        assert "my_stack/__main__.py" in files
+        content = files["my_stack/__main__.py"]
+        assert "main" in content
+
+    def test_has_params_py(self, files):
+        """Should have params.py in package root (not stack/ subdirectory)."""
+        assert "my_stack/params.py" in files
+
+    def test_no_stack_subdirectory(self, files):
+        """Should NOT have stack/ subdirectory in new flat structure."""
+        for filename in files:
+            assert "/stack/" not in filename, f"{filename} uses old stack/ structure"
+
+    def test_init_has_setup_resources(self, files):
+        """__init__.py should use setup_resources() for auto-discovery."""
+        content = files["my_stack/__init__.py"]
+        assert "setup_resources" in content
+        assert "setup_resources(__file__, __name__, globals())" in content
+
+    def test_resource_files_have_resources(self, files):
+        """Resource files should contain resource definitions."""
+        # Find resource files (not __init__, __main__, params, outputs)
+        resource_files = [f for f in files.keys() if f.endswith('.py') and
+                         not f.endswith('__init__.py') and
+                         not f.endswith('__main__.py') and
+                         not f.endswith('params.py') and
+                         not f.endswith('outputs.py')]
+
+        # Check that at least one resource file has the MyBucket class
+        found_bucket = False
+        for filename in resource_files:
+            content = files[filename]
+            if "class MyBucket:" in content:
+                found_bucket = True
+                assert "from . import *" in content
+                break
+
+        assert found_bucket, "Should find MyBucket resource in a resource file"
+
+    def test_all_files_are_valid_python(self, files):
+        for filename, content in files.items():
+            if filename.endswith(".py"):
+                compile(content, filename, "exec")

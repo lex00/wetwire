@@ -15,9 +15,7 @@ wetwire/
 │
 ├── python/                  # Python implementation
 │   └── packages/
-│       ├── graph-refs/     # Typing library
-│       ├── wetwire/        # Core framework
-│       └── wetwire-aws/    # AWS domain
+│       └── wetwire-aws/    # AWS CloudFormation synthesis
 │
 ├── go/                      # Go implementation (future)
 ├── rust/                    # Rust implementation (future)
@@ -28,7 +26,7 @@ wetwire/
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.11+
 - Git
 
 ### Development Setup
@@ -43,10 +41,10 @@ cd python
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# Install development dependencies (once packages exist)
-pip install -e packages/graph-refs[dev]
-pip install -e packages/wetwire[dev]
-pip install -e packages/wetwire-aws[dev]
+# Install development dependencies
+cd packages/wetwire-aws
+uv sync --group dev --group codegen
+./scripts/dev-setup.sh  # Generate resources
 ```
 
 ## Types of Contributions
@@ -119,15 +117,15 @@ mypy .
 ### Running Tests
 
 ```bash
-# Run all tests for a package
-cd python/packages/graph-refs
-pytest
+# Run all tests
+cd python/packages/wetwire-aws
+uv run pytest
 
 # Run with coverage
-pytest --cov=graph_refs
+uv run pytest --cov
 
 # Run type checks
-mypy src/
+uv run mypy src/wetwire_aws
 ```
 
 ### Writing Tests
@@ -159,30 +157,15 @@ mypy src/
 
 ## Package-Specific Guidelines
 
-### graph-refs
+### wetwire-aws
 
-This package is designed for potential stdlib inclusion. Contributions must:
+Contributions should:
 
-- Have zero external dependencies
-- Work with Python 3.10+
-- Be compatible with mypy and pyright
-- Follow typing module conventions
-
-### wetwire
-
-Core framework contributions should:
-
-- Remain domain-agnostic
-- Not introduce cloud-specific concepts
 - Maintain the flat, no-parens philosophy
-
-### wetwire-aws (and other domain packages)
-
-Domain package contributions should:
-
-- Follow patterns established in other domain packages
+- Follow patterns in existing code
 - Include lint rules for best practices
 - Add appropriate security checks
+- Use typed property types instead of raw dicts
 
 ## Commit Messages
 
@@ -207,11 +190,11 @@ Types:
 
 Examples:
 ```
-feat(graph-refs): add RefDict type for dictionary references
+feat(wetwire-aws): add support for RDS Aurora clusters
 
 fix(wetwire-aws): correct S3 bucket encryption serialization
 
-docs(spec): clarify forward reference behavior
+docs: clarify forward reference behavior
 ```
 
 ## Architecture Decisions

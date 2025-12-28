@@ -51,7 +51,7 @@ from wetwire_aws.intrinsics.refs import (
     Attr as AttrType,
 )
 from wetwire_aws.intrinsics.refs import (
-    # Re-export graph-refs types for type annotations
+    # Re-export dataclass-dsl types for type annotations
     Ref as RefType,
 )
 
@@ -61,7 +61,7 @@ __all__ = [
     "get_att",
     # Common attribute constants
     "ARN",
-    # graph-refs type annotations
+    # dataclass-dsl type annotations
     "RefType",
     "AttrType",
     "RefList",

@@ -2,16 +2,16 @@
 Reference helpers for the wetwire pattern.
 
 This module provides:
-1. Re-exports of graph-refs types (Ref, Attr, RefList, etc.) for annotations
+1. Re-exports of dataclass-dsl types (Ref, Attr, RefList, etc.) for annotations
 2. Helper functions ref() and get_att() for explicit reference creation
-3. Serialization support for graph-refs types to CloudFormation intrinsics
+3. Serialization support for dataclass-dsl types to CloudFormation intrinsics
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from graph_refs import (
+from dataclass_dsl import (
     Attr,
     ContextRef,
     Ref,
@@ -26,7 +26,7 @@ from wetwire_aws.intrinsics.functions import GetAtt
 from wetwire_aws.intrinsics.functions import Ref as RefIntrinsic
 
 __all__ = [
-    # Re-exported from graph-refs
+    # Re-exported from dataclass-dsl
     "Ref",
     "Attr",
     "RefList",
@@ -55,8 +55,8 @@ def ref(resource_class: type | None = None) -> RefIntrinsic | DeferredRef:
     1. Direct class reference (simple):
         bucket_ref = ref(MyBucket)
 
-    2. Annotation-based (enables graph-refs introspection):
-        bucket: Ref[MyBucket] = ref()  # Resolved from type annotation
+    2. Annotation-based (enables dataclass-dsl introspection):
+        bucket: Annotated[MyBucket, Ref()] = ref()  # Resolved from type annotation
 
     The ref() function generates a CloudFormation {"Ref": "LogicalName"} reference.
 
@@ -87,8 +87,8 @@ def get_att(
         role_arn = get_att(MyRole, "Arn")
         role_arn = get_att(MyRole, ARN)  # Using constant
 
-    2. Annotation-based (enables graph-refs introspection):
-        role_arn: Attr[MyRole, "Arn"] = get_att("Arn")
+    2. Annotation-based (enables dataclass-dsl introspection):
+        role_arn: Annotated[str, Attr(MyRole, "Arn")] = get_att("Arn")
 
     The get_att() function generates a CloudFormation
     {"Fn::GetAtt": ["LogicalName", "Attribute"]} reference.
@@ -118,9 +118,9 @@ class DeferredRef:
     A deferred Ref that resolves from type annotation at serialization time.
 
     Used with the annotation pattern:
-        bucket: Ref[MyBucket] = ref()
+        bucket: Annotated[MyBucket, Ref()] = ref()
 
-    The logical_id is resolved from the Ref[T] type annotation.
+    The logical_id is resolved from the Annotated[T, Ref()] type annotation.
 
     Args:
         logical_id: The logical ID to reference. Initially None, set during
@@ -142,7 +142,7 @@ class DeferredRef:
         if self.logical_id is None:
             raise ValueError(
                 "DeferredRef.logical_id must be set before serialization. "
-                "For annotation-based refs (bucket: Ref[Bucket] = ref()), "
+                "For annotation-based refs (bucket: Annotated[Bucket, Ref()] = ref()),"
                 "use resolve_deferred_refs() before serialization."
             )
         return {"Ref": self.logical_id}
@@ -164,9 +164,9 @@ class DeferredGetAtt:
     A deferred GetAtt that resolves from type annotation at serialization time.
 
     Used with the annotation pattern:
-        role_arn: Attr[MyRole, "Arn"] = get_att("Arn")
+        role_arn: Annotated[str, Attr(MyRole, "Arn")] = get_att("Arn")
 
-    The logical_id is resolved from the Attr[T, "name"] type annotation.
+    The logical_id is resolved from the Annotated[str, Attr(T, "name")] type annotation.
 
     Args:
         attribute_name: The name of the attribute to get (e.g., "Arn").
@@ -190,7 +190,7 @@ class DeferredGetAtt:
         if self.logical_id is None:
             raise ValueError(
                 "DeferredGetAtt.logical_id must be set before serialization. "
-                "For annotation-based refs (arn: Attr[Role, 'Arn'] = get_att('Arn')), "
+                "For annotation-based refs (arn: Annotated[str, Attr(Role, 'Arn')] = get_att('Arn')),"
                 "use resolve_deferred_refs() before serialization."
             )
         return {"Fn::GetAtt": [self.logical_id, self.attribute_name]}
@@ -209,13 +209,13 @@ class DeferredGetAtt:
 
 def resolve_refs_from_annotations(wrapper_instance: Any) -> dict[str, Any]:
     """
-    Resolve graph-refs type annotations to CloudFormation intrinsics.
+    Resolve dataclass-dsl type annotations to CloudFormation intrinsics.
 
-    Uses graph-refs' get_refs() to introspect the class and resolves:
-    - Ref[T] -> {"Ref": "T"}
-    - Attr[T, "name"] -> {"Fn::GetAtt": ["T", "name"]}
-    - RefList[T] -> [{"Ref": "T"}] (list of refs)
-    - ContextRef["name"] -> {"Ref": "name"} (for pseudo-parameters)
+    Uses dataclass-dsl's get_refs() to introspect the class and resolves:
+    - Annotated[T, Ref()] -> {"Ref": "T"}
+    - Annotated[str, Attr(T, "name")] -> {"Fn::GetAtt": ["T", "name"]}
+    - Annotated[list[T], RefList()] -> [{"Ref": "T"}] (list of refs)
+    - Annotated[str, ContextRef("name")] -> {"Ref": "name"} (for pseudo-parameters)
 
     Args:
         wrapper_instance: An instance of a wrapper class
@@ -226,7 +226,7 @@ def resolve_refs_from_annotations(wrapper_instance: Any) -> dict[str, Any]:
     wrapper_cls = type(wrapper_instance)
     resolved: dict[str, Any] = {}
 
-    # Use graph-refs introspection
+    # Use dataclass-dsl introspection
     refs = get_refs(wrapper_cls)
 
     for field_name, ref_info in refs.items():
@@ -235,22 +235,22 @@ def resolve_refs_from_annotations(wrapper_instance: Any) -> dict[str, Any]:
 
         # Skip if target is not a real class (e.g., type(None) for ContextRef)
         if ref_info.is_context:
-            # ContextRef["AWS::Region"] -> {"Ref": "AWS::Region"}
+            # ContextRef("AWS::Region") -> {"Ref": "AWS::Region"}
             if ref_info.attr:
                 resolved[field_name] = RefIntrinsic(ref_info.attr)
         elif ref_info.attr is not None:
-            # Attr[MyRole, "Arn"] -> {"Fn::GetAtt": ["MyRole", "Arn"]}
+            # Attr(MyRole, "Arn") -> {"Fn::GetAtt": ["MyRole", "Arn"]}
             if isinstance(ref_info.target, type):
                 resolved[field_name] = GetAtt(ref_info.target.__name__, ref_info.attr)
         elif ref_info.is_list:
-            # RefList[T] - we'll handle this at the value level, not annotation level
+            # RefList() - we'll handle this at the value level, not annotation level
             # The actual list values need to be resolved individually
             pass
         elif ref_info.is_dict:
             # RefDict[K, V] - similar to RefList
             pass
         else:
-            # Ref[MyBucket] -> {"Ref": "MyBucket"}
+            # Ref() -> {"Ref": "MyBucket"}
             if isinstance(ref_info.target, type):
                 resolved[field_name] = RefIntrinsic(ref_info.target.__name__)
 

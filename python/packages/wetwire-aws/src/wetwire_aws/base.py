@@ -3,10 +3,13 @@ Base classes for CloudFormation resources.
 
 CloudFormationResource is the base class for all AWS resource types.
 PropertyType is the base class for nested property structures.
+Context is the base class for environment-specific configuration.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from typing import Annotated, Any, ClassVar
+
+from dataclass_dsl import ContextRef
 
 
 def _serialize_value(value: Any) -> Any:
@@ -81,6 +84,22 @@ class PropertyType:
 
 
 @dataclass
+class Tag(PropertyType):
+    """
+    Standard AWS resource tag.
+
+    Most AWS resources support tagging via a list of Tag objects.
+    This is defined centrally to avoid generating 200+ identical copies.
+
+    Example:
+        >>> tags = [Tag(key="Environment", value="Production")]
+    """
+
+    key: str | None = None
+    value: str | None = None
+
+
+@dataclass
 class CloudFormationResource:
     """
     Base class for all CloudFormation resource types.
@@ -100,7 +119,6 @@ class CloudFormationResource:
     condition: str | None = field(default=None, repr=False, kw_only=True)
     metadata: dict[str, Any] | None = field(default=None, repr=False, kw_only=True)
     deletion_policy: str | None = field(default=None, repr=False, kw_only=True)
-    update_policy: dict[str, Any] | None = field(default=None, repr=False, kw_only=True)
     update_replace_policy: str | None = field(default=None, repr=False, kw_only=True)
 
     def to_dict(self) -> dict[str, Any]:
@@ -121,7 +139,6 @@ class CloudFormationResource:
             "condition",
             "metadata",
             "deletion_policy",
-            "update_policy",
             "update_replace_policy",
         }
 
@@ -159,8 +176,6 @@ class CloudFormationResource:
             result["Metadata"] = self.metadata
         if self.deletion_policy:
             result["DeletionPolicy"] = self.deletion_policy
-        if self.update_policy:
-            result["UpdatePolicy"] = self.update_policy
         if self.update_replace_policy:
             result["UpdateReplacePolicy"] = self.update_replace_policy
 
@@ -174,3 +189,64 @@ class CloudFormationResource:
             The CloudFormation resource type (e.g., "AWS::S3::Bucket").
         """
         return cls._resource_type
+
+
+@dataclass
+class Context:
+    """
+    Base context for environment-specific values.
+
+    Subclass to add domain-specific values:
+
+        @dataclass
+        class AWSContext(Context):
+            account_id: str = ""
+            region: str = ""
+            stack_name: str = ""
+
+    Example:
+        >>> ctx = Context(project="myapp", environment="production")
+        >>> ctx.get("project")
+        'myapp'
+    """
+
+    project: str = ""
+    environment: str = ""
+
+    def get(self, name: str, default: Any = None) -> Any:
+        """
+        Get a context value by name.
+
+        Args:
+            name: The context value name
+            default: Default value if not found
+
+        Returns:
+            The context value or default
+        """
+        return getattr(self, name, default)
+
+    def resolve(self, context_ref: object) -> Any:
+        """
+        Resolve a ContextRef to its value.
+
+        Args:
+            context_ref: The context reference to resolve
+
+        Returns:
+            The resolved value
+        """
+        # Extract the name from the ContextRef
+        # ContextRef["name"] has the name as the type argument
+        args = getattr(context_ref, "__args__", ())
+        if args:
+            name = args[0]
+            if isinstance(name, str):
+                return self.get(name)
+        return None
+
+
+# Type aliases for common context references
+# These are used as type annotations: field: PROJECT
+PROJECT = Annotated[str, ContextRef("project")]
+ENVIRONMENT = Annotated[str, ContextRef("environment")]

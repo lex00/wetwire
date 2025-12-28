@@ -9,7 +9,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from wetwire_aws.decorator import get_aws_registry
+from wetwire_aws.decorator import cf_registry
 from wetwire_aws.intrinsics.functions import IntrinsicFunction
 
 
@@ -80,6 +80,29 @@ class Output:
 
 
 @dataclass
+class Mapping:
+    """CloudFormation template mapping.
+
+    A mapping is a two-level lookup table used with Fn::FindInMap.
+    """
+
+    map_data: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, dict[str, Any]]:
+        return self.map_data
+
+
+class Condition:
+    """CloudFormation template condition.
+
+    Represents a condition definition in the Conditions section.
+    Note: This is different from the Condition intrinsic function.
+    """
+
+    pass
+
+
+@dataclass
 class CloudFormationTemplate:
     """
     CloudFormation template container.
@@ -108,7 +131,7 @@ class CloudFormationTemplate:
         """
         Create a template from registered resources.
 
-        Resources are topologically sorted by dependencies using graph-refs
+        Resources are topologically sorted by dependencies using dataclass-dsl
         get_dependencies(), so resources appear in creation order.
 
         Args:
@@ -120,19 +143,21 @@ class CloudFormationTemplate:
         Returns:
             CloudFormationTemplate with all registered resources
         """
-        registry = get_aws_registry()
+        registry = cf_registry
         resources: dict[str, Any] = {}
 
         from typing import get_type_hints
 
-        from wetwire import topological_sort
+        from dataclass_dsl import is_attr_ref, is_class_ref, topological_sort
 
+        from wetwire_aws.intrinsics.functions import GetAtt
+        from wetwire_aws.intrinsics.functions import Ref as RefIntrinsic
         from wetwire_aws.intrinsics.refs import resolve_refs_from_annotations
 
         # Get all wrapper classes
         all_wrappers = list(registry.get_all(scope_package))
 
-        # Topologically sort by dependencies (uses graph-refs internally)
+        # Topologically sort by dependencies (uses dataclass-dsl internally)
         sorted_wrappers = topological_sort(all_wrappers)
 
         for wrapper_cls in sorted_wrappers:
@@ -160,17 +185,29 @@ class CloudFormationTemplate:
 
             # Collect properties from wrapper (excluding 'resource' and private attrs)
             # Also exclude fields that are None (annotation-only placeholders)
-            props = {
-                k: v
-                for k, v in wrapper_instance.__dict__.items()
-                if not k.startswith("_") and k != "resource" and v is not None
-            }
+            props: dict[str, Any] = {}
+            for k, v in wrapper_instance.__dict__.items():
+                if k.startswith("_") or k == "resource" or v is None:
+                    continue
 
-            # Merge resolved refs - these are the graph-refs annotations resolved
+                # Handle no-parens pattern: AttrRef markers (e.g., MyRole.Arn)
+                if is_attr_ref(v):
+                    props[k] = GetAtt(v.target.__name__, v.attr)
+                # Handle no-parens pattern: class references (e.g., MyVPC)
+                elif is_class_ref(v):
+                    props[k] = RefIntrinsic(v.__name__)
+                elif isinstance(v, type) and hasattr(v, "_refs_marker"):
+                    props[k] = RefIntrinsic(v.__name__)
+                else:
+                    props[k] = v
+
+            # Merge resolved refs - these are the dataclass-dsl annotations resolved
             # to CloudFormation intrinsics. Only include refs that resolve to
             # fields the resource actually accepts.
             for field_name, ref_value in resolved_refs.items():
-                props[field_name] = ref_value
+                # Don't overwrite already-resolved no-parens refs
+                if field_name not in props:
+                    props[field_name] = ref_value
 
             # Create resource instance with collected properties
             resource_instance = resource_type_cls(**props)
@@ -223,7 +260,8 @@ class CloudFormationTemplate:
 
     def _resolve_resources(self, resources: dict[str, Any]) -> dict[str, Any]:
         """Resolve any intrinsic functions in resources."""
-        return self._resolve_value(resources)
+        resolved: dict[str, Any] = self._resolve_value(resources)
+        return resolved
 
     def _resolve_conditions(self, conditions: dict[str, Any]) -> dict[str, Any]:
         """Resolve any intrinsic functions in conditions."""

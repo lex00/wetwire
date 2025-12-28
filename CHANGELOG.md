@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `get_creation_order()` / `get_deletion_order()`
   - `detect_cycles()` for circular dependency detection
   - `get_dependency_graph()` for graph extraction
-- Integration with `graph-refs` for typed references
+- Integration with `dataclass-dsl` for typed references
 - Python 3.11+ support
 - Type checker compatibility (mypy, pyright)
 

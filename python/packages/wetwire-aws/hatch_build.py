@@ -37,15 +37,35 @@ class CodegenBuildHook(BuildHookInterface):
         # Skip if WETWIRE_SKIP_CODEGEN is set and resources exist
         if os.environ.get("WETWIRE_SKIP_CODEGEN") and init_file.exists():
             self.app.display_info("Skipping codegen (WETWIRE_SKIP_CODEGEN set)")
+            self._add_resources_to_build(build_data, resources_dir)
             return
 
-        # Skip if resources already exist (for sdist installs)
+        # Skip codegen if resources already exist (for sdist installs)
         if init_file.exists() and self._resources_look_complete(resources_dir):
             self.app.display_info("Resources already exist, skipping codegen")
+            self._add_resources_to_build(build_data, resources_dir)
             return
 
         self.app.display_info("Running wetwire-aws codegen pipeline...")
         self._run_codegen()
+        self._add_resources_to_build(build_data, resources_dir)
+
+    def _add_resources_to_build(
+        self, build_data: dict[str, Any], resources_dir: Path
+    ) -> None:
+        """Add generated resources to the build via force_include."""
+        if not resources_dir.exists():
+            return
+
+        force_include = build_data.setdefault("force_include", {})
+        src_base = Path(self.root) / "src"
+
+        # Walk the resources directory and add all files
+        for path in resources_dir.rglob("*"):
+            if path.is_file() and not path.name.startswith("."):
+                # Get path relative to src/ for the package structure
+                rel_path = path.relative_to(src_base)
+                force_include[str(path)] = str(rel_path)
 
     def _resources_look_complete(self, resources_dir: Path) -> bool:
         """Check if resources directory looks complete (has multiple service dirs)."""

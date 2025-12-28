@@ -475,11 +475,6 @@ Implementations SHOULD provide validation that:
 
 ---
 
-## Appendix: Related Specifications
+## Appendix: Related Documents
 
-- [GRAPH_REFS_SPEC.md](GRAPH_REFS_SPEC.md) — Typing primitives specification
-
-### Language-Specific Implementation Notes
-
-See the language-specific documentation for implementation details:
-- Python: `python/docs/IMPLEMENTATION_PLAN.md`
+See [ARCHITECTURE.md](../architecture/ARCHITECTURE.md) for system architecture and package relationships.
