@@ -26,13 +26,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from codegen.config import GENERATOR_VERSION, RESOURCES_DIR, SPECS_DIR
-from wetwire.codegen import (
+from codegen.schema import (
     IntermediateSchema,
     NestedTypeDef,
     PropertyDef,
     ResourceDef,
+    python_type_for_property,
 )
-from wetwire.codegen.generator import python_type_for_property, format_file
 
 # Use all available CPU cores for parallel generation
 NUM_WORKERS = os.cpu_count() or 4

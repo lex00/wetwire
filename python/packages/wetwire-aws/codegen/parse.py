@@ -12,14 +12,13 @@ import sys
 from datetime import UTC, datetime
 
 from codegen.config import SPECS_DIR
-from wetwire.codegen import (
+from codegen.schema import (
     PYTHON_KEYWORDS,
     AttributeDef,
     IntermediateSchema,
     NestedTypeDef,
     PropertyDef,
     ResourceDef,
-    escape_python_keyword,
     to_snake_case,
 )
 
