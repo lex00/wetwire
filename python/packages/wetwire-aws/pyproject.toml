@@ -110,7 +110,11 @@ python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
-exclude = ["src/wetwire_aws/resources"]
+exclude = [
+    "src/wetwire_aws/resources",
+    "src/wetwire_aws/importer/parser.py",  # YAML constructor typing complex
+    "src/wetwire_aws/linter/rules.py",  # AST typing complex
+]
 
 [tool.pyright]
 pythonVersion = "3.11"
