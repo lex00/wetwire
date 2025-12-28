@@ -25,14 +25,14 @@ class MyVPC:
 @wetwire_aws
 class WebSubnet:
     resource: ec2.Subnet
-    vpc_id = ref(MyVPC)            # Reference — returns {"Ref": "MyVPC"}
+    vpc_id = MyVPC                 # Reference — no parens, no strings
     cidr_block = "10.0.1.0/24"
     availability_zone = "us-east-1a"
 
 @wetwire_aws
 class WebServer:
     resource: ec2.Instance
-    subnet_id = ref(WebSubnet)     # Another reference
+    subnet_id = WebSubnet          # Another reference
     instance_type = "t3.medium"
     image_id = "ami-12345678"
 ```
@@ -77,7 +77,7 @@ class ProcessorFunction:
     runtime = lambda_.Runtime.PYTHON3_12
     handler = "index.handler"
     code = lambda_.function.Code(
-        s3_bucket = ref(DataBucket),
+        s3_bucket = DataBucket,            # No parens needed
         s3_key = "code.zip"
     )
 
