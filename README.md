@@ -14,26 +14,25 @@ Infrastructure code that is:
 ## The Pattern
 
 ```python
-from wetwire_aws import wetwire_aws
-from wetwire_aws.resources.ec2 import VPC, Subnet, Instance
+from . import *
 
 @wetwire_aws
 class MyVPC:
-    resource: VPC
+    resource: ec2.VPC
     cidr_block = "10.0.0.0/16"
     enable_dns_hostnames = True
 
 @wetwire_aws
 class WebSubnet:
-    resource: Subnet
-    vpc = MyVPC                    # Reference — no parens, no strings
+    resource: ec2.Subnet
+    vpc_id = ref(MyVPC)            # Reference — returns {"Ref": "MyVPC"}
     cidr_block = "10.0.1.0/24"
     availability_zone = "us-east-1a"
 
 @wetwire_aws
 class WebServer:
-    resource: Instance
-    subnet = WebSubnet             # Another reference
+    resource: ec2.Instance
+    subnet_id = ref(WebSubnet)     # Another reference
     instance_type = "t3.medium"
     image_id = "ami-12345678"
 ```
@@ -44,9 +43,8 @@ class WebServer:
 
 | Package | Purpose | Status |
 |---------|---------|--------|
-| `graph-refs` | Typed graph references (`Ref[T]`, `Attr[T]`) | ✅ Published on PyPI |
-| `wetwire` | Core framework (decorator, registry, template) | In Development |
-| `wetwire-aws` | AWS CloudFormation synthesis | Planning |
+| `dataclass-dsl` | Typed references and resource loading | ✅ Published on PyPI |
+| `wetwire-aws` | AWS CloudFormation synthesis | ✅ In Development |
 | `wetwire-gcp` | GCP Config Connector synthesis | Future |
 | `wetwire-azure` | Azure ARM synthesis | Future |
 | `wetwire-k8s` | Kubernetes manifest synthesis | Future |
@@ -62,28 +60,26 @@ pip install wetwire-aws
 ## Quick Example
 
 ```python
-from wetwire_aws import wetwire_aws, CloudFormationTemplate
-from wetwire_aws.resources.s3 import Bucket
-from wetwire_aws.resources.iam import Role
+from . import *
 
 @wetwire_aws
 class DataBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "my-data-bucket"
-    versioning_configuration = {"Status": "Enabled"}
+    versioning_configuration = s3.bucket.VersioningConfiguration(
+        status="Enabled"
+    )
 
 @wetwire_aws
-class ProcessorRole:
-    resource: Role
-    role_name = "data-processor"
-    assume_role_policy_document = {
-        "Version": "2012-10-17",
-        "Statement": [{
-            "Effect": "Allow",
-            "Principal": {"Service": "lambda.amazonaws.com"},
-            "Action": "sts:AssumeRole"
-        }]
-    }
+class ProcessorFunction:
+    resource: lambda_.Function
+    function_name = "data-processor"
+    runtime = lambda_.Runtime.PYTHON3_12
+    handler = "index.handler"
+    code = lambda_.function.Code(
+        s3_bucket = ref(DataBucket),
+        s3_key = "code.zip"
+    )
 
 # Generate CloudFormation template
 template = CloudFormationTemplate.from_registry()
@@ -100,17 +96,15 @@ Resources:
       BucketName: my-data-bucket
       VersioningConfiguration:
         Status: Enabled
-  ProcessorRole:
-    Type: AWS::IAM::Role
+  ProcessorFunction:
+    Type: AWS::Lambda::Function
     Properties:
-      RoleName: data-processor
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
+      FunctionName: data-processor
+      Runtime: python3.12
+      Handler: index.handler
+      Code:
+        S3Bucket: {Ref: DataBucket}
+        S3Key: code.zip
 ```
 
 ## Why Wetwire?
@@ -138,14 +132,8 @@ Resources:
 
 ```
 ┌────────────────────┐
-│    graph-refs      │  ← Standalone typing library
-│  (no dependencies) │    Candidate for Python stdlib
-└─────────┬──────────┘
-          │
-          ▼
-┌────────────────────┐
-│     wetwire        │  ← Core framework
-│ depends: graph-refs│    Provider abstraction
+│   dataclass-dsl    │  ← Typed references & resource loading
+│  (no dependencies) │    Published on PyPI
 └─────────┬──────────┘
           │
     ┌─────┼─────┬─────────┬─────────┐
