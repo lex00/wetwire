@@ -7,9 +7,9 @@ Context is the base class for environment-specific configuration.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Literal
+from typing import Annotated, Any, ClassVar
 
-from graph_refs import ContextRef
+from dataclass_dsl import ContextRef
 
 
 def _serialize_value(value: Any) -> Any:
@@ -248,5 +248,5 @@ class Context:
 
 # Type aliases for common context references
 # These are used as type annotations: field: PROJECT
-PROJECT = ContextRef[Literal["project"]]
-ENVIRONMENT = ContextRef[Literal["environment"]]
+PROJECT = Annotated[str, ContextRef("project")]
+ENVIRONMENT = Annotated[str, ContextRef("environment")]

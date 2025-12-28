@@ -148,7 +148,7 @@ class CloudFormationTemplate:
 
         from typing import get_type_hints
 
-        from graph_refs_dataclasses import is_attr_ref, is_class_ref, topological_sort
+        from dataclass_dsl import is_attr_ref, is_class_ref, topological_sort
 
         from wetwire_aws.intrinsics.functions import GetAtt
         from wetwire_aws.intrinsics.functions import Ref as RefIntrinsic

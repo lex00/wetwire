@@ -8,9 +8,9 @@ resolved at runtime or used in CloudFormation templates.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Annotated, Any
 
-from graph_refs import ContextRef
+from dataclass_dsl import ContextRef
 
 from wetwire_aws.base import Context
 
@@ -104,9 +104,9 @@ class AWSContext(Context):
 
 
 # Type aliases for AWS pseudo-parameters
-AWS_REGION = ContextRef[Literal["AWS::Region"]]
-AWS_ACCOUNT_ID = ContextRef[Literal["AWS::AccountId"]]
-AWS_STACK_NAME = ContextRef[Literal["AWS::StackName"]]
-AWS_STACK_ID = ContextRef[Literal["AWS::StackId"]]
-AWS_PARTITION = ContextRef[Literal["AWS::Partition"]]
-AWS_URL_SUFFIX = ContextRef[Literal["AWS::URLSuffix"]]
+AWS_REGION = Annotated[str, ContextRef("AWS::Region")]
+AWS_ACCOUNT_ID = Annotated[str, ContextRef("AWS::AccountId")]
+AWS_STACK_NAME = Annotated[str, ContextRef("AWS::StackName")]
+AWS_STACK_ID = Annotated[str, ContextRef("AWS::StackId")]
+AWS_PARTITION = Annotated[str, ContextRef("AWS::Partition")]
+AWS_URL_SUFFIX = Annotated[str, ContextRef("AWS::URLSuffix")]

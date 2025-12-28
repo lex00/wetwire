@@ -12,7 +12,7 @@ This is the recommended user pattern and MUST work.
 from __future__ import annotations
 
 import pytest
-from graph_refs_dataclasses import AttrRef, is_attr_ref
+from dataclass_dsl import AttrRef, is_attr_ref
 
 from wetwire_aws import CloudFormationTemplate
 from wetwire_aws.decorator import get_aws_registry

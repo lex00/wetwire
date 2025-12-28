@@ -1,7 +1,7 @@
 """
 AWS CloudFormation resource loader.
 
-Convenience wrapper around graph_refs_dataclasses.setup_resources with
+Convenience wrapper around dataclass_dsl.setup_resources with
 AWS-specific namespace injection and stub configuration.
 
 Usage in a resources package __init__.py:
@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from graph_refs_dataclasses import Attr, Ref, RefDict, RefList
-from graph_refs_dataclasses import setup_resources as _setup_resources
+from dataclass_dsl import Attr, Ref, RefDict, RefList
+from dataclass_dsl import setup_resources as _setup_resources
 
 from wetwire_aws.stubs import AWS_STUB_CONFIG
 
@@ -125,7 +125,7 @@ def setup_resources(
 ) -> None:
     """Set up AWS CloudFormation resource imports.
 
-    Wrapper around graph_refs_dataclasses.setup_resources with AWS-specific
+    Wrapper around dataclass_dsl.setup_resources with AWS-specific
     namespace injection and stub configuration pre-applied.
 
     This function:

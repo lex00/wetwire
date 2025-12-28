@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from graph_refs import (
+from dataclass_dsl import (
     Attr,
     ContextRef,
     Ref,

@@ -6,9 +6,18 @@ to work correctly with PEP 563 (from __future__ import annotations).
 
 from __future__ import annotations
 
+from typing import Annotated
+
 import pytest
-from graph_refs import Attr, ContextRef, Ref, RefList, get_dependencies, get_refs
-from graph_refs_dataclasses import topological_sort
+from dataclass_dsl import (
+    Attr,
+    ContextRef,
+    Ref,
+    RefList,
+    get_dependencies,
+    get_refs,
+    topological_sort,
+)
 
 from wetwire_aws import CloudFormationTemplate, get_att, wetwire_aws
 from wetwire_aws.decorator import get_aws_registry
@@ -47,9 +56,9 @@ class TestRole:
 class TestFunctionWithRef:
     resource: Function
     function_name = "test-with-ref"
-    # Using Ref[T] annotation for introspection
+    # Using Annotated[T, Ref()] annotation for introspection
     # Note: bucket isn't a real Function field, this tests the mechanism
-    bucket: Ref[TestBucket] = None
+    bucket: Annotated[TestBucket, Ref()] = None
 
 
 @wetwire_aws
@@ -57,14 +66,14 @@ class TestFunctionWithAttr:
     resource: Function
     function_name = "test-with-attr"
     # role IS a real Function field
-    role: Attr[TestRole, ARN] = None
+    role: Annotated[str, Attr(TestRole, ARN)] = None
 
 
 @wetwire_aws
 class TestFunctionWithBoth:
     resource: Function
     function_name = "test-with-both"
-    role: Attr[TestRole, ARN] = None
+    role: Annotated[str, Attr(TestRole, ARN)] = None
 
 
 # For dependency chain test
@@ -78,14 +87,14 @@ class NetworkBucket:
 class SubnetBucket:
     resource: Bucket
     bucket_name = "subnet"
-    network: Ref[NetworkBucket] = None
+    network: Annotated[NetworkBucket, Ref()] = None
 
 
 @wetwire_aws
 class InstanceBucket:
     resource: Bucket
     bucket_name = "instance"
-    subnet: Ref[SubnetBucket] = None
+    subnet: Annotated[SubnetBucket, Ref()] = None
 
 
 # For direct ref() pattern test
@@ -112,7 +121,7 @@ class AnnotationPatternRole:
 class AnnotationPatternFunction:
     resource: Function
     function_name = "annotated"
-    role: Attr[AnnotationPatternRole, ARN] = None
+    role: Annotated[str, Attr(AnnotationPatternRole, ARN)] = None
 
 
 # ============================================================================
@@ -216,7 +225,7 @@ class ResourceWithContext:
     resource: Bucket
     bucket_name = "context-test"
     # Use ContextRef for pseudo-parameters
-    region: ContextRef["AWS::Region"] = None  # noqa: F722
+    region: Annotated[str, ContextRef("AWS::Region")] = None
 
 
 # ============================================================================
@@ -234,7 +243,7 @@ class SecurityGroupBucket:
 class InstanceWithSecurityGroups:
     resource: Bucket  # Using Bucket as placeholder
     bucket_name = "instance-bucket"
-    security_groups: RefList[SecurityGroupBucket] = None
+    security_groups: Annotated[list[SecurityGroupBucket], RefList()] = None
 
 
 class TestContextRef:

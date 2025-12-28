@@ -35,7 +35,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "graph-refs-dataclasses>=0.1.0",
+    "dataclass-dsl>=0.1.0",
     "pyyaml>=6.0",
 ]
 
@@ -140,4 +140,5 @@ omit = ["*/tests/*", "*/codegen/*", "*/resources/*"]
 line-length = 88
 target-version = ['py311']
 include = '\.pyi?$'
+
 

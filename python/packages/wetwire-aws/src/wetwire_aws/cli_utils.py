@@ -13,7 +13,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from graph_refs_dataclasses import ResourceRegistry
+    from dataclass_dsl import ResourceRegistry
 
 
 def discover_resources(
@@ -145,7 +145,7 @@ def create_validate_command(
     """
 
     def validate_command(args: argparse.Namespace) -> None:
-        from graph_refs import get_dependencies
+        from dataclass_dsl import get_dependencies
 
         # Import modules to discover resources
         if args.modules:

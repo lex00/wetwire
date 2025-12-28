@@ -258,6 +258,15 @@ toml = [
 ]
 
 [[package]]
+name = "dataclass-dsl"
+version = "0.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5f/67/4ae974bdf4f8ab1e3ffb30eec600cc59332816ed859f8cee23a1fe2d2d62/dataclass_dsl-0.1.0.tar.gz", hash = "sha256:01bf67cd8da3265618523f69017923bdbf6da9dd03432232cb399dc41bebf400", size = 39991 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/60/b5/997db2876e7a1e23bb318e03252a9d66dd4c7b0d0f38406cbb3941d218b8/dataclass_dsl-0.1.0-py3-none-any.whl", hash = "sha256:74d7f228ec7ca60af0b1b5383f3c7d48e599ee8da44bc9794fd2215f8927bdf7", size = 34401 },
+]
+
+[[package]]
 name = "distlib"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -273,27 +282,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/a7/23/ce7a1126827cedeb958fc043d61745754464eb56c5937c35bbf2b8e26f34/filelock-3.20.1.tar.gz", hash = "sha256:b8360948b351b80f420878d8516519a2204b07aefcdcfd24912a5d33127f188c", size = 19476 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e3/7f/a1a97644e39e7316d850784c642093c99df1290a460df4ede27659056834/filelock-3.20.1-py3-none-any.whl", hash = "sha256:15d9e9a67306188a44baa72f569d2bfd803076269365fdea0934385da4dc361a", size = 16666 },
-]
-
-[[package]]
-name = "graph-refs"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/47/fd/43a51b7f5e90debe2efdec3609778810d693967539350930722bc1379f8b/graph_refs-0.1.0.tar.gz", hash = "sha256:59a1f455d5f7c71036b405a54e2584cd27b2d36a5173d129b6179c584f09ff18", size = 23630 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/6d/0edcad07758ddee14c41feddfff292745081fe605fedec9e52f216aaf55b/graph_refs-0.1.0-py3-none-any.whl", hash = "sha256:f56b39bb03294dae7e7212a69a165563c7098f768a9ca1ce14f696caea5500fc", size = 16016 },
-]
-
-[[package]]
-name = "graph-refs-dataclasses"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "graph-refs" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/13/e4/87721f325b84604dd0651b3138722d70843803d72990706631843cd24b2b/graph_refs_dataclasses-0.1.0.tar.gz", hash = "sha256:30211045c0ac43e3286a6689d4b1d36124fb60e4779134a93a38596d9f8fdcf2", size = 35053 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/31/cb/e2d3b2bf42a7dd6499a60dc09d7565a98d52663f38e0abdee684aed217ee/graph_refs_dataclasses-0.1.0-py3-none-any.whl", hash = "sha256:39022a59032996d8acd9e35c2eca15822468fbb923c88f572aee1b99a501753b", size = 31834 },
 ]
 
 [[package]]
@@ -863,7 +851,7 @@ name = "wetwire-aws"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "graph-refs-dataclasses" },
+    { name = "dataclass-dsl" },
     { name = "pyyaml" },
 ]
 
@@ -904,7 +892,7 @@ requires-dist = [
     { name = "black", marker = "extra == 'codegen'", specifier = ">=23.12" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.12" },
     { name = "botocore", marker = "extra == 'codegen'", specifier = ">=1.34" },
-    { name = "graph-refs-dataclasses", specifier = ">=0.1.0" },
+    { name = "dataclass-dsl", specifier = ">=0.1.0" },
     { name = "jinja2", marker = "extra == 'codegen'", specifier = ">=3.1" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8" },
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1" },

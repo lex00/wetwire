@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, get_type_hints
 
-from graph_refs_dataclasses import Provider, is_attr_ref, is_class_ref
+from dataclass_dsl import Provider, is_attr_ref, is_class_ref
 
 from wetwire_aws.intrinsics.functions import GetAtt, IntrinsicFunction, Ref
 

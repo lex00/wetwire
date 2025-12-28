@@ -1,13 +1,13 @@
 """
 The @wetwire_aws decorator.
 
-This decorator uses graph-refs-dataclasses to create a CloudFormation-specific
+This decorator uses dataclass-dsl to create a CloudFormation-specific
 decorator with automatic resource registration.
 """
 
 from typing import Any
 
-from graph_refs_dataclasses import ResourceRegistry, create_decorator
+from dataclass_dsl import ResourceRegistry, create_decorator
 
 # AWS-specific registry for CloudFormation resources
 cf_registry = ResourceRegistry()
