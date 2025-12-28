@@ -146,3 +146,57 @@ jobs:
         with:
           name: wheel
           path: python/packages/wetwire-aws/dist/*.whl
+
+  docs:
+    name: Build & Publish Docs
+    needs: generate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Download resources
+        uses: actions/download-artifact@v4
+        with:
+          name: resources
+          path: python/packages/wetwire-aws/src/wetwire_aws/resources/
+
+      - name: Install dependencies
+        run: |
+          uv sync --group dev
+          uv pip install pdoc
+
+      - name: Build API docs
+        run: |
+          uv run pdoc wetwire_aws \
+            --output-dir docs \
+            --docformat google \
+            --no-show-source
+        env:
+          PYTHONPATH: src
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: python/packages/wetwire-aws/docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
