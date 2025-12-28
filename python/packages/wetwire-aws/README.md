@@ -22,48 +22,51 @@ myapp/
 ```python
 from wetwire_aws.loader import setup_resources
 
-# Magic: injects wetwire_aws decorator, resource modules (s3, iam, lambda_, etc.),
-# helpers (ref, get_att, ARN), and CloudFormationTemplate into this package's namespace.
-# This enables `from . import *` in submodules.
+# Magic: this single call injects into this package's namespace:
+# - @wetwire_aws decorator
+# - All resource modules: s3, iam, lambda_, ec2, dynamodb, sqs, sns, ...
+# - Intrinsic helpers: ref, get_att, Sub, Join, If, ...
+# - Attribute constants: ARN, ...
+# - CloudFormationTemplate
 setup_resources(__file__, __name__, globals())
 ```
 
 **myapp/infra.py:**
 ```python
-# The star import pulls in everything injected by setup_resources:
-# - wetwire_aws decorator
-# - Resource modules: s3, iam, lambda_, ec2, dynamodb, etc.
-# - Helpers: ref, get_att, ARN, Sub, Join, If, etc.
-# - CloudFormationTemplate
-from . import *
+from . import *  # Everything you need, injected by setup_resources
 
 @wetwire_aws
 class DataBucket:
     resource: s3.Bucket
     bucket_name = "my-data-bucket"
+    # Type-safe nested property types
     versioning_configuration = s3.bucket.VersioningConfiguration(
         status="Enabled"
     )
 
 @wetwire_aws
-class ProcessorRole:
-    resource: iam.Role
-    role_name = "data-processor"
-    assume_role_policy_document = {
-        "Version": "2012-10-17",
-        "Statement": [{
-            "Effect": "Allow",
-            "Principal": {"Service": "lambda.amazonaws.com"},
-            "Action": "sts:AssumeRole"
-        }]
-    }
+class DataQueue:
+    resource: sqs.Queue
+    queue_name = "data-queue"
+    visibility_timeout = 300
+    # Type-safe encryption config
+    sqs_managed_sse_enabled = True
 
 @wetwire_aws
 class ProcessorFunction:
     resource: lambda_.Function
     function_name = "data-processor"
-    runtime = lambda_.Runtime.PYTHON3_12  # Type-safe enum constants
-    role = get_att(ProcessorRole, ARN)  # Reference to role's ARN attribute
+    runtime = lambda_.Runtime.PYTHON3_12    # Type-safe enum constants
+    handler = "index.handler"
+    code = lambda_.function.Code(
+        s3_bucket = ref(DataBucket),        # Reference another resource
+        s3_key = "code.zip"
+    )
+    environment = lambda_.function.Environment(
+        variables = {
+            "QUEUE_URL": get_att(DataQueue, sqs.Queue.QUEUE_URL)  # Get attribute
+        }
+    )
 ```
 
 **Generate template:**
