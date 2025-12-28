@@ -59,7 +59,7 @@ class ProcessorFunction:
     runtime = lambda_.Runtime.PYTHON3_12    # Type-safe enum constants
     handler = "index.handler"
     code = lambda_.function.Code(
-        s3_bucket = ref(DataBucket),        # Reference another resource
+        s3_bucket = DataBucket,             # Reference — no parens needed
         s3_key = "code.zip"
     )
     environment = lambda_.function.Environment(
