@@ -131,7 +131,7 @@ class CloudFormationTemplate:
         """
         Create a template from registered resources.
 
-        Resources are topologically sorted by dependencies using graph-refs
+        Resources are topologically sorted by dependencies using dataclass-dsl
         get_dependencies(), so resources appear in creation order.
 
         Args:
@@ -157,7 +157,7 @@ class CloudFormationTemplate:
         # Get all wrapper classes
         all_wrappers = list(registry.get_all(scope_package))
 
-        # Topologically sort by dependencies (uses graph-refs internally)
+        # Topologically sort by dependencies (uses dataclass-dsl internally)
         sorted_wrappers = topological_sort(all_wrappers)
 
         for wrapper_cls in sorted_wrappers:
@@ -201,7 +201,7 @@ class CloudFormationTemplate:
                 else:
                     props[k] = v
 
-            # Merge resolved refs - these are the graph-refs annotations resolved
+            # Merge resolved refs - these are the dataclass-dsl annotations resolved
             # to CloudFormation intrinsics. Only include refs that resolve to
             # fields the resource actually accepts.
             for field_name, ref_value in resolved_refs.items():

@@ -18,7 +18,7 @@ class CloudFormationProvider(Provider):
     """
     CloudFormation-specific serialization provider.
 
-    Converts graph-refs Ref[T] and Attr[T, name] annotations to
+    Converts dataclass-dsl Ref and Attr annotations to
     CloudFormation intrinsic functions {"Ref": "..."} and
     {"Fn::GetAtt": ["...", "..."]}.
 
@@ -151,7 +151,7 @@ class CloudFormationProvider(Provider):
             else:
                 props[name] = value
 
-        # Resolve graph-refs annotations to intrinsics (for type annotation pattern)
+        # Resolve dataclass-dsl annotations to intrinsics (for type annotation pattern)
         resolved_refs = resolve_refs_from_annotations(wrapper_instance)
         for field_name, ref_value in resolved_refs.items():
             # Only use annotation-based resolution if not already resolved

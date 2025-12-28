@@ -131,7 +131,7 @@ def create_validate_command(
     Create a 'validate' command handler.
 
     The returned handler validates that all resource references point
-    to resources that exist in the registry. Uses graph-refs for
+    to resources that exist in the registry. Uses dataclass-dsl for
     dependency introspection.
 
     Args:

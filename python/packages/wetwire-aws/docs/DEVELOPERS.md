@@ -52,7 +52,7 @@ wetwire-aws/
 │   ├── intrinsics/            # Intrinsic functions
 │   │   ├── functions.py       # Ref, GetAtt, Sub, Join, etc.
 │   │   ├── pseudo.py          # AWS pseudo-parameters
-│   │   └── refs.py            # ref(), get_att(), graph-refs integration
+│   │   └── refs.py            # ref(), get_att(), dataclass-dsl integration
 │   └── resources/             # Generated AWS resources (263 services)
 │       ├── s3/__init__.py     # S3 resources
 │       ├── ec2/__init__.py    # EC2 resources
@@ -236,7 +236,7 @@ Follow conventional commits:
 feat: Add support for EC2 resources
 fix: Correct S3 bucket serialization
 docs: Update installation instructions
-test: Add tests for graph-refs integration
+test: Add tests for dataclass-dsl integration
 chore: Update dependencies
 ```
 

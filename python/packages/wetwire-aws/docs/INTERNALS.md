@@ -5,7 +5,7 @@ This document covers the internal architecture of wetwire-aws for contributors a
 **Contents:**
 - [Resource Registry](#resource-registry) - How auto-registration works
 - [Template Generation](#template-generation) - How templates are built
-- [graph-refs Integration](#graph-refs-integration) - Dependency introspection
+- [dataclass-dsl Integration](#dataclass-dsl-integration) - Dependency introspection
 - [AWS Resource Generator](#aws-resource-generator) - Code generation architecture
 
 ---
@@ -77,7 +77,7 @@ template = CloudFormationTemplate.from_registry(
 
 The method:
 1. Gets all registered resources (optionally filtered by scope)
-2. **Topologically sorts** resources by dependencies using graph-refs
+2. **Topologically sorts** resources by dependencies using dataclass-dsl
 3. Resolves `Ref[T]` and `Attr[T, "name"]` annotations to intrinsics
 4. Creates CloudFormation resource definitions
 
@@ -86,7 +86,7 @@ The method:
 Resources are ordered so dependencies come before dependents:
 
 ```python
-from graph_refs import get_dependencies
+from dataclass_dsl import get_dependencies
 
 # NetworkBucket has no deps
 # SubnetBucket depends on NetworkBucket
@@ -106,57 +106,57 @@ The `_topological_sort()` method uses Kahn's algorithm:
 
 ### Reference Resolution
 
-`resolve_refs_from_annotations()` converts graph-refs types to CloudFormation intrinsics:
+`resolve_refs_from_annotations()` converts dataclass-dsl types to CloudFormation intrinsics:
 
-| graph-refs Type | CloudFormation Output |
-|-----------------|----------------------|
-| `Ref[MyBucket]` | `{"Ref": "MyBucket"}` |
-| `Attr[MyRole, "Arn"]` | `{"Fn::GetAtt": ["MyRole", "Arn"]}` |
-| `ContextRef["AWS::Region"]` | `{"Ref": "AWS::Region"}` |
-| `RefList[MySecurityGroup]` | (handled at value level) |
+| dataclass-dsl Type | CloudFormation Output |
+|--------------------|----------------------|
+| `Annotated[MyBucket, Ref()]` | `{"Ref": "MyBucket"}` |
+| `Annotated[str, Attr(MyRole, "Arn")]` | `{"Fn::GetAtt": ["MyRole", "Arn"]}` |
+| `Annotated[str, ContextRef("AWS::Region")]` | `{"Ref": "AWS::Region"}` |
+| `Annotated[list[MySecurityGroup], RefList()]` | (handled at value level) |
 
 ---
 
-## graph-refs Integration
+## dataclass-dsl Integration
 
-wetwire-aws uses graph-refs for dependency introspection and reference resolution.
+wetwire-aws uses dataclass-dsl for dependency introspection and reference resolution.
 
 ### Type Annotations
 
 ```python
-# Import reference types from wetwire (core package)
-from wetwire import Ref, Attr, ContextRef, RefList
+from typing import Annotated
+from dataclass_dsl import Ref, Attr, ContextRef, RefList
 
 @wetwire_aws
 class MyFunction:
     resource: Function
     # These annotations enable introspection
-    role: Attr[MyRole, "Arn"] = None
-    bucket: Ref[MyBucket] = None
-    region: ContextRef["AWS::Region"] = None
-    security_groups: RefList[SecurityGroup] = None
+    role: Annotated[str, Attr(MyRole, "Arn")] = None
+    bucket: Annotated[MyBucket, Ref()] = None
+    region: Annotated[str, ContextRef("AWS::Region")] = None
+    security_groups: Annotated[list[SecurityGroup], RefList()] = None
 ```
 
 ### Introspection API
 
 ```python
-from wetwire import get_refs, get_ref_dependencies
+from dataclass_dsl import get_refs, get_dependencies
 
 # Get all references from a class
 refs = get_refs(MyFunction)
 # Returns: {"role": RefInfo(target=MyRole, attr="Arn"), ...}
 
 # Get dependency classes
-deps = get_ref_dependencies(MyFunction)
+deps = get_dependencies(MyFunction)
 # Returns: {MyRole, MyBucket}
 
 # Transitive dependencies
-all_deps = get_ref_dependencies(MyFunction, transitive=True)
+all_deps = get_dependencies(MyFunction, transitive=True)
 ```
 
 ### Validation
 
-The CLI uses graph-refs to validate references:
+The CLI uses dataclass-dsl to validate references:
 
 ```bash
 wetwire-aws validate --module myapp.infra

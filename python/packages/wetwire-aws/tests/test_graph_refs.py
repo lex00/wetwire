@@ -1,6 +1,6 @@
-"""Tests for graph-refs integration.
+"""Tests for dataclass-dsl integration.
 
-Note: Classes must be defined at module level for graph-refs introspection
+Note: Classes must be defined at module level for dataclass-dsl introspection
 to work correctly with PEP 563 (from __future__ import annotations).
 """
 
@@ -36,7 +36,7 @@ def clear_registry():
 
 
 # ============================================================================
-# Module-level wrapper classes for graph-refs introspection tests
+# Module-level wrapper classes for dataclass-dsl introspection tests
 # ============================================================================
 
 
@@ -130,16 +130,16 @@ class AnnotationPatternFunction:
 
 
 class TestGraphRefsIntrospection:
-    """Test that graph-refs can introspect wrapper classes."""
+    """Test that dataclass-dsl can introspect wrapper classes."""
 
     def test_ref_detected(self):
-        """Test that Ref[T] annotations are detected by graph-refs."""
+        """Test that Annotated[T, Ref()] annotations are detected by dataclass-dsl."""
         refs = get_refs(TestFunctionWithRef)
         assert "bucket" in refs
         assert refs["bucket"].target == TestBucket
 
     def test_attr_detected(self):
-        """Test that Attr[T, 'name'] annotations are detected by graph-refs."""
+        """Test that Annotated[str, Attr(T, 'name')] annotations are detected by dataclass-dsl."""
         refs = get_refs(TestFunctionWithAttr)
         assert "role" in refs
         assert refs["role"].target == TestRole
@@ -164,10 +164,10 @@ class TestGraphRefsIntrospection:
 
 
 class TestGraphRefsSerialization:
-    """Test that graph-refs annotations are serialized to CloudFormation."""
+    """Test that dataclass-dsl annotations are serialized to CloudFormation."""
 
     def test_attr_serializes_to_cf_getatt(self):
-        """Test that Attr[T, 'name'] serializes to {"Fn::GetAtt": ["T", "name"]}."""
+        """Test that Annotated[str, Attr(T, 'name')] serializes to {"Fn::GetAtt": ["T", "name"]}."""
         # Re-register the classes since autouse fixture cleared them
         registry = get_aws_registry()
         registry.register(TestRole, "AWS::IAM::Role")
@@ -190,7 +190,7 @@ class TestGraphRefsSerialization:
 
 
 class TestMixedPatterns:
-    """Test mixing graph-refs annotations with direct ref() calls."""
+    """Test mixing dataclass-dsl annotations with direct ref() calls."""
 
     def test_direct_ref_still_works(self):
         """Test that ref(Class) pattern still works."""
@@ -250,7 +250,7 @@ class TestContextRef:
     """Test ContextRef for pseudo-parameters."""
 
     def test_context_ref_detected(self):
-        """Test that ContextRef annotations are detected by graph-refs."""
+        """Test that ContextRef annotations are detected by dataclass-dsl."""
         refs = get_refs(ResourceWithContext)
         assert "region" in refs
         assert refs["region"].is_context is True
@@ -269,7 +269,7 @@ class TestRefList:
     """Test RefList for list references."""
 
     def test_reflist_detected(self):
-        """Test that RefList annotations are detected by graph-refs."""
+        """Test that RefList annotations are detected by dataclass-dsl."""
         refs = get_refs(InstanceWithSecurityGroups)
         assert "security_groups" in refs
         assert refs["security_groups"].is_list is True

@@ -209,7 +209,7 @@ By now you've seen:
 - `@wetwire_aws` decorator
 - `resource: <type>` to specify the CloudFormation type
 - `ref()` and `get_att()` for references
-- `Ref[T]` and `Attr[T, "name"]` type annotations for introspection
+- `Annotated[T, Ref()]` and `Annotated[str, Attr(T, "name")]` type annotations for introspection
 - Class attributes for properties
 
 That's 90% of what you need.
@@ -227,7 +227,7 @@ That's 90% of what you need.
 Decide these early:
 - **File organization**: By service (network.py, compute.py) or by feature?
 - **Naming**: PascalCase for classes, snake_case for files?
-- **Reference style**: Direct `ref(MyBucket)` or annotation `bucket: Ref[MyBucket]`?
+- **Reference style**: Direct `ref(MyBucket)` or annotation `bucket: Annotated[MyBucket, Ref()]`?
 
 Document in your repo's README.
 

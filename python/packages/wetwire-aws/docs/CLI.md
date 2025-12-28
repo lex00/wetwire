@@ -59,7 +59,7 @@ wetwire-aws build --module myapp --scope myapp.production
 1. Imports the specified module(s), which triggers `@wetwire_aws` decorators
 2. Resources auto-register with the global registry
 3. Collects all registered resources (optionally filtered by scope)
-4. Orders resources topologically by dependencies (using graph-refs)
+4. Orders resources topologically by dependencies (using dataclass-dsl)
 5. Generates CloudFormation JSON or YAML
 
 ### Output Modes
@@ -111,8 +111,8 @@ wetwire-aws validate --module myapp.infra --verbose
 
 ### What It Checks
 
-1. **Reference validity**: All `Ref[T]` and `Attr[T, "name"]` targets exist in the registry
-2. **Dependency graph**: Uses graph-refs to compute and validate dependencies
+1. **Reference validity**: All `Annotated[T, Ref()]` and `Annotated[str, Attr(T, "name")]` targets exist in the registry
+2. **Dependency graph**: Uses dataclass-dsl to compute and validate dependencies
 3. **Registration**: Ensures all resources are properly decorated and registered
 
 ### Output Examples
@@ -261,16 +261,17 @@ class MyBucket:
 Use type annotations for introspectable references:
 
 ```python
-from wetwire import Ref, Attr
+from typing import Annotated
+from dataclass_dsl import Attr
 
 @wetwire_aws
 class ProcessorFunction:
     resource: Function
     # Type annotation for introspection
-    role: Attr[ProcessorRole, "Arn"] = None
+    role: Annotated[str, Attr(ProcessorRole, "Arn")] = None
 ```
 
-The CLI uses graph-refs for:
+The CLI uses dataclass-dsl for:
 - **Dependency detection**: `get_dependencies()` finds all referenced resources
 - **Topological sorting**: Resources are ordered by dependencies in output
 - **Validation**: Ensures all referenced resources exist

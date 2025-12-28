@@ -68,7 +68,7 @@ def _get_aws_namespace() -> dict[str, Any]:
         "Tag": Tag,
         # Template
         "CloudFormationTemplate": CloudFormationTemplate,
-        # Reference types from graph-refs
+        # Reference types from dataclass-dsl
         "Ref": Ref,
         "Attr": Attr,
         "RefList": RefList,

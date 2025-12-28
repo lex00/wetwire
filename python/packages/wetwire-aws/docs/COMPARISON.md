@@ -48,7 +48,7 @@ If you're happy with your current tooling, you probably don't need this library.
 class MyBucket:
     resource: Bucket
     bucket_name = "data"
-    versioning: Ref[MyVersioning] = None  # Type-safe reference
+    versioning: Annotated[MyVersioning, Ref()] = None  # Type-safe reference
 ```
 
 ```python
@@ -64,7 +64,7 @@ resource "aws_s3_bucket" "my_bucket" {
 }
 ```
 
-Both wetwire-aws and Terraform are declarative. The difference: wetwire-aws uses Python with type hints and graph-refs for introspection; Terraform uses HCL with state management.
+Both wetwire-aws and Terraform are declarative. The difference: wetwire-aws uses Python with type hints and dataclass-dsl for introspection; Terraform uses HCL with state management.
 
 ---
 
@@ -150,22 +150,23 @@ wetwire-aws delegates state entirely to CloudFormation. You author templates; Cl
 | Feature | wetwire-aws | AWS CDK | Terraform |
 |---------|:-----------:|:-------:|:---------:|
 | **Static dependency analysis** | ✅ | ⚠️ | ❌ |
-| graph-refs integration | ✅ | N/A | N/A |
+| dataclass-dsl integration | ✅ | N/A | N/A |
 | Topological ordering | ✅ | ✅ | ✅ |
 | Dependency visualization | ✅ | ⚠️ | ✅ |
 
-wetwire-aws uses graph-refs for static dependency analysis:
+wetwire-aws uses dataclass-dsl for static dependency analysis:
 
 ```python
-from wetwire import Ref, Attr, get_ref_dependencies
+from typing import Annotated
+from dataclass_dsl import Attr, get_dependencies
 
 @wetwire_aws
 class ProcessorFunction:
     resource: Function
-    role: Attr[ProcessorRole, "Arn"] = None  # Introspectable
+    role: Annotated[str, Attr(ProcessorRole, "Arn")] = None  # Introspectable
 
 # Get dependencies without instantiation
-deps = get_ref_dependencies(ProcessorFunction)
+deps = get_dependencies(ProcessorFunction)
 # Returns: {ProcessorRole}
 ```
 
@@ -303,7 +304,7 @@ CDK is more concise and handles asset bundling. wetwire-aws is more explicit abo
 - **Clean, readable** CloudFormation output
 - **AI-assisted** infrastructure authoring
 - **GitOps workflows** where templates are the source of truth
-- **Dependency introspection** via graph-refs
+- **Dependency introspection** via dataclass-dsl
 
 ---
 
@@ -320,7 +321,7 @@ CDK is more concise and handles asset bundling. wetwire-aws is more explicit abo
 
 ## Notes
 
-**Troposphere**: Another Python library for CloudFormation. Uses imperative syntax with string-based references. If you're considering Troposphere, wetwire-aws offers similar capabilities with type-safe references and declarative syntax plus graph-refs integration.
+**Troposphere**: Another Python library for CloudFormation. Uses imperative syntax with string-based references. If you're considering Troposphere, wetwire-aws offers similar capabilities with type-safe references and declarative syntax plus dataclass-dsl integration.
 
 ---
 

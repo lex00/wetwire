@@ -102,10 +102,10 @@ class ProcessorFunction:
     function_name = "processor"
     runtime = lambda_.Runtime.PYTHON3_12
     # Type annotation enables dependency introspection
-    role: Attr[ProcessorRole, "Arn"] = None
+    role: Annotated[str, Attr(ProcessorRole, "Arn")] = None
 ```
 
-The annotation `Attr[ProcessorRole, "Arn"]` tells graph-refs this resource depends on `ProcessorRole` and uses its `Arn` attribute. This enables:
+The annotation `Annotated[str, Attr(ProcessorRole, "Arn")]` tells dataclass-dsl this resource depends on `ProcessorRole` and uses its `Arn` attribute. This enables:
 
 - Static dependency analysis
 - Topological sorting in templates
@@ -182,7 +182,7 @@ class ProcessorFunction:
     function_name = "processor"
     runtime = lambda_.Runtime.PYTHON3_12
     # Cross-file reference - DataBucket is injected by setup_resources()
-    bucket: Ref[DataBucket] = None  # noqa: F821
+    bucket: Annotated[DataBucket, Ref()] = None  # noqa: F821
 ```
 
 **Generate:**

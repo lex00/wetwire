@@ -73,7 +73,7 @@ from wetwire_aws.intrinsics import (
     RefDict,
     RefInfo,
     RefList,
-    # graph-refs types for type annotations
+    # dataclass-dsl types for type annotations
     RefType,
     Select,
     Split,
@@ -134,7 +134,7 @@ __all__ = [
     "get_att",
     # Attribute constants
     "ARN",
-    # graph-refs types for type annotations
+    # dataclass-dsl types for type annotations
     "RefType",
     "AttrType",
     "RefList",
