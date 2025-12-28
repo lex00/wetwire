@@ -80,7 +80,7 @@ class BucketPolicy:
     policy_document = get_att(MyRole, ARN)
 ```
 
-**2. Type annotations (`Ref[T]`, `Attr[T, name]`)** - Enables graph-refs introspection:
+**2. Type annotations (`Ref[T]`, `Attr[T, name]`)** - Enables dataclass-dsl introspection:
 ```python
 from . import *
 

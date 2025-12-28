@@ -160,9 +160,7 @@ See [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for d
 |----------|-------------|
 | [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) | System architecture |
 | [AGENT_WORKFLOW.md](docs/architecture/AGENT_WORKFLOW.md) | Design and testing workflow |
-| [IMPLEMENTATION_PLAN.md](docs/architecture/IMPLEMENTATION_PLAN.md) | Phased implementation roadmap |
 | [WETWIRE_SPEC.md](docs/spec/WETWIRE_SPEC.md) | Pattern specification |
-| [GRAPH_REFS_SPEC.md](docs/spec/GRAPH_REFS_SPEC.md) | Typing primitives specification |
 
 ## Contributing
 
@@ -171,9 +169,3 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
-
-## Status
-
-**Phase 0: Documentation**
-
-We are currently in the documentation phase, establishing specifications before implementation. See [IMPLEMENTATION_PLAN.md](docs/architecture/IMPLEMENTATION_PLAN.md) for the roadmap.

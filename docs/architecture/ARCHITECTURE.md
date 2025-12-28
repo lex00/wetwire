@@ -26,13 +26,8 @@ wetwire/
 │   └── personas/           # Agent testing personas
 │
 ├── python/                  # Python implementation
-│   ├── docs/               # Python-specific docs
 │   └── packages/
-│       ├── graph-refs/     # Typing library
-│       ├── wetwire/        # Core framework
-│       ├── wetwire-aws/    # AWS domain
-│       ├── wetwire-gcp/    # GCP domain
-│       └── wetwire-codegen/# Code generation
+│       └── wetwire-aws/    # AWS CloudFormation synthesis
 │
 ├── go/                      # Go implementation (future)
 ├── rust/                    # Rust implementation (future)
@@ -49,16 +44,9 @@ wetwire/
 
 ```
                          ┌────────────────────┐
-                         │    graph-refs      │
+                         │   dataclass-dsl    │
                          │  (typing library)  │
-                         │  No dependencies   │
-                         └─────────┬──────────┘
-                                   │
-                                   ▼
-                         ┌────────────────────┐
-                         │     wetwire        │
-                         │  (core framework)  │
-                         │ depends: graph-refs│
+                         │  Published on PyPI │
                          └─────────┬──────────┘
                                    │
          ┌─────────────┬───────────┼───────────┬─────────────┐
@@ -73,24 +61,22 @@ wetwire/
 
 | Package | Purpose | Dependencies |
 |---------|---------|--------------|
-| `graph-refs` | Typed references (`Ref[T]`, `Attr[T]`) | None (stdlib only) |
-| `wetwire` | Core framework (decorator, registry, template) | `graph-refs` |
-| `wetwire-aws` | AWS CloudFormation synthesis | `wetwire`, `pyyaml` |
-| `wetwire-gcp` | GCP Config Connector synthesis | `wetwire`, `pyyaml` |
-| `wetwire-azure` | Azure ARM synthesis | `wetwire`, `pyyaml` |
-| `wetwire-k8s` | Kubernetes manifest synthesis | `wetwire`, `pyyaml` |
-| `wetwire-actions` | GitHub Actions workflow synthesis | `wetwire`, `pyyaml` |
-| `wetwire-codegen` | Code generation from schemas | Build-time only |
+| `dataclass-dsl` | Typed references and resource loading | None (stdlib only) |
+| `wetwire-aws` | AWS CloudFormation synthesis | `dataclass-dsl`, `pyyaml` |
+| `wetwire-gcp` | GCP Config Connector synthesis | `dataclass-dsl`, `pyyaml` (future) |
+| `wetwire-azure` | Azure ARM synthesis | `dataclass-dsl`, `pyyaml` (future) |
+| `wetwire-k8s` | Kubernetes manifest synthesis | `dataclass-dsl`, `pyyaml` (future) |
+| `wetwire-actions` | GitHub Actions workflow synthesis | `dataclass-dsl`, `pyyaml` (future) |
 
 ---
 
 ## Layer Architecture
 
-### Layer 1: Typing Primitives (graph-refs)
+### Layer 1: Typing Primitives (dataclass-dsl)
 
-General-purpose typed references for dataclass-based DSLs.
+General-purpose typed references for dataclass-based DSLs. Published as a standalone package on PyPI.
 
-```
+```python
 class Subnet:
     network: Ref[Network]          # Reference to Network
     gateway: Attr[Gateway, "Arn"]  # Attribute reference
@@ -102,44 +88,26 @@ class Subnet:
 - `get_refs(class)` — Introspection API
 - `get_dependencies(class)` — Dependency graph computation
 
-### Layer 2: Core Framework (wetwire)
-
-Domain-agnostic infrastructure for the declarative pattern.
-
-```
-@wetwire
-class MyResource:
-    resource: SomeType
-    name = "example"
-    related = OtherResource  # Auto-detected as reference
-```
-
-**Key Components:**
-- `@wetwire` — Decorator that transforms classes
-- `Registry` — Resource registration and discovery
-- `Template` — Aggregation and serialization base
-- `Provider` — Abstract interface for output formats
-- `Context` — Environment values resolved at serialization
-
-### Layer 3: Domain Packages (wetwire-aws, etc.)
+### Layer 2: Domain Packages (wetwire-aws, etc.)
 
 Cloud-specific implementations with pre-generated resources.
 
-```
+```python
 @wetwire_aws
 class MyBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "data"
-    encryption = AES256
+    versioning_configuration = s3.bucket.VersioningConfiguration(
+        status="Enabled"
+    )
 ```
 
 **Key Components:**
 - Domain decorator (`@wetwire_aws`)
 - Domain template (`CloudFormationTemplate`)
-- Domain context (`AWSContext` with pseudo-parameters)
-- Domain provider (`CloudFormationProvider`)
+- Registry — Resource registration and discovery
 - Generated resources (from cloud provider schemas)
-- Intrinsic functions (domain-specific)
+- Intrinsic functions (`ref`, `get_att`, `Sub`, etc.)
 
 ---
 
@@ -335,8 +303,3 @@ See [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) for details.
 - [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) — Agent testing and design workflow
 - [CODEGEN_WORKFLOW.md](CODEGEN_WORKFLOW.md) — Schema fetching and code generation
 - [WETWIRE_SPEC.md](../spec/WETWIRE_SPEC.md) — Pattern specification
-- [GRAPH_REFS_SPEC.md](../spec/GRAPH_REFS_SPEC.md) — Typing primitives specification
-
-### Language-Specific Documentation
-
-- Python: [python/docs/IMPLEMENTATION_PLAN.md](../../python/docs/IMPLEMENTATION_PLAN.md)
