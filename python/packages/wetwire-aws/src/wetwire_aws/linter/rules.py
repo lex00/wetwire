@@ -31,7 +31,6 @@ from __future__ import annotations
 import ast
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
 
 from wetwire_aws.importer.codegen.helpers import (
     PARAMETER_TYPE_MAP,
@@ -65,7 +64,7 @@ class LintIssue:
     original: str
     suggestion: str
     fix_imports: list[str]
-    insert_after_line: Optional[int] = None
+    insert_after_line: int | None = None
 
 
 @dataclass
@@ -136,9 +135,7 @@ class StringShouldBeParameterType(LintRule):
                             type_str = node.value.value
                             if type_str in PARAMETER_TYPE_MAP:
                                 constant_name = PARAMETER_TYPE_MAP[type_str]
-                                import_stmt = (
-                                    f"from wetwire_aws.intrinsics import {constant_name}"
-                                )
+                                import_stmt = f"from wetwire_aws.intrinsics import {constant_name}"
 
                                 issues.append(
                                     LintIssue(
@@ -162,9 +159,7 @@ class StringShouldBeParameterType(LintRule):
                             type_str = keyword.value.value
                             if type_str in PARAMETER_TYPE_MAP:
                                 constant_name = PARAMETER_TYPE_MAP[type_str]
-                                import_stmt = (
-                                    f"from wetwire_aws.intrinsics import {constant_name}"
-                                )
+                                import_stmt = f"from wetwire_aws.intrinsics import {constant_name}"
 
                                 issues.append(
                                     LintIssue(
@@ -494,9 +489,10 @@ class DictShouldBeIntrinsic(LintRule):
                                 else:
                                     suggestion = f"{func_name}({value_source})"
                             elif key_str in ("Fn::Select", "Fn::Join"):
-                                if isinstance(value_node, ast.List) and len(
-                                    value_node.elts
-                                ) >= 2:
+                                if (
+                                    isinstance(value_node, ast.List)
+                                    and len(value_node.elts) >= 2
+                                ):
                                     args = [
                                         ast.get_source_segment(context.source, elt)
                                         for elt in value_node.elts
@@ -557,7 +553,16 @@ class UnnecessaryToDict(LintRule):
     description = "Remove unnecessary .to_dict() calls on intrinsic functions"
 
     # Functions that return serializable intrinsic objects
-    INTRINSIC_FUNCTIONS = {"ref", "get_att", "Ref", "GetAtt", "Sub", "Join", "Select", "If"}
+    INTRINSIC_FUNCTIONS = {
+        "ref",
+        "get_att",
+        "Ref",
+        "GetAtt",
+        "Sub",
+        "Join",
+        "Select",
+        "If",
+    }
 
     def check(self, context: LintContext) -> list[LintIssue]:
         issues = []

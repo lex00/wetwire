@@ -7,7 +7,6 @@ generation from CloudFormation IR.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
 
 from wetwire_aws.importer.ir import IRTemplate
 
@@ -58,8 +57,8 @@ class CodegenContext:
     imports: dict[str, set[str]] = field(default_factory=dict)
     intrinsic_imports: set[str] = field(default_factory=set)
 
-    current_module: Optional[str] = None
-    current_resource_id: Optional[str] = None
+    current_module: str | None = None
+    current_resource_id: str | None = None
     forward_references: set[str] = field(default_factory=set)
 
     name_pattern_map: dict[str, str] = field(default_factory=dict)
@@ -122,23 +121,25 @@ class PackageContext:
 
 
 # Properties that define a resource's "name" for implicit ref detection
-NAME_PROPERTIES = frozenset([
-    "BucketName",      # S3
-    "RoleName",        # IAM
-    "TableName",       # DynamoDB
-    "FunctionName",    # Lambda
-    "QueueName",       # SQS
-    "TopicName",       # SNS
-    "StackName",       # CloudFormation
-    "ClusterName",     # ECS, EKS, etc.
-    "LogGroupName",    # CloudWatch Logs
-    "StreamName",      # Kinesis
-    "DatabaseName",    # RDS, Glue
-    "RepositoryName",  # ECR
-    "VaultName",       # Glacier
-    "DomainName",      # Various services
-    "Name",            # Generic fallback
-])
+NAME_PROPERTIES = frozenset(
+    [
+        "BucketName",  # S3
+        "RoleName",  # IAM
+        "TableName",  # DynamoDB
+        "FunctionName",  # Lambda
+        "QueueName",  # SQS
+        "TopicName",  # SNS
+        "StackName",  # CloudFormation
+        "ClusterName",  # ECS, EKS, etc.
+        "LogGroupName",  # CloudWatch Logs
+        "StreamName",  # Kinesis
+        "DatabaseName",  # RDS, Glue
+        "RepositoryName",  # ECR
+        "VaultName",  # Glacier
+        "DomainName",  # Various services
+        "Name",  # Generic fallback
+    ]
+)
 
 
 def build_name_pattern_map(template: IRTemplate) -> dict[str, str]:
@@ -152,6 +153,7 @@ def build_name_pattern_map(template: IRTemplate) -> dict[str, str]:
     referencing each other.
     """
     import re
+
     from wetwire_aws.importer.ir import IntrinsicType, IRIntrinsic
 
     pattern_map: dict[str, str] = {}
@@ -161,11 +163,17 @@ def build_name_pattern_map(template: IRTemplate) -> dict[str, str]:
             if prop_cf_name in resource.properties:
                 prop = resource.properties[prop_cf_name]
                 # Check if it's a Sub intrinsic
-                if isinstance(prop.value, IRIntrinsic) and prop.value.type == IntrinsicType.SUB:
+                if (
+                    isinstance(prop.value, IRIntrinsic)
+                    and prop.value.type == IntrinsicType.SUB
+                ):
                     # Extract the template string
                     if isinstance(prop.value.args, str):
                         template_str = prop.value.args
-                    elif isinstance(prop.value.args, (list, tuple)) and len(prop.value.args) >= 1:
+                    elif (
+                        isinstance(prop.value.args, (list, tuple))
+                        and len(prop.value.args) >= 1
+                    ):
                         template_str = prop.value.args[0]
                     else:
                         continue
@@ -220,10 +228,16 @@ def build_arn_pattern_map(template: IRTemplate) -> dict[str, tuple[str, str]]:
         for prop_cf_name in NAME_PROPERTIES:
             if prop_cf_name in resource.properties:
                 prop = resource.properties[prop_cf_name]
-                if isinstance(prop.value, IRIntrinsic) and prop.value.type == IntrinsicType.SUB:
+                if (
+                    isinstance(prop.value, IRIntrinsic)
+                    and prop.value.type == IntrinsicType.SUB
+                ):
                     if isinstance(prop.value.args, str):
                         name_pattern = prop.value.args
-                    elif isinstance(prop.value.args, (list, tuple)) and len(prop.value.args) >= 1:
+                    elif (
+                        isinstance(prop.value.args, (list, tuple))
+                        and len(prop.value.args) >= 1
+                    ):
                         name_pattern = prop.value.args[0]
                     else:
                         continue

@@ -58,7 +58,7 @@ def escape_docstring(s: str) -> str:
 
 def value_to_python(
     value: Any,
-    ctx: "CodegenContext",
+    ctx: CodegenContext,
     indent: int = 0,
 ) -> str:
     """Convert a value to Python source code.
@@ -139,7 +139,7 @@ def annotated_to_class_ref(annotated: AnnotatedValue) -> str:
 
 
 def intrinsic_to_python(
-    intrinsic: IRIntrinsic, ctx: "CodegenContext"
+    intrinsic: IRIntrinsic, ctx: CodegenContext
 ) -> str | AnnotatedValue:
     """Convert an IRIntrinsic to Python source code.
 
@@ -318,7 +318,11 @@ def intrinsic_to_python(
         if isinstance(args, dict):
             name = args.get("Name", "")
             params = args.get("Parameters")
-            name_str = escape_string(name) if isinstance(name, str) else value_to_python(name, ctx)
+            name_str = (
+                escape_string(name)
+                if isinstance(name, str)
+                else value_to_python(name, ctx)
+            )
             if params:
                 params_str = value_to_python(params, ctx)
                 return f"Transform(name={name_str}, parameters={params_str})"

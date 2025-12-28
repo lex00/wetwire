@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from .context import CodegenContext
 
 
-def generate_imports(ctx: "CodegenContext") -> str:
+def generate_imports(ctx: CodegenContext) -> str:
     """Generate import statements for a code file.
 
     Formats all imports collected in the context into properly
@@ -49,7 +49,9 @@ def generate_imports(ctx: "CodegenContext") -> str:
     if resource_module_imports:
         sorted_imports = sorted(resource_module_imports)
         if len(sorted_imports) <= 3:
-            lines.append(f"from wetwire_aws.resources import {', '.join(sorted_imports)}")
+            lines.append(
+                f"from wetwire_aws.resources import {', '.join(sorted_imports)}"
+            )
         else:
             lines.append("from wetwire_aws.resources import (")
             for name in sorted_imports:

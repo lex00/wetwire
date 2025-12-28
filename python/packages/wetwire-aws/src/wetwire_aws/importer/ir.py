@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 
 class IntrinsicType(Enum):
@@ -151,15 +151,15 @@ class IRParameter:
 
     logical_id: str
     type: str
-    description: Optional[str] = None
-    default: Optional[Any] = None
-    allowed_values: Optional[list[Any]] = None
-    allowed_pattern: Optional[str] = None
-    min_length: Optional[int] = None
-    max_length: Optional[int] = None
-    min_value: Optional[int] = None
-    max_value: Optional[int] = None
-    constraint_description: Optional[str] = None
+    description: str | None = None
+    default: Any | None = None
+    allowed_values: list[Any] | None = None
+    allowed_pattern: str | None = None
+    min_length: int | None = None
+    max_length: int | None = None
+    min_value: int | None = None
+    max_value: int | None = None
+    constraint_description: str | None = None
     no_echo: bool = False
 
 
@@ -193,10 +193,10 @@ class IRResource:
     resource_type: str
     properties: dict[str, IRProperty] = field(default_factory=dict)
     depends_on: list[str] = field(default_factory=list)
-    condition: Optional[str] = None
-    deletion_policy: Optional[str] = None
-    update_replace_policy: Optional[str] = None
-    metadata: Optional[dict[str, Any]] = None
+    condition: str | None = None
+    deletion_policy: str | None = None
+    update_replace_policy: str | None = None
+    metadata: dict[str, Any] | None = None
 
     @property
     def service(self) -> str:
@@ -241,9 +241,9 @@ class IROutput:
 
     logical_id: str
     value: Any
-    description: Optional[str] = None
-    export_name: Optional[Any] = None
-    condition: Optional[str] = None
+    description: str | None = None
+    export_name: Any | None = None
+    condition: str | None = None
 
 
 @dataclass
@@ -328,7 +328,7 @@ class IRTemplate:
         'My CloudFormation Stack'
     """
 
-    description: Optional[str] = None
+    description: str | None = None
     aws_template_format_version: str = "2010-09-09"
 
     parameters: dict[str, IRParameter] = field(default_factory=dict)
@@ -337,5 +337,5 @@ class IRTemplate:
     resources: dict[str, IRResource] = field(default_factory=dict)
     outputs: dict[str, IROutput] = field(default_factory=dict)
 
-    source_file: Optional[str] = None
+    source_file: str | None = None
     reference_graph: dict[str, list[str]] = field(default_factory=dict)

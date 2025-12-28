@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import ast
 import re
-from typing import Optional
 
 from wetwire_aws.linter.ast_helpers import find_last_import_line
 from wetwire_aws.linter.rules import (
@@ -73,7 +72,7 @@ def lint_code(
     source: str,
     *,
     filename: str = "<string>",
-    rules: Optional[list[LintRule]] = None,
+    rules: list[LintRule] | None = None,
 ) -> list[LintIssue]:
     """Lint Python source code for wetwire-aws issues.
 
@@ -108,7 +107,7 @@ def lint_code(
 def lint_file(
     filepath: str,
     *,
-    rules: Optional[list[LintRule]] = None,
+    rules: list[LintRule] | None = None,
 ) -> list[LintIssue]:
     """Lint a Python file for wetwire-aws issues.
 
@@ -119,7 +118,7 @@ def lint_file(
     Returns:
         List of LintIssue objects describing detected issues
     """
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, encoding="utf-8") as f:
         source = f.read()
     return lint_code(source, filename=filepath, rules=rules)
 
@@ -128,7 +127,7 @@ def fix_code(
     source: str,
     *,
     filename: str = "<string>",
-    rules: Optional[list[LintRule]] = None,
+    rules: list[LintRule] | None = None,
     add_imports: bool = True,
 ) -> str:
     """Fix lint issues in Python source code.
@@ -202,7 +201,9 @@ def fix_code(
             lines[line_num - 1] = line
 
     # Apply insertions (in reverse line order)
-    for issue in sorted(insertions, key=lambda i: i.insert_after_line or 0, reverse=True):
+    for issue in sorted(
+        insertions, key=lambda i: i.insert_after_line or 0, reverse=True
+    ):
         insert_pos = issue.insert_after_line or 0
         suggestion = issue.suggestion
         if not suggestion.endswith("\n"):
@@ -221,7 +222,7 @@ def fix_code(
 def fix_file(
     filepath: str,
     *,
-    rules: Optional[list[LintRule]] = None,
+    rules: list[LintRule] | None = None,
     add_imports: bool = True,
     write: bool = False,
 ) -> str:
@@ -237,7 +238,7 @@ def fix_file(
     Returns:
         The fixed source code
     """
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, encoding="utf-8") as f:
         source = f.read()
 
     fixed = fix_code(source, rules=rules, add_imports=add_imports)
@@ -320,7 +321,12 @@ def _add_imports(source: str, imports: set[str]) -> str:
         insert_pos = 0
         for i, line in enumerate(lines):
             stripped = line.strip()
-            if stripped and not stripped.startswith("#") and not stripped.startswith('"""') and not stripped.startswith("'''"):
+            if (
+                stripped
+                and not stripped.startswith("#")
+                and not stripped.startswith('"""')
+                and not stripped.startswith("'''")
+            ):
                 insert_pos = i
                 break
         lines.insert(insert_pos, import_block + "\n\n")

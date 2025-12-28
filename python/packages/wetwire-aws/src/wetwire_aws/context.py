@@ -13,7 +13,6 @@ from typing import Annotated, Any
 from dataclass_dsl import ContextRef
 
 from wetwire_aws.base import Context
-
 from wetwire_aws.intrinsics.functions import Ref
 
 

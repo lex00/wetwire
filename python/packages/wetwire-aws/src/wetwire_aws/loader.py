@@ -43,9 +43,12 @@ def _get_aws_namespace() -> dict[str, Any]:
         Join,
         Not,
         Or,
+        Select,
+        Split,
+        Sub,
+        Transform,
     )
     from wetwire_aws.intrinsics.functions import Ref as RefIntrinsic
-    from wetwire_aws.intrinsics.functions import Select, Split, Sub, Transform
     from wetwire_aws.intrinsics.pseudo import (
         AWS_ACCOUNT_ID,
         AWS_NO_VALUE,

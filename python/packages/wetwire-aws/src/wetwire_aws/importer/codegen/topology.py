@@ -117,7 +117,12 @@ def find_resource_dependencies(
     resource = template.resources.get(resource_id)
     if resource:
         _find_sub_pattern_refs(
-            resource.properties, name_pattern_map, arn_pattern_map, resource_id, deps, template
+            resource.properties,
+            name_pattern_map,
+            arn_pattern_map,
+            resource_id,
+            deps,
+            template,
         )
 
         for dep in resource.depends_on:
@@ -139,7 +144,12 @@ def _find_sub_pattern_refs(
     for prop in properties.values():
         if hasattr(prop, "value"):
             _find_sub_in_value(
-                prop.value, name_pattern_map, arn_pattern_map, current_resource_id, deps, template
+                prop.value,
+                name_pattern_map,
+                arn_pattern_map,
+                current_resource_id,
+                deps,
+                template,
             )
 
 
@@ -179,22 +189,42 @@ def _find_sub_in_value(
         if isinstance(value.args, (list, tuple)):
             for arg in value.args:
                 _find_sub_in_value(
-                    arg, name_pattern_map, arn_pattern_map, current_resource_id, deps, template
+                    arg,
+                    name_pattern_map,
+                    arn_pattern_map,
+                    current_resource_id,
+                    deps,
+                    template,
                 )
         elif isinstance(value.args, dict):
             for v in value.args.values():
                 _find_sub_in_value(
-                    v, name_pattern_map, arn_pattern_map, current_resource_id, deps, template
+                    v,
+                    name_pattern_map,
+                    arn_pattern_map,
+                    current_resource_id,
+                    deps,
+                    template,
                 )
     elif isinstance(value, dict):
         for v in value.values():
             _find_sub_in_value(
-                v, name_pattern_map, arn_pattern_map, current_resource_id, deps, template
+                v,
+                name_pattern_map,
+                arn_pattern_map,
+                current_resource_id,
+                deps,
+                template,
             )
     elif isinstance(value, list):
         for item in value:
             _find_sub_in_value(
-                item, name_pattern_map, arn_pattern_map, current_resource_id, deps, template
+                item,
+                name_pattern_map,
+                arn_pattern_map,
+                current_resource_id,
+                deps,
+                template,
             )
 
 

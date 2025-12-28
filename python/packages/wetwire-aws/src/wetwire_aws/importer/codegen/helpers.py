@@ -102,7 +102,7 @@ EC2_NETWORK_TYPES: set[str] = {
 }
 
 
-def get_resource_category(resource: "IRResource") -> str:
+def get_resource_category(resource: IRResource) -> str:
     """Get the category file for a resource based on its AWS service.
 
     Currently returns 'main' for all resources to avoid cross-file cycles.
@@ -222,7 +222,9 @@ def _resource_class_exists(module_name: str, class_name: str) -> bool:
                     try:
                         content = init_file.read_text()
                         # Find all class definitions
-                        for match in re.finditer(r"^class\s+(\w+)", content, re.MULTILINE):
+                        for match in re.finditer(
+                            r"^class\s+(\w+)", content, re.MULTILINE
+                        ):
                             _KNOWN_RESOURCE_CLASSES[(mod_name, match.group(1))] = True
                     except Exception:
                         pass

@@ -19,10 +19,10 @@ Example:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union
 
 from .codegen import generate_code, generate_package
 from .ir import (
+    IntrinsicType,
     IRCondition,
     IRIntrinsic,
     IRMapping,
@@ -31,7 +31,6 @@ from .ir import (
     IRProperty,
     IRResource,
     IRTemplate,
-    IntrinsicType,
 )
 from .parser import parse_template
 
@@ -57,7 +56,7 @@ __all__ = [
 
 
 def import_template(
-    source: Union[str, Path],
+    source: str | Path,
     package_name: str | None = None,
     *,
     single_file: bool = False,

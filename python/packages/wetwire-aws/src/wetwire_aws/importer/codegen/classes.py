@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 # =============================================================================
 
 
-def generate_parameter_class(param: IRParameter, ctx: "CodegenContext") -> str:
+def generate_parameter_class(param: IRParameter, ctx: CodegenContext) -> str:
     """Generate a Parameter wrapper class definition."""
     lines = []
 
@@ -60,7 +60,9 @@ def generate_parameter_class(param: IRParameter, ctx: "CodegenContext") -> str:
     if param.default is not None:
         lines.append(f"    default = {value_to_python(param.default, ctx)}")
     if param.allowed_values:
-        lines.append(f"    allowed_values = {value_to_python(param.allowed_values, ctx)}")
+        lines.append(
+            f"    allowed_values = {value_to_python(param.allowed_values, ctx)}"
+        )
     if param.allowed_pattern:
         lines.append(f"    allowed_pattern = {escape_string(param.allowed_pattern)}")
     if param.min_length is not None:
@@ -72,7 +74,9 @@ def generate_parameter_class(param: IRParameter, ctx: "CodegenContext") -> str:
     if param.max_value is not None:
         lines.append(f"    max_value = {param.max_value}")
     if param.constraint_description:
-        lines.append(f"    constraint_description = {escape_string(param.constraint_description)}")
+        lines.append(
+            f"    constraint_description = {escape_string(param.constraint_description)}"
+        )
     if param.no_echo:
         lines.append("    no_echo = True")
 
@@ -87,7 +91,7 @@ def generate_parameter_class(param: IRParameter, ctx: "CodegenContext") -> str:
 # =============================================================================
 
 
-def generate_resource_class(resource: IRResource, ctx: "CodegenContext") -> str:
+def generate_resource_class(resource: IRResource, ctx: CodegenContext) -> str:
     """Generate a resource wrapper class."""
     ctx.current_resource_id = resource.logical_id
     lines = []
@@ -119,7 +123,9 @@ def generate_resource_class(resource: IRResource, ctx: "CodegenContext") -> str:
     for prop in resource.properties.values():
         value_result = value_to_python(prop.value, ctx)
         if isinstance(value_result, AnnotatedValue):
-            lines.append(f"    {prop.python_name}: {value_result.annotation} = {value_result.value}")
+            lines.append(
+                f"    {prop.python_name}: {value_result.annotation} = {value_result.value}"
+            )
         else:
             lines.append(f"    {prop.python_name} = {value_result}")
 
@@ -143,7 +149,7 @@ def generate_resource_class(resource: IRResource, ctx: "CodegenContext") -> str:
 # =============================================================================
 
 
-def generate_output_class(output: IROutput, ctx: "CodegenContext") -> str:
+def generate_output_class(output: IROutput, ctx: CodegenContext) -> str:
     """Generate an output wrapper class."""
     lines = []
 
@@ -179,7 +185,7 @@ def generate_output_class(output: IROutput, ctx: "CodegenContext") -> str:
 # =============================================================================
 
 
-def generate_mapping_class(mapping: IRMapping, ctx: "CodegenContext") -> str:
+def generate_mapping_class(mapping: IRMapping, ctx: CodegenContext) -> str:
     """Generate a mapping wrapper class."""
     lines = []
 
@@ -201,7 +207,7 @@ def generate_mapping_class(mapping: IRMapping, ctx: "CodegenContext") -> str:
 # =============================================================================
 
 
-def generate_condition_class(condition: IRCondition, ctx: "CodegenContext") -> str:
+def generate_condition_class(condition: IRCondition, ctx: CodegenContext) -> str:
     """Generate a condition wrapper class."""
     lines = []
 

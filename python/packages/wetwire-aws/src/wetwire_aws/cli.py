@@ -38,7 +38,6 @@ from wetwire_aws.cli_utils import (
     create_validate_command,
     discover_resources,
 )
-
 from wetwire_aws.decorator import get_aws_registry
 from wetwire_aws.template import CloudFormationTemplate
 
@@ -97,7 +96,8 @@ def lint_command(args: argparse.Namespace) -> None:
                 if issues:
                     files_with_issues += 1
                     for issue in issues:
-                        print(f"{filepath}:{issue.line}:{issue.column}: {issue.rule_id} {issue.message}")
+                        loc = f"{filepath}:{issue.line}:{issue.column}"
+                        print(f"{loc}: {issue.rule_id} {issue.message}")
                         total_issues += 1
         except Exception as e:
             if args.verbose:
@@ -105,7 +105,8 @@ def lint_command(args: argparse.Namespace) -> None:
 
     if not args.fix:
         if total_issues:
-            print(f"\nFound {total_issues} issues in {files_with_issues} files", file=sys.stderr)
+            msg = f"\nFound {total_issues} issues in {files_with_issues} files"
+            print(msg, file=sys.stderr)
             sys.exit(1)
         else:
             if args.verbose:
@@ -158,7 +159,8 @@ def import_command(args: argparse.Namespace) -> None:
         if args.verbose:
             print(f"Created: {full_path}", file=sys.stderr)
 
-    print(f"Imported {len(files)} files to {output_dir / package_name}", file=sys.stderr)
+    dest = output_dir / package_name
+    print(f"Imported {len(files)} files to {dest}", file=sys.stderr)
 
 
 def build_command(args: argparse.Namespace) -> None:

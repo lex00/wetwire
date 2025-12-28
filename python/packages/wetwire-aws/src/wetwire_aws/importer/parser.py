@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Optional, TextIO, Union
+from typing import Any, TextIO
 
 import yaml
 
@@ -41,7 +41,6 @@ from wetwire_aws.importer.ir import (
     IRTemplate,
 )
 from wetwire_aws.naming import sanitize_python_name, to_snake_case
-
 
 # =============================================================================
 # YAML Intrinsic Constructors
@@ -460,8 +459,8 @@ def _parse_condition(logical_id: str, expression: Any) -> IRCondition:
 
 
 def parse_template(
-    source: Union[str, Path, TextIO],
-    source_name: Optional[str] = None,
+    source: str | Path | TextIO,
+    source_name: str | None = None,
 ) -> IRTemplate:
     """Parse a CloudFormation template into the intermediate representation.
 

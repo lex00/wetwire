@@ -13,37 +13,7 @@ This package provides:
 from wetwire_aws.base import CloudFormationResource, PropertyType
 from wetwire_aws.context import AWSContext
 from wetwire_aws.decorator import wetwire_aws
-from wetwire_aws.template import (
-    Condition as TemplateCondition,
-    Mapping,
-    Output,
-    Parameter,
-)
-from wetwire_aws.params import (
-    AMI_ID,
-    AVAILABILITY_ZONE,
-    COMMA_DELIMITED_LIST,
-    HOSTED_ZONE_ID,
-    INSTANCE_ID,
-    KEY_PAIR,
-    LIST_AVAILABILITY_ZONE,
-    LIST_NUMBER,
-    LIST_SECURITY_GROUP_ID,
-    LIST_SUBNET_ID,
-    NUMBER,
-    SECURITY_GROUP_ID,
-    SSM_PARAMETER_STRING,
-    SSM_PARAMETER_STRING_LIST,
-    STRING,
-    SUBNET_ID,
-    VOLUME_ID,
-    VPC_ID,
-)
-
-# Re-export TemplateCondition for backward compatibility
-# NOTE: The intrinsic Condition is exported separately for use in condition expressions
 from wetwire_aws.intrinsics import (
-    Condition,  # Intrinsic function for referencing conditions by name
     ARN,
     # Pseudo-parameters
     AWS_ACCOUNT_ID,
@@ -58,6 +28,7 @@ from wetwire_aws.intrinsics import (
     AttrType,
     Base64,
     Cidr,
+    Condition,  # Intrinsic function for referencing conditions by name
     ContextRef,
     Equals,
     FindInMap,
@@ -84,11 +55,33 @@ from wetwire_aws.intrinsics import (
     get_refs,
     ref,
 )
+from wetwire_aws.loader import setup_resources
+from wetwire_aws.params import (
+    AMI_ID,
+    AVAILABILITY_ZONE,
+    COMMA_DELIMITED_LIST,
+    HOSTED_ZONE_ID,
+    INSTANCE_ID,
+    KEY_PAIR,
+    LIST_AVAILABILITY_ZONE,
+    LIST_NUMBER,
+    LIST_SECURITY_GROUP_ID,
+    LIST_SUBNET_ID,
+    NUMBER,
+    SECURITY_GROUP_ID,
+    SSM_PARAMETER_STRING,
+    SSM_PARAMETER_STRING_LIST,
+    STRING,
+    SUBNET_ID,
+    VOLUME_ID,
+    VPC_ID,
+)
+from wetwire_aws.provider import CloudFormationProvider
+from wetwire_aws.template import CloudFormationTemplate, Mapping, Output, Parameter
+from wetwire_aws.template import Condition as TemplateCondition
+
 # Condition is already imported above from intrinsics
 ConditionIntrinsic = Condition  # Alias for backward compatibility
-from wetwire_aws.loader import setup_resources
-from wetwire_aws.provider import CloudFormationProvider
-from wetwire_aws.template import CloudFormationTemplate
 
 __version__ = "0.1.0"
 
