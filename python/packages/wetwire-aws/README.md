@@ -22,22 +22,20 @@ myapp/
 ```python
 from wetwire_aws.loader import setup_resources
 
-# This injects wetwire_aws, resource modules (s3, iam, lambda_, etc.),
-# helper functions (ref, get_att), and CloudFormationTemplate into globals
+# Magic: injects wetwire_aws decorator, resource modules (s3, iam, lambda_, etc.),
+# helpers (ref, get_att, ARN), and CloudFormationTemplate into this package's namespace.
+# This enables `from . import *` in submodules.
 setup_resources(__file__, __name__, globals())
 ```
 
 **myapp/infra.py:**
 ```python
-# Import everything from the parent package (injected by setup_resources)
-from . import (
-    wetwire_aws,
-    s3,
-    iam,
-    lambda_,
-    get_att,
-    ARN,
-)
+# The star import pulls in everything injected by setup_resources:
+# - wetwire_aws decorator
+# - Resource modules: s3, iam, lambda_, ec2, dynamodb, etc.
+# - Helpers: ref, get_att, ARN, Sub, Join, If, etc.
+# - CloudFormationTemplate
+from . import *
 
 @wetwire_aws
 class DataBucket:
@@ -65,7 +63,7 @@ class ProcessorFunction:
     resource: lambda_.Function
     function_name = "data-processor"
     runtime = lambda_.Runtime.PYTHON3_12  # Type-safe enum constants
-    role = get_att(ProcessorRole, ARN)  # Reference to role ARN
+    role = get_att(ProcessorRole, ARN)  # Reference to role's ARN attribute
 ```
 
 **Generate template:**
