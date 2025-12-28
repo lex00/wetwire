@@ -21,18 +21,31 @@ myapp/
 **myapp/__init__.py:**
 ```python
 from wetwire_aws.loader import setup_resources
+
+# This injects wetwire_aws, resource modules (s3, iam, lambda_, etc.),
+# helper functions (ref, get_att), and CloudFormationTemplate into globals
 setup_resources(__file__, __name__, globals())
 ```
 
 **myapp/infra.py:**
 ```python
-from . import *
+# Import everything from the parent package (injected by setup_resources)
+from . import (
+    wetwire_aws,
+    s3,
+    iam,
+    lambda_,
+    get_att,
+    ARN,
+)
 
 @wetwire_aws
 class DataBucket:
     resource: s3.Bucket
     bucket_name = "my-data-bucket"
-    versioning_configuration = {"Status": "Enabled"}
+    versioning_configuration = s3.bucket.VersioningConfiguration(
+        status="Enabled"
+    )
 
 @wetwire_aws
 class ProcessorRole:
@@ -51,13 +64,14 @@ class ProcessorRole:
 class ProcessorFunction:
     resource: lambda_.Function
     function_name = "data-processor"
-    runtime = lambda_.Runtime.PYTHON3_12  # Type-safe constants
+    runtime = lambda_.Runtime.PYTHON3_12  # Type-safe enum constants
     role = get_att(ProcessorRole, ARN)  # Reference to role ARN
 ```
 
 **Generate template:**
 ```python
 from myapp import CloudFormationTemplate
+
 template = CloudFormationTemplate.from_registry()
 print(template.to_yaml())
 ```
