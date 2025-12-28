@@ -627,23 +627,20 @@ def main():
     print(f"\nGenerated {total_files} files")
     print(f"  Including {total_enums} enum constant classes")
 
-    # Format with black
-    print("\nFormatting with black...")
-    result = subprocess.run(
-        ["black", str(output_dir), "--quiet"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        # Count formatted files
-        formatted = subprocess.run(
-            ["black", str(output_dir), "--check", "--quiet"],
+    # Format with black (optional - skip if not installed)
+    if shutil.which("black"):
+        print("\nFormatting with black...")
+        result = subprocess.run(
+            ["black", str(output_dir), "--quiet"],
             capture_output=True,
             text=True,
         )
-        print(f"  Formatted {total_files}/{total_files} files")
+        if result.returncode == 0:
+            print(f"  Formatted {total_files}/{total_files} files")
+        else:
+            print(f"  Warning: black formatting failed: {result.stderr}")
     else:
-        print(f"  Warning: black formatting failed: {result.stderr}")
+        print("\nSkipping black formatting (not installed)")
 
     print(f"\nOutput written to {output_dir}")
     print("\nGenerate completed successfully!")
