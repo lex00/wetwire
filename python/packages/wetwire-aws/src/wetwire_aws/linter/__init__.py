@@ -37,6 +37,7 @@ from wetwire_aws.linter.ast_helpers import find_last_import_line
 from wetwire_aws.linter.rules import (
     ALL_RULES,
     DictShouldBeIntrinsic,
+    DuplicateResource,
     ExplicitResourceImport,
     FileTooLarge,
     LintContext,
@@ -69,6 +70,7 @@ __all__ = [
     "UnnecessaryToDict",
     "ExplicitResourceImport",
     "FileTooLarge",
+    "DuplicateResource",
     "ALL_RULES",
     "get_all_rules",
 ]

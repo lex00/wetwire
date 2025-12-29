@@ -14,6 +14,7 @@ from wetwire_aws.linter import (
     RefShouldBeNoParens,
     ExplicitResourceImport,
     FileTooLarge,
+    DuplicateResource,
 )
 
 
@@ -826,3 +827,95 @@ class MyRole:
     assume_role_policy_document = MyPolicyDoc'''
         fixed = fix_code(code, rules=[PropertyTypeAsRef()], add_imports=False)
         assert "assume_role_policy_document = MyPolicyDoc()" in fixed
+
+
+class TestDuplicateResource:
+    """Tests for WAW012: duplicate resource class names."""
+
+    def test_detects_duplicate_class_names(self):
+        """Should detect duplicate @wetwire_aws class names in same file."""
+        code = '''
+@wetwire_aws
+class MyBucket:
+    resource: s3.Bucket
+    bucket_name = "bucket-1"
+
+@wetwire_aws
+class MyBucket:
+    resource: s3.Bucket
+    bucket_name = "bucket-2"
+'''
+        issues = lint_code(code, rules=[DuplicateResource()])
+        assert len(issues) == 1
+        assert issues[0].rule_id == "WAW012"
+        assert "Duplicate resource class 'MyBucket'" in issues[0].message
+        assert "first defined at line" in issues[0].message
+
+    def test_detects_multiple_duplicates(self):
+        """Should detect all duplicate definitions."""
+        code = '''
+@wetwire_aws
+class MyBucket:
+    resource: s3.Bucket
+
+@wetwire_aws
+class MyBucket:
+    resource: s3.Bucket
+
+@wetwire_aws
+class MyBucket:
+    resource: s3.Bucket
+'''
+        issues = lint_code(code, rules=[DuplicateResource()])
+        assert len(issues) == 2  # Two duplicates (first is the original)
+
+    def test_ignores_unique_classes(self):
+        """Should not flag unique class names."""
+        code = '''
+@wetwire_aws
+class MyBucket:
+    resource: s3.Bucket
+
+@wetwire_aws
+class MyVPC:
+    resource: ec2.VPC
+
+@wetwire_aws
+class MyRole:
+    resource: iam.Role
+'''
+        issues = lint_code(code, rules=[DuplicateResource()])
+        assert len(issues) == 0
+
+    def test_ignores_non_wetwire_classes(self):
+        """Should not flag non-wetwire_aws classes with same name."""
+        code = '''
+class MyBucket:
+    pass
+
+@wetwire_aws
+class MyBucket:
+    resource: s3.Bucket
+'''
+        issues = lint_code(code, rules=[DuplicateResource()])
+        assert len(issues) == 0
+
+    def test_reports_correct_line_numbers(self):
+        """Should report correct line numbers for duplicate definitions."""
+        code = '''
+@wetwire_aws
+class MyBucket:
+    resource: s3.Bucket
+
+@wetwire_aws
+class OtherResource:
+    resource: ec2.VPC
+
+@wetwire_aws
+class MyBucket:
+    resource: s3.Bucket
+'''
+        issues = lint_code(code, rules=[DuplicateResource()])
+        assert len(issues) == 1
+        assert issues[0].line == 11  # Line of second MyBucket definition
+        assert "first defined at line 3" in issues[0].message
