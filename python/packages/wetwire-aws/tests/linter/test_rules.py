@@ -585,6 +585,56 @@ class TestSplittingUtilities:
         assert categorize_resource_type("AWS::Unknown::Resource") == "main"
         assert categorize_resource_type("InvalidFormat") == "main"
 
+    def test_is_ec2_network_type_core_types(self):
+        """Core network types should be detected."""
+        from wetwire_aws.linter.splitting import is_ec2_network_type
+
+        assert is_ec2_network_type("VPC") is True
+        assert is_ec2_network_type("Subnet") is True
+        assert is_ec2_network_type("SecurityGroup") is True
+        assert is_ec2_network_type("SecurityGroupIngress") is True
+        assert is_ec2_network_type("SecurityGroupEgress") is True
+        assert is_ec2_network_type("RouteTable") is True
+        assert is_ec2_network_type("NetworkInterface") is True
+
+    def test_is_ec2_network_type_compute_types(self):
+        """Compute types should NOT be detected as network."""
+        from wetwire_aws.linter.splitting import is_ec2_network_type
+
+        assert is_ec2_network_type("Instance") is False
+        assert is_ec2_network_type("LaunchTemplate") is False
+        assert is_ec2_network_type("Volume") is False
+        assert is_ec2_network_type("Snapshot") is False
+        assert is_ec2_network_type("KeyPair") is False
+        assert is_ec2_network_type("SpotFleet") is False
+
+    def test_is_ec2_network_type_endpoint_types(self):
+        """Endpoint types should be detected as network."""
+        from wetwire_aws.linter.splitting import is_ec2_network_type
+
+        assert is_ec2_network_type("VPCEndpoint") is True
+        assert is_ec2_network_type("VPCEndpointService") is True
+        assert is_ec2_network_type("ClientVpnEndpoint") is True
+
+    def test_is_ec2_network_type_new_types(self):
+        """Newly-added network types should be detected dynamically."""
+        from wetwire_aws.linter.splitting import is_ec2_network_type
+
+        # These were previously missing from the static list
+        assert is_ec2_network_type("TransitGatewayRouteTable") is True
+        assert is_ec2_network_type("TrafficMirrorSession") is True
+        assert is_ec2_network_type("TrafficMirrorTarget") is True
+        assert is_ec2_network_type("PrefixList") is True
+        assert is_ec2_network_type("VerifiedAccessEndpoint") is True
+        assert is_ec2_network_type("LocalGatewayRouteTable") is True
+
+    def test_categorize_ec2_security_group_ingress(self):
+        """SecurityGroupIngress should categorize as network via dynamic inference."""
+        from wetwire_aws.linter.splitting import categorize_resource_type
+
+        assert categorize_resource_type("AWS::EC2::SecurityGroupIngress") == "network"
+        assert categorize_resource_type("AWS::EC2::SecurityGroupEgress") == "network"
+
     def test_suggest_file_splits_basic(self):
         """Test basic file splitting suggestion."""
         from wetwire_aws.linter.splitting import ResourceInfo, suggest_file_splits
@@ -637,3 +687,142 @@ class TestSplittingUtilities:
         # A->B, B->A = 2 internal edges
         weight = calculate_scc_weight(["A", "B"], resources)
         assert weight == 2  # A depends on B, B depends on A
+
+
+class TestPropertyTypeAsRef:
+    """Tests for WAW011: PropertyType wrappers should be instantiated."""
+
+    def test_detects_policy_document_wrapper(self):
+        """Should detect PolicyDocument wrapper used without ()."""
+        from wetwire_aws.linter.rules import PropertyTypeAsRef
+
+        code = '''
+@wetwire_aws
+class MyPolicyDoc:
+    resource: PolicyDocument
+    statement = []
+
+@wetwire_aws
+class MyRole:
+    resource: iam.Role
+    assume_role_policy_document = MyPolicyDoc
+'''
+        issues = lint_code(code, rules=[PropertyTypeAsRef()])
+        assert len(issues) == 1
+        assert issues[0].rule_id == "WAW011"
+        assert "MyPolicyDoc()" in issues[0].suggestion
+
+    def test_detects_policy_statement_wrapper(self):
+        """Should detect PolicyStatement wrapper used without ()."""
+        from wetwire_aws.linter.rules import PropertyTypeAsRef
+
+        code = '''
+@wetwire_aws
+class AllowStatement:
+    resource: PolicyStatement
+    action = "sts:AssumeRole"
+
+@wetwire_aws
+class MyPolicyDoc:
+    resource: PolicyDocument
+    statement = [AllowStatement]
+'''
+        issues = lint_code(code, rules=[PropertyTypeAsRef()])
+        assert len(issues) == 1
+        assert "AllowStatement()" in issues[0].suggestion
+
+    def test_detects_nested_property_type_wrapper(self):
+        """Should detect nested PropertyType wrapper (e.g., s3.bucket.BucketEncryption)."""
+        from wetwire_aws.linter.rules import PropertyTypeAsRef
+
+        code = '''
+@wetwire_aws
+class MyBucketEncryption:
+    resource: s3.bucket.BucketEncryption
+    sse_algorithm = "AES256"
+
+@wetwire_aws
+class MyBucket:
+    resource: s3.Bucket
+    bucket_encryption = MyBucketEncryption
+'''
+        issues = lint_code(code, rules=[PropertyTypeAsRef()])
+        assert len(issues) == 1
+        assert "MyBucketEncryption()" in issues[0].suggestion
+
+    def test_ignores_resource_wrappers(self):
+        """Should not flag resource wrappers (these are valid as class refs)."""
+        from wetwire_aws.linter.rules import PropertyTypeAsRef
+
+        code = '''
+@wetwire_aws
+class MyVPC:
+    resource: ec2.VPC
+    cidr_block = "10.0.0.0/16"
+
+@wetwire_aws
+class MySubnet:
+    resource: ec2.Subnet
+    vpc_id = MyVPC
+'''
+        issues = lint_code(code, rules=[PropertyTypeAsRef()])
+        assert len(issues) == 0
+
+    def test_ignores_already_instantiated(self):
+        """Should not flag PropertyType wrappers that are already instantiated."""
+        from wetwire_aws.linter.rules import PropertyTypeAsRef
+
+        code = '''
+@wetwire_aws
+class MyPolicyDoc:
+    resource: PolicyDocument
+    statement = []
+
+@wetwire_aws
+class MyRole:
+    resource: iam.Role
+    assume_role_policy_document = MyPolicyDoc()
+'''
+        issues = lint_code(code, rules=[PropertyTypeAsRef()])
+        assert len(issues) == 0
+
+    def test_detects_multiple_in_list(self):
+        """Should detect multiple PropertyType wrappers in a list."""
+        from wetwire_aws.linter.rules import PropertyTypeAsRef
+
+        code = '''
+@wetwire_aws
+class AllowStatement1:
+    resource: PolicyStatement
+    action = "s3:GetObject"
+
+@wetwire_aws
+class AllowStatement2:
+    resource: PolicyStatement
+    action = "s3:PutObject"
+
+@wetwire_aws
+class MyPolicyDoc:
+    resource: PolicyDocument
+    statement = [AllowStatement1, AllowStatement2]
+'''
+        issues = lint_code(code, rules=[PropertyTypeAsRef()])
+        assert len(issues) == 2
+        assert "AllowStatement1()" in issues[0].suggestion
+        assert "AllowStatement2()" in issues[1].suggestion
+
+    def test_fix_adds_parentheses(self):
+        """Should fix by adding () to instantiate the wrapper."""
+        from wetwire_aws.linter.rules import PropertyTypeAsRef
+
+        code = '''@wetwire_aws
+class MyPolicyDoc:
+    resource: PolicyDocument
+    statement = []
+
+@wetwire_aws
+class MyRole:
+    resource: iam.Role
+    assume_role_policy_document = MyPolicyDoc'''
+        fixed = fix_code(code, rules=[PropertyTypeAsRef()], add_imports=False)
+        assert "assume_role_policy_document = MyPolicyDoc()" in fixed

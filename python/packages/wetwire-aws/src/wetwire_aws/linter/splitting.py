@@ -28,6 +28,7 @@ __all__ = [
     "EC2_NETWORK_TYPES",
     "MAX_RESOURCES_PER_FILE",
     "categorize_resource_type",
+    "is_ec2_network_type",
     "suggest_file_splits",
     "calculate_scc_weight",
     "ResourceInfo",
@@ -97,6 +98,8 @@ SERVICE_CATEGORIES: dict[str, str] = {
 }
 
 # EC2 resource types that should go to network.py instead of compute.py
+# NOTE: This set is kept for backward compatibility but the dynamic inference
+# function is_ec2_network_type() is preferred and covers more types.
 EC2_NETWORK_TYPES: set[str] = {
     "VPC",
     "Subnet",
@@ -124,6 +127,86 @@ EC2_NETWORK_TYPES: set[str] = {
     "VPNConnection",
     "CustomerGateway",
 }
+
+
+def is_ec2_network_type(type_name: str) -> bool:
+    """Infer if an EC2 type is network-related based on naming patterns.
+
+    This function uses keyword-based heuristics to determine whether an EC2
+    resource type belongs in network.py rather than compute.py. This dynamic
+    approach handles new resource types without requiring manual updates to
+    a static list.
+
+    Args:
+        type_name: The EC2 resource type name (e.g., "VPC", "Instance",
+            "SecurityGroupIngress")
+
+    Returns:
+        True if the type should be categorized as network, False for compute.
+
+    Examples:
+        >>> is_ec2_network_type("VPC")
+        True
+        >>> is_ec2_network_type("SecurityGroupIngress")
+        True
+        >>> is_ec2_network_type("Instance")
+        False
+        >>> is_ec2_network_type("LaunchTemplate")
+        False
+    """
+    # Special case: Endpoint types are always network
+    if "Endpoint" in type_name:
+        return True
+
+    # Exclude compute keywords first (these take precedence)
+    compute_keywords = [
+        "Instance",
+        "Fleet",
+        "Host",
+        "KeyPair",
+        "Capacity",
+        "Volume",
+        "Placement",
+        "IPAM",  # IP Address Management is infrastructure, not networking
+        "Snapshot",
+        "Enclave",
+        "LaunchTemplate",
+        "SpotFleet",
+        "Image",
+        "AMI",
+    ]
+    if any(kw in type_name for kw in compute_keywords):
+        return False
+
+    # Include network keywords
+    network_keywords = [
+        "VPC",
+        "Subnet",
+        "Route",
+        "Gateway",
+        "Network",
+        "Interface",
+        "Security",
+        "Acl",
+        "VPN",
+        "Transit",
+        "Peering",
+        "EIP",
+        "Customer",
+        "DHCP",
+        "Carrier",
+        "Insights",
+        "FlowLog",
+        "Association",
+        "Attachment",
+        "Prefix",  # PrefixList
+        "Traffic",  # TrafficMirror*
+        "Egress",  # EgressOnlyInternetGateway
+        "Ingress",
+        "LocalGateway",
+        "Verified",  # VerifiedAccess*
+    ]
+    return any(kw in type_name for kw in network_keywords)
 
 
 def categorize_resource_type(resource_type: str) -> str:
@@ -155,7 +238,8 @@ def categorize_resource_type(resource_type: str) -> str:
     type_name = parts[2]
 
     # Special case: EC2 VPC/networking resources go to network, not compute
-    if service == "EC2" and type_name in EC2_NETWORK_TYPES:
+    # Use dynamic inference to handle new resource types automatically
+    if service == "EC2" and is_ec2_network_type(type_name):
         return "network"
 
     return SERVICE_CATEGORIES.get(service, "main")

@@ -13,6 +13,64 @@ from dataclass_dsl import ContextRef, is_attr_ref, is_class_ref
 from dataclass_dsl._loader import _ClassPlaceholder
 
 
+def _is_property_type_wrapper(cls: type) -> bool:
+    """Check if a class is a PropertyType wrapper (not a Resource wrapper).
+
+    PropertyType wrappers have a `resource` annotation pointing to a PropertyType
+    subclass. Resource wrappers point to CloudFormationResource subclasses.
+
+    Args:
+        cls: The class to check.
+
+    Returns:
+        True if the class wraps a PropertyType, False otherwise.
+    """
+    annotations = getattr(cls, "__annotations__", {})
+    resource_type = annotations.get("resource")
+    if resource_type is None:
+        return False
+    # Check if resource_type is a PropertyType (not a CloudFormationResource)
+    # PropertyType doesn't have _resource_type, CloudFormationResource does
+    return not hasattr(resource_type, "_resource_type")
+
+
+def _instantiate_property_type_wrapper(wrapper_cls: type) -> Any:
+    """Create a PropertyType instance from a wrapper class.
+
+    Wrapper classes have a `resource:` annotation pointing to a PropertyType
+    subclass. This function extracts the property values from the wrapper
+    and creates an actual PropertyType instance.
+
+    Args:
+        wrapper_cls: A class with `resource: SomePropertyType` annotation.
+
+    Returns:
+        An instance of the PropertyType with values from the wrapper.
+    """
+    # Get the PropertyType class from the wrapper's annotation
+    annotations = getattr(wrapper_cls, "__annotations__", {})
+    property_type_cls = annotations.get("resource")
+    if property_type_cls is None:
+        # Shouldn't happen if _is_property_type_wrapper was True
+        return None
+
+    # Create wrapper instance to get its property values
+    wrapper_instance = wrapper_cls()
+
+    # Collect properties from wrapper (excluding 'resource' and private attrs)
+    props: dict[str, Any] = {}
+    for k, v in wrapper_instance.__dict__.items():
+        if k.startswith("_") or k == "resource" or v is None:
+            continue
+        # Recursively serialize nested values (handles nested wrappers, lists, etc.)
+        props[k] = _serialize_value(v)
+
+    # Create and return the PropertyType instance
+    # Use to_dict() on the PropertyType instance
+    property_instance = property_type_cls(**props)
+    return property_instance
+
+
 def _serialize_value(value: Any) -> Any:
     """Recursively serialize a value for CloudFormation JSON.
 
@@ -35,6 +93,12 @@ def _serialize_value(value: Any) -> Any:
         return GetAtt(value.target.__name__, value.attr).to_dict()
     # Handle no-parens pattern: class references (e.g., MyBucket)
     if is_class_ref(value):
+        # Check if this is a PropertyType wrapper - if so, instantiate and serialize
+        if _is_property_type_wrapper(value):
+            property_instance = _instantiate_property_type_wrapper(value)
+            if property_instance is not None and hasattr(property_instance, "to_dict"):
+                return property_instance.to_dict()
+        # Otherwise it's a Resource wrapper - serialize as Ref
         from wetwire_aws.intrinsics import Ref
 
         return Ref(value.__name__).to_dict()

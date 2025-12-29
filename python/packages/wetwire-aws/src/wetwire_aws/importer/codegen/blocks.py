@@ -302,7 +302,8 @@ def _generate_property_type_wrapper_impl(
     class_def = f"@wetwire_aws\nclass {class_name}:\n" + "\n".join(lines)
     ctx.property_type_class_defs.append(class_def)
 
-    return class_name
+    # Return instantiated form - PropertyType wrappers must be instances, not class refs
+    return f"{class_name}()"
 
 
 # =============================================================================
@@ -410,7 +411,8 @@ def _generate_policy_statement_wrapper_impl(
     class_def = f"@wetwire_aws\nclass {class_name}:\n" + "\n".join(lines)
     ctx.property_type_class_defs.append(class_def)
 
-    return class_name
+    # Return instantiated form - PolicyStatement wrappers must be instances, not class refs
+    return f"{class_name}()"
 
 
 def _generate_policy_document_wrapper_block(
@@ -501,7 +503,8 @@ def _generate_policy_document_wrapper_impl(
     class_def = f"@wetwire_aws\nclass {class_name}:\n" + "\n".join(lines)
     ctx.property_type_class_defs.append(class_def)
 
-    return class_name
+    # Return instantiated form - PolicyDocument wrappers must be instances, not class refs
+    return f"{class_name}()"
 
 
 # =============================================================================

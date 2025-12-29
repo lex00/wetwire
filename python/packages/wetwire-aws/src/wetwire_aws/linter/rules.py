@@ -18,6 +18,7 @@ Rules:
     WAW007: Use flat imports with module-qualified names instead of explicit resource imports
     WAW008: Remove verbose imports that setup_params/setup_resources handle
     WAW010: Split large files (>15 resources) into smaller category-based files
+    WAW011: PropertyType wrappers should be instantiated with ()
 
 Example:
     >>> from wetwire_aws.linter.rules import get_all_rules, LintContext
@@ -1013,6 +1014,152 @@ class FileTooLarge(LintRule):
         return False
 
 
+class PropertyTypeAsRef(LintRule):
+    """Detect PropertyType wrappers used as class refs instead of instances.
+
+    PropertyType wrapper classes (those with resource: annotations pointing to
+    PolicyDocument, PolicyStatement, DenyStatement, or nested property types)
+    must be instantiated with `()` when used as values.
+
+    The serialization layer has a safety net that auto-instantiates these, but
+    for code clarity and consistency, wrappers should be explicitly instantiated.
+
+    Detects:
+    - field = MyPropertyTypeWrapper  (where MyPropertyTypeWrapper has resource: PolicyDocument)
+    - statement = [AllowStatement]  (where AllowStatement has resource: PolicyStatement)
+
+    Suggests:
+    - field = MyPropertyTypeWrapper()
+    - statement = [AllowStatement()]
+    """
+
+    rule_id = "WAW011"
+    description = "PropertyType wrappers should be instantiated with ()"
+
+    # Known PropertyType base classes from wetwire_aws
+    PROPERTY_TYPE_BASES = {
+        "PolicyDocument",
+        "PolicyStatement",
+        "DenyStatement",
+        "Tag",
+        "PropertyType",
+    }
+
+    def check(self, context: LintContext) -> list[LintIssue]:
+        issues = []
+
+        # First pass: identify PropertyType wrapper classes in this file
+        # A PropertyType wrapper has a `resource:` annotation pointing to a PropertyType
+        property_type_wrappers: set[str] = set()
+
+        for node in ast.walk(context.tree):
+            if isinstance(node, ast.ClassDef):
+                # Check for resource: annotation in class body
+                for stmt in node.body:
+                    if isinstance(stmt, ast.AnnAssign):
+                        target = stmt.target
+                        if isinstance(target, ast.Name) and target.id == "resource":
+                            # Check what the annotation points to
+                            if self._is_property_type_annotation(stmt.annotation):
+                                property_type_wrappers.add(node.name)
+                                break
+
+        if not property_type_wrappers:
+            return issues
+
+        # Second pass: find usages of these wrappers as bare class refs
+        for node in ast.walk(context.tree):
+            # Check direct assignments: field = WrapperClass
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        # Skip if target is 'resource' (the type annotation field)
+                        if target.id == "resource":
+                            continue
+
+                        value = node.value
+                        # Check for bare Name: field = WrapperClass
+                        if isinstance(value, ast.Name):
+                            if value.id in property_type_wrappers:
+                                original = ast.get_source_segment(context.source, value)
+                                if original:
+                                    issues.append(
+                                        LintIssue(
+                                            rule_id=self.rule_id,
+                                            message=f"Instantiate PropertyType wrapper: {value.id}()",
+                                            line=value.lineno,
+                                            column=value.col_offset,
+                                            original=original,
+                                            suggestion=f"{value.id}()",
+                                            fix_imports=[],
+                                        )
+                                    )
+
+                        # Check lists: field = [WrapperClass, WrapperClass2]
+                        elif isinstance(value, ast.List):
+                            for elt in value.elts:
+                                if isinstance(elt, ast.Name):
+                                    if elt.id in property_type_wrappers:
+                                        original = ast.get_source_segment(
+                                            context.source, elt
+                                        )
+                                        if original:
+                                            issues.append(
+                                                LintIssue(
+                                                    rule_id=self.rule_id,
+                                                    message=f"Instantiate PropertyType wrapper: {elt.id}()",
+                                                    line=elt.lineno,
+                                                    column=elt.col_offset,
+                                                    original=original,
+                                                    suggestion=f"{elt.id}()",
+                                                    fix_imports=[],
+                                                )
+                                            )
+
+        return issues
+
+    def _is_property_type_annotation(self, annotation: ast.expr) -> bool:
+        """Check if an annotation refers to a PropertyType.
+
+        Returns True for:
+        - Name nodes like PolicyDocument, PolicyStatement, DenyStatement
+        - Attribute nodes like s3.bucket.SomePropertyType (nested in a module)
+        """
+        if isinstance(annotation, ast.Name):
+            return annotation.id in self.PROPERTY_TYPE_BASES
+
+        if isinstance(annotation, ast.Attribute):
+            # Check for nested property types like s3.bucket.BucketEncryption
+            # or rds.db_proxy.TagFormat
+            # These have at least one nested module (not just s3.Bucket which is a Resource)
+            parts = self._get_attribute_parts(annotation)
+            if len(parts) >= 3:
+                # Format: module.submodule.ClassName (e.g., s3.bucket.BucketEncryption)
+                # This is a nested PropertyType
+                return True
+            if len(parts) >= 2:
+                # Check if the class name is in our known PropertyType bases
+                class_name = parts[-1]
+                return class_name in self.PROPERTY_TYPE_BASES
+
+        return False
+
+    def _get_attribute_parts(self, node: ast.expr) -> list[str]:
+        """Extract parts from a nested Attribute node.
+
+        For s3.bucket.BucketEncryption, returns ['s3', 'bucket', 'BucketEncryption'].
+        """
+        parts: list[str] = []
+        current = node
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+        if isinstance(current, ast.Name):
+            parts.append(current.id)
+        parts.reverse()
+        return parts
+
+
 # All available rules
 ALL_RULES: list[type[LintRule]] = [
     StringShouldBeParameterType,
@@ -1024,6 +1171,7 @@ ALL_RULES: list[type[LintRule]] = [
     ExplicitResourceImport,
     VerboseInitImports,
     FileTooLarge,
+    PropertyTypeAsRef,
 ]
 
 
