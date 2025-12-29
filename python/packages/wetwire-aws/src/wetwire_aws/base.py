@@ -354,8 +354,7 @@ class CloudFormationResource(Resource):
         # Add optional metadata fields
         if self.depends_on:
             result["DependsOn"] = [
-                dep if isinstance(dep, str) else dep.__name__
-                for dep in self.depends_on
+                dep if isinstance(dep, str) else dep.__name__ for dep in self.depends_on
             ]
         if self.condition:
             result["Condition"] = self.condition

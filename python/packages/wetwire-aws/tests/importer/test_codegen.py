@@ -196,11 +196,15 @@ class TestGeneratePackage:
     def test_has_resource_files(self, files):
         """Should have resource files (either main.py or categorized files like storage.py)."""
         # Check for at least one resource file (besides __init__.py, __main__.py, params.py, outputs.py)
-        resource_files = [f for f in files.keys() if f.endswith('.py') and
-                         not f.endswith('__init__.py') and
-                         not f.endswith('__main__.py') and
-                         not f.endswith('params.py') and
-                         not f.endswith('outputs.py')]
+        resource_files = [
+            f
+            for f in files.keys()
+            if f.endswith(".py")
+            and not f.endswith("__init__.py")
+            and not f.endswith("__main__.py")
+            and not f.endswith("params.py")
+            and not f.endswith("outputs.py")
+        ]
         assert len(resource_files) > 0, "Should have at least one resource file"
 
     def test_has_dunder_main(self, files):
@@ -227,11 +231,15 @@ class TestGeneratePackage:
     def test_resource_files_have_resources(self, files):
         """Resource files should contain resource definitions."""
         # Find resource files (not __init__, __main__, params, outputs)
-        resource_files = [f for f in files.keys() if f.endswith('.py') and
-                         not f.endswith('__init__.py') and
-                         not f.endswith('__main__.py') and
-                         not f.endswith('params.py') and
-                         not f.endswith('outputs.py')]
+        resource_files = [
+            f
+            for f in files.keys()
+            if f.endswith(".py")
+            and not f.endswith("__init__.py")
+            and not f.endswith("__main__.py")
+            and not f.endswith("params.py")
+            and not f.endswith("outputs.py")
+        ]
 
         # Check that at least one resource file has the MyBucket class
         found_bucket = False

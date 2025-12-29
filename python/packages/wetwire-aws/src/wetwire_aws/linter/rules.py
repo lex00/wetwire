@@ -357,7 +357,9 @@ class StringShouldBeEnum(LintRule):
                                 if value in value_map:
                                     const_name = value_map[value]
                                     # Use module-qualified form: s3.ServerSideEncryption.AES256
-                                    suggestion = f"{module_short}.{enum_class}.{const_name}"
+                                    suggestion = (
+                                        f"{module_short}.{enum_class}.{const_name}"
+                                    )
 
                                     issues.append(
                                         LintIssue(
@@ -410,13 +412,15 @@ class StringShouldBeEnum(LintRule):
                                 val.value, str
                             ):
                                 value = val.value
-                                enum_class, module_short, value_map = self.KNOWN_DICT_KEYS[
-                                    key_str
-                                ]
+                                enum_class, module_short, value_map = (
+                                    self.KNOWN_DICT_KEYS[key_str]
+                                )
                                 if value in value_map:
                                     const_name = value_map[value]
                                     # Use module-qualified form
-                                    suggestion = f"{module_short}.{enum_class}.{const_name}"
+                                    suggestion = (
+                                        f"{module_short}.{enum_class}.{const_name}"
+                                    )
 
                                     issues.append(
                                         LintIssue(

@@ -23,9 +23,9 @@ class TestStringShouldBeParameterType:
 
     def test_detects_type_string(self):
         """Should detect type = 'String'."""
-        code = '''
+        code = """
 type = "String"
-'''
+"""
         issues = lint_code(code, rules=[StringShouldBeParameterType()])
         assert len(issues) == 1
         assert issues[0].rule_id == "WAW001"
@@ -33,27 +33,27 @@ type = "String"
 
     def test_detects_type_number(self):
         """Should detect type = 'Number'."""
-        code = '''
+        code = """
 type = "Number"
-'''
+"""
         issues = lint_code(code, rules=[StringShouldBeParameterType()])
         assert len(issues) == 1
         assert "NUMBER" in issues[0].suggestion
 
     def test_detects_type_in_kwargs(self):
         """Should detect type in keyword arguments."""
-        code = '''
+        code = """
 param = Parameter(type="String", description="Test")
-'''
+"""
         issues = lint_code(code, rules=[StringShouldBeParameterType()])
         assert len(issues) == 1
         assert "STRING" in issues[0].suggestion
 
     def test_ignores_non_parameter_types(self):
         """Should not flag arbitrary string assignments to type."""
-        code = '''
+        code = """
 type = "CustomType"
-'''
+"""
         issues = lint_code(code, rules=[StringShouldBeParameterType()])
         assert len(issues) == 0
 
@@ -70,9 +70,9 @@ class TestRefShouldBePseudoParameter:
 
     def test_detects_aws_region(self):
         """Should detect Ref('AWS::Region')."""
-        code = '''
+        code = """
 region = Ref("AWS::Region")
-'''
+"""
         issues = lint_code(code, rules=[RefShouldBePseudoParameter()])
         assert len(issues) == 1
         assert issues[0].rule_id == "WAW002"
@@ -80,45 +80,45 @@ region = Ref("AWS::Region")
 
     def test_detects_aws_stack_name(self):
         """Should detect Ref('AWS::StackName')."""
-        code = '''
+        code = """
 stack_name = Ref("AWS::StackName")
-'''
+"""
         issues = lint_code(code, rules=[RefShouldBePseudoParameter()])
         assert len(issues) == 1
         assert "AWS_STACK_NAME" in issues[0].suggestion
 
     def test_detects_aws_account_id(self):
         """Should detect Ref('AWS::AccountId')."""
-        code = '''
+        code = """
 account_id = Ref("AWS::AccountId")
-'''
+"""
         issues = lint_code(code, rules=[RefShouldBePseudoParameter()])
         assert len(issues) == 1
         assert "AWS_ACCOUNT_ID" in issues[0].suggestion
 
     def test_detects_all_pseudo_parameters(self):
         """Should detect all AWS pseudo-parameters."""
-        code = '''
+        code = """
 region = Ref("AWS::Region")
 stack = Ref("AWS::StackName")
 account = Ref("AWS::AccountId")
 partition = Ref("AWS::Partition")
-'''
+"""
         issues = lint_code(code, rules=[RefShouldBePseudoParameter()])
         assert len(issues) == 4
 
     def test_ignores_regular_refs(self):
         """Should not flag Ref() with regular resource/parameter references."""
-        code = '''
+        code = """
 bucket_ref = Ref("MyBucket")
 param_ref = Ref("Environment")
-'''
+"""
         issues = lint_code(code, rules=[RefShouldBePseudoParameter()])
         assert len(issues) == 0
 
     def test_fix_replaces_ref(self):
         """Should replace Ref('AWS::Region') with AWS_REGION."""
-        code = '''region = Ref("AWS::Region")'''
+        code = """region = Ref("AWS::Region")"""
         fixed = fix_code(code, rules=[RefShouldBePseudoParameter()], add_imports=False)
         assert "AWS_REGION" in fixed
         assert 'Ref("AWS::Region")' not in fixed
@@ -129,9 +129,9 @@ class TestStringShouldBeEnum:
 
     def test_detects_sse_algorithm_aes256(self):
         """Should detect sse_algorithm = 'AES256' and suggest module-qualified name."""
-        code = '''
+        code = """
 sse_algorithm = "AES256"
-'''
+"""
         issues = lint_code(code, rules=[StringShouldBeEnum()])
         assert len(issues) == 1
         assert issues[0].rule_id == "WAW003"
@@ -139,53 +139,53 @@ sse_algorithm = "AES256"
 
     def test_detects_sse_algorithm_aws_kms(self):
         """Should detect sse_algorithm = 'aws:kms' and suggest module-qualified name."""
-        code = '''
+        code = """
 sse_algorithm = "aws:kms"
-'''
+"""
         issues = lint_code(code, rules=[StringShouldBeEnum()])
         assert len(issues) == 1
         assert issues[0].suggestion == "s3.ServerSideEncryption.AWSKMS"
 
     def test_detects_dynamodb_key_type(self):
         """Should detect DynamoDB key_type = 'HASH' and suggest module-qualified name."""
-        code = '''
+        code = """
 key_type = "HASH"
-'''
+"""
         issues = lint_code(code, rules=[StringShouldBeEnum()])
         assert len(issues) == 1
         assert issues[0].suggestion == "dynamodb.KeyType.HASH"
 
     def test_detects_dynamodb_attribute_type(self):
         """Should detect DynamoDB attribute_type = 'S' and suggest module-qualified name."""
-        code = '''
+        code = """
 attribute_type = "S"
-'''
+"""
         issues = lint_code(code, rules=[StringShouldBeEnum()])
         assert len(issues) == 1
         assert issues[0].suggestion == "dynamodb.ScalarAttributeType.S"
 
     def test_detects_enum_in_kwargs(self):
         """Should detect enum values in keyword arguments with module-qualified name."""
-        code = '''
+        code = """
 encryption = ServerSideEncryptionByDefault(sse_algorithm="AES256")
-'''
+"""
         issues = lint_code(code, rules=[StringShouldBeEnum()])
         assert len(issues) == 1
         assert issues[0].suggestion == "s3.ServerSideEncryption.AES256"
 
     def test_ignores_unknown_field_names(self):
         """Should not flag unknown field names."""
-        code = '''
+        code = """
 unknown_field = "AES256"
-'''
+"""
         issues = lint_code(code, rules=[StringShouldBeEnum()])
         assert len(issues) == 0
 
     def test_ignores_unknown_values(self):
         """Should not flag unknown values for known fields."""
-        code = '''
+        code = """
 sse_algorithm = "UNKNOWN_VALUE"
-'''
+"""
         issues = lint_code(code, rules=[StringShouldBeEnum()])
         assert len(issues) == 0
 
@@ -202,9 +202,9 @@ class TestDictShouldBeIntrinsic:
 
     def test_detects_ref_dict(self):
         """Should detect {"Ref": "..."} dict pattern."""
-        code = '''
+        code = """
 value = {"Ref": "MyBucket"}
-'''
+"""
         issues = lint_code(code, rules=[DictShouldBeIntrinsic()])
         assert len(issues) == 1
         assert issues[0].rule_id == "WAW004"
@@ -212,27 +212,27 @@ value = {"Ref": "MyBucket"}
 
     def test_detects_fn_sub_dict(self):
         """Should detect {"Fn::Sub": "..."} dict pattern."""
-        code = '''
+        code = """
 value = {"Fn::Sub": "${AWS::Region}-bucket"}
-'''
+"""
         issues = lint_code(code, rules=[DictShouldBeIntrinsic()])
         assert len(issues) == 1
         assert "Sub(" in issues[0].suggestion
 
     def test_detects_fn_getatt_dict(self):
         """Should detect {"Fn::GetAtt": "..."} dict pattern."""
-        code = '''
+        code = """
 value = {"Fn::GetAtt": "MyBucket.Arn"}
-'''
+"""
         issues = lint_code(code, rules=[DictShouldBeIntrinsic()])
         assert len(issues) == 1
         assert "GetAtt(" in issues[0].suggestion
 
     def test_ignores_regular_dicts(self):
         """Should not flag regular dicts."""
-        code = '''
+        code = """
 data = {"Name": "value", "Value": 123}
-'''
+"""
         issues = lint_code(code, rules=[DictShouldBeIntrinsic()])
         assert len(issues) == 0
 
@@ -242,9 +242,9 @@ class TestUnnecessaryToDict:
 
     def test_detects_ref_to_dict(self):
         """Should detect ref().to_dict()."""
-        code = '''
+        code = """
 value = ref(MyBucket).to_dict()
-'''
+"""
         issues = lint_code(code, rules=[UnnecessaryToDict()])
         assert len(issues) == 1
         assert issues[0].rule_id == "WAW005"
@@ -252,18 +252,18 @@ value = ref(MyBucket).to_dict()
 
     def test_detects_get_att_to_dict(self):
         """Should detect get_att().to_dict()."""
-        code = '''
+        code = """
 value = get_att(MyBucket, "Arn").to_dict()
-'''
+"""
         issues = lint_code(code, rules=[UnnecessaryToDict()])
         assert len(issues) == 1
         assert "get_att(" in issues[0].message
 
     def test_ignores_other_to_dict(self):
         """Should not flag .to_dict() on other objects."""
-        code = '''
+        code = """
 value = some_object.to_dict()
-'''
+"""
         issues = lint_code(code, rules=[UnnecessaryToDict()])
         assert len(issues) == 0
 
@@ -273,9 +273,9 @@ class TestRefShouldBeNoParens:
 
     def test_detects_ref_with_class_name(self):
         """Should detect ref(VPC) -> VPC."""
-        code = '''
+        code = """
 vpc_id = ref(VPC)
-'''
+"""
         issues = lint_code(code, rules=[RefShouldBeNoParens()])
         assert len(issues) == 1
         assert issues[0].rule_id == "WAW006"
@@ -283,59 +283,59 @@ vpc_id = ref(VPC)
 
     def test_ignores_ref_with_string(self):
         """Should ignore ref("VPC") - string literals are forward references."""
-        code = '''
+        code = """
 vpc_id = ref("VPC")
-'''
+"""
         issues = lint_code(code, rules=[RefShouldBeNoParens()])
         # String literals are forward references and should not be flagged
         assert len(issues) == 0
 
     def test_detects_get_att_with_class_and_string(self):
         """Should detect get_att(MyRole, "Arn") -> MyRole.Arn."""
-        code = '''
+        code = """
 role_arn = get_att(MyRole, "Arn")
-'''
+"""
         issues = lint_code(code, rules=[RefShouldBeNoParens()])
         assert len(issues) == 1
         assert issues[0].suggestion == "MyRole.Arn"
 
     def test_ignores_get_att_with_string_target(self):
         """Should ignore get_att("MyRole", "Arn") - string literals are forward references."""
-        code = '''
+        code = """
 role_arn = get_att("MyRole", "Arn")
-'''
+"""
         issues = lint_code(code, rules=[RefShouldBeNoParens()])
         # String literals are forward references and should not be flagged
         assert len(issues) == 0
 
     def test_detects_get_att_with_constant(self):
         """Should detect get_att(MyRole, ARN) -> MyRole.ARN."""
-        code = '''
+        code = """
 role_arn = get_att(MyRole, ARN)
-'''
+"""
         issues = lint_code(code, rules=[RefShouldBeNoParens()])
         assert len(issues) == 1
         assert issues[0].suggestion == "MyRole.ARN"
 
     def test_detects_multiple_refs(self):
         """Should detect multiple ref() calls."""
-        code = '''
+        code = """
 vpc_id = ref(VPC)
 subnet_id = ref(Subnet)
-'''
+"""
         issues = lint_code(code, rules=[RefShouldBeNoParens()])
         assert len(issues) == 2
 
     def test_fix_replaces_ref(self):
         """Should replace ref(VPC) with VPC."""
-        code = '''vpc_id = ref(VPC)'''
+        code = """vpc_id = ref(VPC)"""
         fixed = fix_code(code, rules=[RefShouldBeNoParens()], add_imports=False)
         assert "vpc_id = VPC" in fixed
         assert "ref(VPC)" not in fixed
 
     def test_fix_replaces_get_att(self):
         """Should replace get_att(MyRole, "Arn") with MyRole.Arn."""
-        code = '''role_arn = get_att(MyRole, "Arn")'''
+        code = """role_arn = get_att(MyRole, "Arn")"""
         fixed = fix_code(code, rules=[RefShouldBeNoParens()], add_imports=False)
         assert "role_arn = MyRole.Arn" in fixed
         assert "get_att(" not in fixed
@@ -346,9 +346,9 @@ class TestExplicitResourceImport:
 
     def test_detects_lambda_runtime_import(self):
         """Should detect from wetwire_aws.resources.lambda_ import Runtime."""
-        code = '''
+        code = """
 from wetwire_aws.resources.lambda_ import Runtime
-'''
+"""
         issues = lint_code(code, rules=[ExplicitResourceImport()])
         assert len(issues) == 1
         assert issues[0].rule_id == "WAW007"
@@ -356,65 +356,67 @@ from wetwire_aws.resources.lambda_ import Runtime
 
     def test_detects_s3_enum_import(self):
         """Should detect from wetwire_aws.resources.s3 import ServerSideEncryption."""
-        code = '''
+        code = """
 from wetwire_aws.resources.s3 import ServerSideEncryption
-'''
+"""
         issues = lint_code(code, rules=[ExplicitResourceImport()])
         assert len(issues) == 1
         assert "Remove explicit resource import" in issues[0].message
 
     def test_detects_multiple_imports_same_line(self):
         """Should detect one issue per import line (not per imported name)."""
-        code = '''
+        code = """
 from wetwire_aws.resources.lambda_ import Runtime, Architecture
-'''
+"""
         issues = lint_code(code, rules=[ExplicitResourceImport()])
         # Now only 1 issue per import line
         assert len(issues) == 1
 
     def test_ignores_non_resource_imports(self):
         """Should not flag imports from wetwire_aws (not wetwire_aws.resources)."""
-        code = '''
+        code = """
 from wetwire_aws import wetwire_aws
 from wetwire_aws.intrinsics import Sub
-'''
+"""
         issues = lint_code(code, rules=[ExplicitResourceImport()])
         assert len(issues) == 0
 
     def test_fix_removes_import_line(self):
         """Should remove the explicit import line."""
-        code = '''from wetwire_aws.resources.lambda_ import Runtime'''
+        code = """from wetwire_aws.resources.lambda_ import Runtime"""
         fixed = fix_code(code, rules=[ExplicitResourceImport()], add_imports=False)
         assert "from wetwire_aws.resources.lambda_" not in fixed
 
     def test_qualifies_usages_of_imported_names(self):
         """Should qualify usages like Runtime.PYTHON3_12 -> lambda_.Runtime.PYTHON3_12."""
-        code = '''from wetwire_aws.resources.lambda_ import Runtime
+        code = """from wetwire_aws.resources.lambda_ import Runtime
 runtime = Runtime.PYTHON3_12
-'''
+"""
         issues = lint_code(code, rules=[ExplicitResourceImport()])
         # Should have 2 issues: 1 for import, 1 for usage
         assert len(issues) == 2
         # Filter for usage issues (ones that have a non-empty suggestion)
-        usage_issues = [i for i in issues if i.suggestion and "lambda_.Runtime" in i.suggestion]
+        usage_issues = [
+            i for i in issues if i.suggestion and "lambda_.Runtime" in i.suggestion
+        ]
         assert len(usage_issues) == 1
         assert usage_issues[0].suggestion == "lambda_.Runtime.PYTHON3_12"
 
     def test_fix_qualifies_and_removes_import(self):
         """Should both remove import and qualify usages."""
-        code = '''from wetwire_aws.resources.lambda_ import Runtime
+        code = """from wetwire_aws.resources.lambda_ import Runtime
 runtime = Runtime.PYTHON3_12
-'''
+"""
         fixed = fix_code(code, rules=[ExplicitResourceImport()], add_imports=False)
         assert "from wetwire_aws.resources.lambda_" not in fixed
         assert "lambda_.Runtime.PYTHON3_12" in fixed
 
     def test_detects_redundant_module_imports_in_init(self):
         """Should detect redundant module imports in __init__.py with setup_resources."""
-        code = '''from wetwire_aws.loader import setup_resources
+        code = """from wetwire_aws.loader import setup_resources
 from wetwire_aws.resources import ec2, lambda_
 setup_resources(__file__, __name__, globals())
-'''
+"""
         issues = lint_code(code, rules=[ExplicitResourceImport()])
         assert len(issues) == 1
         assert "setup_resources()" in issues[0].message
@@ -425,13 +427,13 @@ class TestLintCodeIntegration:
 
     def test_detects_multiple_issue_types(self):
         """Should detect issues from multiple rules."""
-        code = '''
+        code = """
 from wetwire_aws.intrinsics import Ref
 
 type = "String"
 region = Ref("AWS::Region")
 sse_algorithm = "AES256"
-'''
+"""
         issues = lint_code(code)
         # Should find: STRING, AWS_REGION, ServerSideEncryption.AES256
         assert len(issues) >= 3
@@ -443,9 +445,9 @@ sse_algorithm = "AES256"
 
     def test_fix_code_fixes_all_issues(self):
         """Should fix all detected issues."""
-        code = '''type = "String"
+        code = """type = "String"
 sse_algorithm = "AES256"
-'''
+"""
         fixed = fix_code(code, add_imports=False)
         assert "STRING" in fixed
         assert "s3.ServerSideEncryption.AES256" in fixed
@@ -466,10 +468,10 @@ class TestFixCodeImports:
 
     def test_module_qualified_enums_no_imports_needed(self):
         """Module-qualified enums don't need explicit imports."""
-        code = '''
+        code = """
 sse_algorithm = "AES256"
 status = "Enabled"
-'''
+"""
         fixed = fix_code(code, add_imports=True, rules=[StringShouldBeEnum()])
         # Should NOT add explicit imports - modules available via from . import *
         assert "from wetwire_aws.resources.s3 import" not in fixed
@@ -478,7 +480,7 @@ status = "Enabled"
 
     def test_handles_syntax_errors_gracefully(self):
         """Should return original code for syntax errors."""
-        code = '''this is not valid python'''
+        code = """this is not valid python"""
         issues = lint_code(code)
         assert len(issues) == 0
 
@@ -518,7 +520,7 @@ class TestFileTooLarge:
 
     def test_allows_small_files(self):
         """Should not flag small files."""
-        code = '''from . import *
+        code = """from . import *
 
 @wetwire_aws
 class MyBucket:
@@ -527,13 +529,13 @@ class MyBucket:
 @wetwire_aws
 class MyRole:
     resource: iam.Role
-'''
+"""
         issues = lint_code(code, rules=[FileTooLarge()])
         assert len(issues) == 0
 
     def test_ignores_non_wetwire_classes(self):
         """Should only count @wetwire_aws decorated classes."""
-        code = '''from . import *
+        code = """from . import *
 
 class HelperClass:
     pass
@@ -545,7 +547,7 @@ class DataClass:
 @wetwire_aws
 class MyBucket:
     resource: s3.Bucket
-'''
+"""
         issues = lint_code(code, rules=[FileTooLarge()])
         assert len(issues) == 0
 
@@ -661,8 +663,7 @@ class TestSplittingUtilities:
 
         # Create 20 S3 buckets
         resources = [
-            ResourceInfo(f"Bucket{i}", "AWS::S3::Bucket", set())
-            for i in range(20)
+            ResourceInfo(f"Bucket{i}", "AWS::S3::Bucket", set()) for i in range(20)
         ]
 
         # With max 15, should split into storage1, storage2
@@ -697,7 +698,7 @@ class TestPropertyTypeAsRef:
         """Should detect PolicyDocument wrapper used with ()."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
-        code = '''
+        code = """
 @wetwire_aws
 class MyPolicyDoc:
     resource: PolicyDocument
@@ -707,7 +708,7 @@ class MyPolicyDoc:
 class MyRole:
     resource: iam.Role
     assume_role_policy_document = MyPolicyDoc()
-'''
+"""
         issues = lint_code(code, rules=[PropertyTypeAsRef()])
         assert len(issues) == 1
         assert issues[0].rule_id == "WAW011"
@@ -717,7 +718,7 @@ class MyRole:
         """Should detect PolicyStatement wrapper used with ()."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
-        code = '''
+        code = """
 @wetwire_aws
 class AllowStatement:
     resource: PolicyStatement
@@ -727,7 +728,7 @@ class AllowStatement:
 class MyPolicyDoc:
     resource: PolicyDocument
     statement = [AllowStatement()]
-'''
+"""
         issues = lint_code(code, rules=[PropertyTypeAsRef()])
         assert len(issues) == 1
         assert issues[0].suggestion == "AllowStatement"
@@ -736,7 +737,7 @@ class MyPolicyDoc:
         """Should detect nested PropertyType wrapper (e.g., s3.bucket.BucketEncryption) with ()."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
-        code = '''
+        code = """
 @wetwire_aws
 class MyBucketEncryption:
     resource: s3.bucket.BucketEncryption
@@ -746,7 +747,7 @@ class MyBucketEncryption:
 class MyBucket:
     resource: s3.Bucket
     bucket_encryption = MyBucketEncryption()
-'''
+"""
         issues = lint_code(code, rules=[PropertyTypeAsRef()])
         assert len(issues) == 1
         assert issues[0].suggestion == "MyBucketEncryption"
@@ -755,7 +756,7 @@ class MyBucket:
         """Should not flag resource wrappers (these are valid as class refs)."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
-        code = '''
+        code = """
 @wetwire_aws
 class MyVPC:
     resource: ec2.VPC
@@ -765,7 +766,7 @@ class MyVPC:
 class MySubnet:
     resource: ec2.Subnet
     vpc_id = MyVPC
-'''
+"""
         issues = lint_code(code, rules=[PropertyTypeAsRef()])
         assert len(issues) == 0
 
@@ -773,7 +774,7 @@ class MySubnet:
         """Should not flag PropertyType wrappers that already use no-parens style."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
-        code = '''
+        code = """
 @wetwire_aws
 class MyPolicyDoc:
     resource: PolicyDocument
@@ -783,7 +784,7 @@ class MyPolicyDoc:
 class MyRole:
     resource: iam.Role
     assume_role_policy_document = MyPolicyDoc
-'''
+"""
         issues = lint_code(code, rules=[PropertyTypeAsRef()])
         assert len(issues) == 0
 
@@ -791,7 +792,7 @@ class MyRole:
         """Should detect multiple PropertyType wrappers with () in a list."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
-        code = '''
+        code = """
 @wetwire_aws
 class AllowStatement1:
     resource: PolicyStatement
@@ -806,7 +807,7 @@ class AllowStatement2:
 class MyPolicyDoc:
     resource: PolicyDocument
     statement = [AllowStatement1(), AllowStatement2()]
-'''
+"""
         issues = lint_code(code, rules=[PropertyTypeAsRef()])
         assert len(issues) == 2
         assert issues[0].suggestion == "AllowStatement1"
@@ -816,7 +817,7 @@ class MyPolicyDoc:
         """Should fix by removing () from the wrapper."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
-        code = '''@wetwire_aws
+        code = """@wetwire_aws
 class MyPolicyDoc:
     resource: PolicyDocument
     statement = []
@@ -824,10 +825,12 @@ class MyPolicyDoc:
 @wetwire_aws
 class MyRole:
     resource: iam.Role
-    assume_role_policy_document = MyPolicyDoc()'''
+    assume_role_policy_document = MyPolicyDoc()"""
         fixed = fix_code(code, rules=[PropertyTypeAsRef()], add_imports=False)
-        assert "assume_role_policy_document = MyPolicyDoc\n" in fixed or \
-               fixed.strip().endswith("assume_role_policy_document = MyPolicyDoc")
+        assert (
+            "assume_role_policy_document = MyPolicyDoc\n" in fixed
+            or fixed.strip().endswith("assume_role_policy_document = MyPolicyDoc")
+        )
 
 
 class TestDuplicateResource:
@@ -835,7 +838,7 @@ class TestDuplicateResource:
 
     def test_detects_duplicate_class_names(self):
         """Should detect duplicate @wetwire_aws class names in same file."""
-        code = '''
+        code = """
 @wetwire_aws
 class MyBucket:
     resource: s3.Bucket
@@ -845,7 +848,7 @@ class MyBucket:
 class MyBucket:
     resource: s3.Bucket
     bucket_name = "bucket-2"
-'''
+"""
         issues = lint_code(code, rules=[DuplicateResource()])
         assert len(issues) == 1
         assert issues[0].rule_id == "WAW012"
@@ -854,7 +857,7 @@ class MyBucket:
 
     def test_detects_multiple_duplicates(self):
         """Should detect all duplicate definitions."""
-        code = '''
+        code = """
 @wetwire_aws
 class MyBucket:
     resource: s3.Bucket
@@ -866,13 +869,13 @@ class MyBucket:
 @wetwire_aws
 class MyBucket:
     resource: s3.Bucket
-'''
+"""
         issues = lint_code(code, rules=[DuplicateResource()])
         assert len(issues) == 2  # Two duplicates (first is the original)
 
     def test_ignores_unique_classes(self):
         """Should not flag unique class names."""
-        code = '''
+        code = """
 @wetwire_aws
 class MyBucket:
     resource: s3.Bucket
@@ -884,26 +887,26 @@ class MyVPC:
 @wetwire_aws
 class MyRole:
     resource: iam.Role
-'''
+"""
         issues = lint_code(code, rules=[DuplicateResource()])
         assert len(issues) == 0
 
     def test_ignores_non_wetwire_classes(self):
         """Should not flag non-wetwire_aws classes with same name."""
-        code = '''
+        code = """
 class MyBucket:
     pass
 
 @wetwire_aws
 class MyBucket:
     resource: s3.Bucket
-'''
+"""
         issues = lint_code(code, rules=[DuplicateResource()])
         assert len(issues) == 0
 
     def test_reports_correct_line_numbers(self):
         """Should report correct line numbers for duplicate definitions."""
-        code = '''
+        code = """
 @wetwire_aws
 class MyBucket:
     resource: s3.Bucket
@@ -915,7 +918,7 @@ class OtherResource:
 @wetwire_aws
 class MyBucket:
     resource: s3.Bucket
-'''
+"""
         issues = lint_code(code, rules=[DuplicateResource()])
         assert len(issues) == 1
         assert issues[0].line == 11  # Line of second MyBucket definition

@@ -320,52 +320,54 @@ def setup_params(package_globals: dict[str, Any]) -> None:
     )
 
     # Inject into package globals
-    package_globals.update({
-        # Decorator
-        "wetwire_aws": wetwire_aws,
-        # Template components
-        "Parameter": Parameter,
-        "Output": Output,
-        "Mapping": Mapping,
-        "TemplateCondition": TemplateCondition,
-        # Policy helpers
-        "PolicyStatement": PolicyStatement,
-        "DenyStatement": DenyStatement,
-        "PolicyDocument": PolicyDocument,
-        # Parameter type constants
-        "STRING": STRING,
-        "NUMBER": NUMBER,
-        "LIST_NUMBER": LIST_NUMBER,
-        "COMMA_DELIMITED_LIST": COMMA_DELIMITED_LIST,
-        "SSM_PARAMETER_STRING": SSM_PARAMETER_STRING,
-        "SSM_PARAMETER_STRING_LIST": SSM_PARAMETER_STRING_LIST,
-        "AVAILABILITY_ZONE": AVAILABILITY_ZONE,
-        "LIST_AVAILABILITY_ZONE": LIST_AVAILABILITY_ZONE,
-        "AMI_ID": AMI_ID,
-        "INSTANCE_ID": INSTANCE_ID,
-        "KEY_PAIR": KEY_PAIR,
-        "SECURITY_GROUP_ID": SECURITY_GROUP_ID,
-        "LIST_SECURITY_GROUP_ID": LIST_SECURITY_GROUP_ID,
-        "SUBNET_ID": SUBNET_ID,
-        "LIST_SUBNET_ID": LIST_SUBNET_ID,
-        "VPC_ID": VPC_ID,
-        "VOLUME_ID": VOLUME_ID,
-        "HOSTED_ZONE_ID": HOSTED_ZONE_ID,
-        # Condition intrinsics
-        "Equals": Equals,
-        "Not": Not,
-        "And": And,
-        "Or": Or,
-        "If": If,
-        "Condition": ConditionIntrinsic,
-        # Reference helper for parameter refs in conditions
-        "ref": ref,
-        # Pseudo-parameters
-        "AWS_REGION": AWS_REGION,
-        "AWS_ACCOUNT_ID": AWS_ACCOUNT_ID,
-        "AWS_STACK_NAME": AWS_STACK_NAME,
-        "AWS_NO_VALUE": AWS_NO_VALUE,
-    })
+    package_globals.update(
+        {
+            # Decorator
+            "wetwire_aws": wetwire_aws,
+            # Template components
+            "Parameter": Parameter,
+            "Output": Output,
+            "Mapping": Mapping,
+            "TemplateCondition": TemplateCondition,
+            # Policy helpers
+            "PolicyStatement": PolicyStatement,
+            "DenyStatement": DenyStatement,
+            "PolicyDocument": PolicyDocument,
+            # Parameter type constants
+            "STRING": STRING,
+            "NUMBER": NUMBER,
+            "LIST_NUMBER": LIST_NUMBER,
+            "COMMA_DELIMITED_LIST": COMMA_DELIMITED_LIST,
+            "SSM_PARAMETER_STRING": SSM_PARAMETER_STRING,
+            "SSM_PARAMETER_STRING_LIST": SSM_PARAMETER_STRING_LIST,
+            "AVAILABILITY_ZONE": AVAILABILITY_ZONE,
+            "LIST_AVAILABILITY_ZONE": LIST_AVAILABILITY_ZONE,
+            "AMI_ID": AMI_ID,
+            "INSTANCE_ID": INSTANCE_ID,
+            "KEY_PAIR": KEY_PAIR,
+            "SECURITY_GROUP_ID": SECURITY_GROUP_ID,
+            "LIST_SECURITY_GROUP_ID": LIST_SECURITY_GROUP_ID,
+            "SUBNET_ID": SUBNET_ID,
+            "LIST_SUBNET_ID": LIST_SUBNET_ID,
+            "VPC_ID": VPC_ID,
+            "VOLUME_ID": VOLUME_ID,
+            "HOSTED_ZONE_ID": HOSTED_ZONE_ID,
+            # Condition intrinsics
+            "Equals": Equals,
+            "Not": Not,
+            "And": And,
+            "Or": Or,
+            "If": If,
+            "Condition": ConditionIntrinsic,
+            # Reference helper for parameter refs in conditions
+            "ref": ref,
+            # Pseudo-parameters
+            "AWS_REGION": AWS_REGION,
+            "AWS_ACCOUNT_ID": AWS_ACCOUNT_ID,
+            "AWS_STACK_NAME": AWS_STACK_NAME,
+            "AWS_NO_VALUE": AWS_NO_VALUE,
+        }
+    )
 
 
 def _auto_decorate_resources(package_globals: dict[str, Any]) -> None:

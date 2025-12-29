@@ -24,8 +24,13 @@ class TestLintCommand:
     def test_lint_missing_path(self, tmp_path):
         """Lint fails gracefully for missing path."""
         result = subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "lint",
-             str(tmp_path / "nonexistent")],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "lint",
+                str(tmp_path / "nonexistent"),
+            ],
             capture_output=True,
             text=True,
         )
@@ -116,8 +121,14 @@ class TestLintCommand:
         test_file.write_text('"""Clean code."""\n')
 
         result = subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "lint",
-             str(test_file), "--verbose"],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "lint",
+                str(test_file),
+                "--verbose",
+            ],
             capture_output=True,
             text=True,
         )

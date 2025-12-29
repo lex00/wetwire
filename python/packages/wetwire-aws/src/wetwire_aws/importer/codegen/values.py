@@ -187,7 +187,7 @@ def intrinsic_to_python(
         if logical_id in ctx.template.resources:
             # Use no-parens pattern: ClassName.Attr
             # setup_resources() handles forward refs via placeholders
-            return f'{_format_ref_target(logical_id)}.{attr}'
+            return f"{_format_ref_target(logical_id)}.{attr}"
         ctx.add_intrinsic_import("GetAtt")
         return f'GetAtt("{logical_id}", "{attr}")'
 
@@ -209,7 +209,7 @@ def intrinsic_to_python(
                     formatted_id = _format_ref_target(resource_id)
                     if suffix == "":
                         # Use no-parens pattern: ClassName.Arn
-                        return f'{formatted_id}.Arn'
+                        return f"{formatted_id}.Arn"
                     else:
                         # Join with .Arn suffix
                         ctx.add_intrinsic_import("Join")

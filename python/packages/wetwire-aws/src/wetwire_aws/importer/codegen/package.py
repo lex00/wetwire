@@ -556,7 +556,9 @@ def _generate_resource_files(
         resource_class = generate_resource_class(resource, ctx)
         resource_classes[resource_id] = resource_class
         pkg_ctx.resources_exports.add(resource_id)
-        resource_wrappers[resource_id] = ctx.property_type_class_defs[wrapper_start_idx:]
+        resource_wrappers[resource_id] = ctx.property_type_class_defs[
+            wrapper_start_idx:
+        ]
 
     ctx.current_resource_file = None
 
