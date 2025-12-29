@@ -34,8 +34,8 @@ from .context import (
 from .helpers import get_resource_category, sanitize_class_name
 from .imports import generate_imports
 from .topology import (
+    find_resource_dependencies,
     find_strongly_connected_components,
-    order_scc_resources,
     topological_sort,
 )
 from .values import escape_string
@@ -97,10 +97,20 @@ def generate_code(
 
     # Resources (in dependency order)
     sorted_resources = topological_sort(template)
+    resource_classes = []
     for resource_id in sorted_resources:
         resource = template.resources[resource_id]
         resource_class = generate_resource_class(resource, ctx)
-        class_sections.append(resource_class)
+        resource_classes.append(resource_class)
+
+    # Add PropertyType wrapper classes (generated during resource class generation)
+    # They go before the resource classes that use them
+    for pt_class_def in ctx.property_type_class_defs:
+        class_sections.append(pt_class_def)
+    ctx.property_type_class_defs.clear()
+
+    # Now add resource classes
+    class_sections.extend(resource_classes)
 
     # Outputs
     for output in template.outputs.values():
@@ -227,7 +237,11 @@ if __name__ == "__main__":
 
 
 def _generate_init_py(pkg_ctx: PackageContext, template: IRTemplate) -> str:
-    """Generate __init__.py with centralized imports and setup_resources."""
+    """Generate __init__.py with setup_params() and setup_resources().
+
+    The __init__.py uses setup_params() to inject all types needed by params.py,
+    then calls setup_resources() which loads resource files in dependency order.
+    """
     lines = []
 
     # Docstring
@@ -241,125 +255,26 @@ def _generate_init_py(pkg_ctx: PackageContext, template: IRTemplate) -> str:
 
     lines.append("")
 
-    ctx = pkg_ctx.codegen_ctx
-
-    # Core imports (always needed for params.py, resources, etc.)
-    # Note: Condition is imported as TemplateCondition to avoid conflict with intrinsic
-    core_imports = [
-        # Template building
-        "CloudFormationTemplate",
-        "Condition as TemplateCondition",  # For params.py conditions
-        "Mapping",  # For params.py mappings
-        "Output",  # For outputs.py
-        "Parameter",  # For params.py parameters
-        "get_att",
-        "ref",
-        "wetwire_aws",
-        # Parameter type constants
-        "AMI_ID",
-        "AVAILABILITY_ZONE",
-        "COMMA_DELIMITED_LIST",
-        "HOSTED_ZONE_ID",
-        "INSTANCE_ID",
-        "KEY_PAIR",
-        "LIST_AVAILABILITY_ZONE",
-        "LIST_NUMBER",
-        "LIST_SECURITY_GROUP_ID",
-        "LIST_SUBNET_ID",
-        "NUMBER",
-        "SECURITY_GROUP_ID",
-        "SSM_PARAMETER_STRING",
-        "SSM_PARAMETER_STRING_LIST",
-        "STRING",
-        "SUBNET_ID",
-        "VOLUME_ID",
-        "VPC_ID",
-    ]
-    lines.append("from wetwire_aws import (")
-    for name in core_imports:
-        lines.append(f"    {name},")
-
-    # Add intrinsic functions used by the template
-    if ctx.intrinsic_imports:
-        for name in sorted(ctx.intrinsic_imports):
-            lines.append(f"    {name},")
-
-    # Also add pseudo-parameters that may be used
-    pseudo_params = {
-        "AWS_ACCOUNT_ID",
-        "AWS_REGION",
-        "AWS_STACK_NAME",
-        "AWS_STACK_ID",
-        "AWS_PARTITION",
-        "AWS_URL_SUFFIX",
-        "AWS_NO_VALUE",
-        "AWS_NOTIFICATION_ARNS",
-    }
-    for name in sorted(pseudo_params):
-        lines.append(f"    {name},")
-
-    lines.append(")")
-
-    # setup_resources import
-    lines.append("from wetwire_aws.loader import setup_resources")
+    # Minimal imports - just the setup functions
+    lines.append("from wetwire_aws.loader import setup_params, setup_resources")
     lines.append("")
 
-    # Resource module imports
-    resource_modules = set()
-    for mod, names in ctx.imports.items():
-        if mod == "wetwire_aws.resources":
-            # Direct module import: ec2, s3, etc.
-            resource_modules.update(names)
-        elif mod.startswith("wetwire_aws.resources."):
-            # Class import from module - extract module name
-            resource_modules.add(mod.split(".")[-1])
+    # Inject types needed by params.py
+    lines.append("setup_params(globals())")
+    lines.append("")
 
-    if resource_modules:
-        sorted_modules = sorted(resource_modules)
-        lines.append(f"from wetwire_aws.resources import {', '.join(sorted_modules)}")
-        lines.append("")
-
-    # Import params
+    # Import params (now works because setup_params injected everything)
     lines.append("from .params import *  # noqa: F403, F401")
     lines.append("")
 
-    # Setup resources
-    lines.append("# Auto-discover and import resource files in topological order")
+    # Setup resources - loads resource files and injects remaining types
     lines.append("setup_resources(__file__, __name__, globals())")
     lines.append("")
 
-    # Import outputs
+    # Import outputs after resources are loaded
     if template.outputs:
-        lines.append("# Import outputs after resources")
         lines.append("from .outputs import *  # noqa: F403, F401")
         lines.append("")
-
-    # Collect names for __all__
-    all_names: list[str] = ["wetwire_aws", "ref", "get_att", "CloudFormationTemplate"]
-    all_names.extend(sorted(resource_modules))
-
-    # Add config names
-    for param in template.parameters.values():
-        all_names.append(sanitize_class_name(param.logical_id))
-    for mapping in template.mappings.values():
-        all_names.append(f"{sanitize_class_name(mapping.logical_id)}Mapping")
-    for condition in template.conditions.values():
-        all_names.append(f"{sanitize_class_name(condition.logical_id)}Condition")
-
-    # Add resource names
-    for resource in template.resources.values():
-        all_names.append(sanitize_class_name(resource.logical_id))
-
-    # Add output names
-    for output in template.outputs.values():
-        all_names.append(f"{sanitize_class_name(output.logical_id)}Output")
-
-    all_names = sorted(set(all_names))
-
-    lines.append("__all__ = [")
-    for name in all_names:
-        lines.append(f'    "{name}",')
-    lines.append("]")
 
     return "\n".join(lines) + "\n"
 
@@ -449,10 +364,58 @@ def _generate_outputs_py(pkg_ctx: PackageContext, template: IRTemplate) -> str |
 # =============================================================================
 
 
+def _find_file_cycle(file_deps: dict[str, set[str]]) -> list[str] | None:
+    """Detect cycles in file-level dependency graph using DFS.
+
+    Args:
+        file_deps: Dict mapping file name -> set of file names it depends on.
+
+    Returns:
+        List of file names forming a cycle, or None if no cycle found.
+    """
+    visited: set[str] = set()
+    rec_stack: set[str] = set()  # Tracks nodes in current recursion path
+    path: list[str] = []
+
+    def dfs(node: str) -> list[str] | None:
+        visited.add(node)
+        rec_stack.add(node)
+        path.append(node)
+
+        for neighbor in file_deps.get(node, set()):
+            if neighbor not in visited:
+                result = dfs(neighbor)
+                if result:
+                    return result
+            elif neighbor in rec_stack:
+                # Found cycle - return the cycle portion
+                cycle_start = path.index(neighbor)
+                return path[cycle_start:]
+
+        path.pop()
+        rec_stack.remove(node)
+        return None
+
+    # Try DFS from each unvisited node
+    for node in file_deps:
+        if node not in visited:
+            result = dfs(node)
+            if result:
+                return result
+
+    return None
+
+
 def _generate_resource_files(
     pkg_ctx: PackageContext, template: IRTemplate
 ) -> dict[str, str]:
-    """Generate resource files."""
+    """Generate resource files.
+
+    With two-pass loading and placeholder support in dataclass-dsl, forward
+    references within the same file are handled automatically. We still use
+    SCCs to group tightly-coupled resources together in main.py, but ordering
+    within files is no longer required for correctness.
+    """
     files = {}
     ctx = pkg_ctx.codegen_ctx
 
@@ -463,32 +426,10 @@ def _generate_resource_files(
         for resource_id in scc:
             resource_to_scc[resource_id] = scc_idx
 
-    scc_orderings: dict[int, list[str]] = {}
-    for scc_idx, scc in enumerate(sccs):
-        if len(scc) > 1:
-            scc_orderings[scc_idx] = order_scc_resources(scc, template)
-
     sorted_resources = topological_sort(template)
-    resource_classes: dict[str, str] = {}
 
-    for resource_id in sorted_resources:
-        resource = template.resources[resource_id]
-
-        scc_idx = resource_to_scc[resource_id]
-        if scc_idx in scc_orderings:
-            ordered_scc = scc_orderings[scc_idx]
-            resource_pos = ordered_scc.index(resource_id)
-            ctx.forward_references = set(ordered_scc[resource_pos + 1 :])
-        else:
-            ctx.forward_references = set()
-
-        resource_class = generate_resource_class(resource, ctx)
-        resource_classes[resource_id] = resource_class
-        pkg_ctx.resources_exports.add(resource_id)
-
-    ctx.forward_references = set()
-
-    # Group resources
+    # First: categorize resources into files BEFORE generating code
+    # This allows the code generator to know which file each resource is in
     main_py_resources: list[str] = []
     separate_files: dict[str, list[str]] = {}
     generated_sccs: set[int] = set()
@@ -502,7 +443,8 @@ def _generate_resource_files(
         scc = sccs[scc_idx]
 
         if len(scc) > 1:
-            main_py_resources.extend(scc_orderings[scc_idx])
+            # Multi-resource SCCs go to main.py to keep cycles together
+            main_py_resources.extend(scc)
         else:
             resource = template.resources[resource_id]
             category = get_resource_category(resource)
@@ -512,6 +454,115 @@ def _generate_resource_files(
                 if category not in separate_files:
                     separate_files[category] = []
                 separate_files[category].append(resource_id)
+
+    # Build resource -> file mapping
+    resource_to_file: dict[str, str] = {}
+    for rid in main_py_resources:
+        resource_to_file[rid] = "main"
+    for category, rids in separate_files.items():
+        for rid in rids:
+            resource_to_file[rid] = category
+
+    # Build resource dependency graph for cycle detection
+    name_pattern_map = ctx.name_pattern_map
+    arn_pattern_map = ctx.arn_pattern_map
+    all_resource_deps: dict[str, set[str]] = {}
+    for rid in sorted_resources:
+        deps = find_resource_dependencies(
+            template, rid, name_pattern_map, arn_pattern_map
+        )
+        all_resource_deps[rid] = deps
+
+    # Detect and break file-level cycles by moving minimal resources to main.py
+    # File-level cycles break the loader's topological sort
+    for _ in range(len(separate_files) * 2 + 1):
+        # Build file dependency graph and track which resources create cross-file deps
+        file_deps: dict[str, set[str]] = {"main": set()}
+        # Track resources that create each cross-file edge: (from_file, to_file) -> [resources]
+        cross_file_resources: dict[tuple[str, str], list[str]] = {}
+
+        for cat in separate_files:
+            file_deps[cat] = set()
+
+        for rid, deps in all_resource_deps.items():
+            rid_file = resource_to_file.get(rid, "main")
+            for dep in deps:
+                dep_file = resource_to_file.get(dep, "main")
+                if dep_file != rid_file:
+                    file_deps[rid_file].add(dep_file)
+                    edge = (rid_file, dep_file)
+                    if edge not in cross_file_resources:
+                        cross_file_resources[edge] = []
+                    cross_file_resources[edge].append(rid)
+
+        # Check for cycle
+        cycle = _find_file_cycle(file_deps)
+        if not cycle:
+            break
+
+        # Find the minimal set of resources to move to break the cycle
+        # Look for edges within the cycle and move resources from the smaller side
+        cycle_set = set(cycle)
+        best_resources_to_move: list[str] = []
+        best_count = float("inf")
+
+        for i, file_a in enumerate(cycle):
+            file_b = cycle[(i + 1) % len(cycle)]
+            # Edge from file_a to file_b
+            edge_ab = (file_a, file_b)
+            resources_ab = cross_file_resources.get(edge_ab, [])
+
+            # Moving these resources breaks the A→B edge
+            if resources_ab and len(resources_ab) < best_count:
+                best_count = len(resources_ab)
+                best_resources_to_move = resources_ab
+
+        if not best_resources_to_move:
+            # Fallback: merge smallest file in cycle into main.py
+            smallest_file = min(
+                (f for f in cycle if f != "main" and f in separate_files),
+                key=lambda f: len(separate_files.get(f, [])),
+                default=None,
+            )
+            if smallest_file:
+                for rid in separate_files[smallest_file]:
+                    main_py_resources.append(rid)
+                    resource_to_file[rid] = "main"
+                del separate_files[smallest_file]
+        else:
+            # Move only the resources that create the cross-file edge
+            for rid in best_resources_to_move:
+                if resource_to_file.get(rid) == "main":
+                    # Already in main, skip
+                    continue
+                old_file = resource_to_file.get(rid)
+                if old_file and old_file in separate_files:
+                    if rid in separate_files[old_file]:
+                        separate_files[old_file].remove(rid)
+                    if not separate_files[old_file]:
+                        del separate_files[old_file]
+                main_py_resources.append(rid)
+                resource_to_file[rid] = "main"
+
+    ctx.resource_to_file = resource_to_file
+
+    # Now generate resource classes with file info available
+    # Forward references within the same file are handled by placeholder support
+    # in dataclass-dsl's two-pass loading
+    resource_classes: dict[str, str] = {}
+    resource_wrappers: dict[str, list[str]] = {}
+
+    for resource_id in sorted_resources:
+        resource = template.resources[resource_id]
+        ctx.current_resource_file = resource_to_file.get(resource_id)
+
+        wrapper_start_idx = len(ctx.property_type_class_defs)
+        resource_class = generate_resource_class(resource, ctx)
+        resource_classes[resource_id] = resource_class
+        pkg_ctx.resources_exports.add(resource_id)
+        resource_wrappers[resource_id] = ctx.property_type_class_defs[wrapper_start_idx:]
+
+    ctx.current_resource_file = None
 
     # Re-sort
     topo_order = {rid: idx for idx, rid in enumerate(sorted_resources)}
@@ -528,7 +579,14 @@ def _generate_resource_files(
         lines.append("")
         lines.append("")
 
+        # Interleave PropertyType wrappers with their resources
+        # Order: wrappers for ResourceA, ResourceA, wrappers for ResourceB, ResourceB
+        # This ensures wrappers can reference earlier resources with bare class names
         for res_id in main_py_resources:
+            for pt_class_def in resource_wrappers.get(res_id, []):
+                lines.append(pt_class_def)
+                lines.append("")
+                lines.append("")
             resource_class = resource_classes[res_id]
             lines.append(resource_class)
             lines.append("")
@@ -538,6 +596,9 @@ def _generate_resource_files(
             lines.pop()
 
         files["main.py"] = "\n".join(lines) + "\n"
+
+    # Clear property_type_class_defs (no longer needed)
+    ctx.property_type_class_defs.clear()
 
     # Generate category files
     for filename, resource_ids in separate_files.items():
@@ -549,7 +610,12 @@ def _generate_resource_files(
         lines.append("")
         lines.append("")
 
+        # Interleave PropertyType wrappers with their resources
         for res_id in resource_ids:
+            for pt_class_def in resource_wrappers.get(res_id, []):
+                lines.append(pt_class_def)
+                lines.append("")
+                lines.append("")
             resource_class = resource_classes[res_id]
             lines.append(resource_class)
             lines.append("")

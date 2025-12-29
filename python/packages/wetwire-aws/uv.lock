@@ -259,11 +259,11 @@ toml = [
 
 [[package]]
 name = "dataclass-dsl"
-version = "0.1.0"
+version = "0.1.2"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/5f/67/4ae974bdf4f8ab1e3ffb30eec600cc59332816ed859f8cee23a1fe2d2d62/dataclass_dsl-0.1.0.tar.gz", hash = "sha256:01bf67cd8da3265618523f69017923bdbf6da9dd03432232cb399dc41bebf400", size = 39991 }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/bf/1e0a0f3d9f06a166dc9d1bcadace183f8fe014b22359c3c012326b831b5e/dataclass_dsl-0.1.2.tar.gz", hash = "sha256:f24fcb2bd794f43ffed6024e93442910d6da70f86de2342556ef822111cda68c", size = 40895 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/60/b5/997db2876e7a1e23bb318e03252a9d66dd4c7b0d0f38406cbb3941d218b8/dataclass_dsl-0.1.0-py3-none-any.whl", hash = "sha256:74d7f228ec7ca60af0b1b5383f3c7d48e599ee8da44bc9794fd2215f8927bdf7", size = 34401 },
+    { url = "https://files.pythonhosted.org/packages/9b/77/60cb6658ccec2941ab5840dd8332225cce0e06c553d9232fab88dc99ce21/dataclass_dsl-0.1.2-py3-none-any.whl", hash = "sha256:7a17aac3dd2c8c875d4ec7180b1380d5c96e8ac71a0e30846dd1046c29385b0d", size = 35226 },
 ]
 
 [[package]]
@@ -848,7 +848,7 @@ wheels = [
 
 [[package]]
 name = "wetwire-aws"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "dataclass-dsl" },

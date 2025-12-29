@@ -92,9 +92,9 @@ class TestLintCommand:
         assert "ServerSideEncryption.AES256" in content
         assert '"AES256"' not in content
 
-    def test_lint_fix_adds_imports(self, tmp_path):
-        """Lint --fix adds required imports."""
-        test_file = tmp_path / "needs_import.py"
+    def test_lint_fix_uses_module_qualified_names(self, tmp_path):
+        """Lint --fix uses module-qualified enum names (no import needed)."""
+        test_file = tmp_path / "needs_fix.py"
         test_file.write_text('sse_algorithm = "AES256"\n')
 
         result = subprocess.run(
@@ -105,7 +105,10 @@ class TestLintCommand:
         assert result.returncode == 0
 
         content = test_file.read_text()
-        assert "from wetwire_aws.resources.s3 import ServerSideEncryption" in content
+        # Should use module-qualified name, not import statement
+        assert "s3.ServerSideEncryption.AES256" in content
+        # No import statement should be added (setup_resources provides s3 module)
+        assert "from wetwire_aws.resources.s3 import" not in content
 
     def test_lint_verbose(self, tmp_path):
         """Lint --verbose shows extra output."""

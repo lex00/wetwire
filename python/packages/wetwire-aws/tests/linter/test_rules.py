@@ -11,6 +11,9 @@ from wetwire_aws.linter import (
     StringShouldBeEnum,
     DictShouldBeIntrinsic,
     UnnecessaryToDict,
+    RefShouldBeNoParens,
+    ExplicitResourceImport,
+    FileTooLarge,
 )
 
 
@@ -124,50 +127,50 @@ class TestStringShouldBeEnum:
     """Tests for WAW003: string literals that should be enums."""
 
     def test_detects_sse_algorithm_aes256(self):
-        """Should detect sse_algorithm = 'AES256'."""
+        """Should detect sse_algorithm = 'AES256' and suggest module-qualified name."""
         code = '''
 sse_algorithm = "AES256"
 '''
         issues = lint_code(code, rules=[StringShouldBeEnum()])
         assert len(issues) == 1
         assert issues[0].rule_id == "WAW003"
-        assert "ServerSideEncryption.AES256" in issues[0].suggestion
+        assert issues[0].suggestion == "s3.ServerSideEncryption.AES256"
 
     def test_detects_sse_algorithm_aws_kms(self):
-        """Should detect sse_algorithm = 'aws:kms'."""
+        """Should detect sse_algorithm = 'aws:kms' and suggest module-qualified name."""
         code = '''
 sse_algorithm = "aws:kms"
 '''
         issues = lint_code(code, rules=[StringShouldBeEnum()])
         assert len(issues) == 1
-        assert "ServerSideEncryption.AWSKMS" in issues[0].suggestion
+        assert issues[0].suggestion == "s3.ServerSideEncryption.AWSKMS"
 
     def test_detects_dynamodb_key_type(self):
-        """Should detect DynamoDB key_type = 'HASH'."""
+        """Should detect DynamoDB key_type = 'HASH' and suggest module-qualified name."""
         code = '''
 key_type = "HASH"
 '''
         issues = lint_code(code, rules=[StringShouldBeEnum()])
         assert len(issues) == 1
-        assert "KeyType.HASH" in issues[0].suggestion
+        assert issues[0].suggestion == "dynamodb.KeyType.HASH"
 
     def test_detects_dynamodb_attribute_type(self):
-        """Should detect DynamoDB attribute_type = 'S'."""
+        """Should detect DynamoDB attribute_type = 'S' and suggest module-qualified name."""
         code = '''
 attribute_type = "S"
 '''
         issues = lint_code(code, rules=[StringShouldBeEnum()])
         assert len(issues) == 1
-        assert "AttributeType.S" in issues[0].suggestion
+        assert issues[0].suggestion == "dynamodb.ScalarAttributeType.S"
 
     def test_detects_enum_in_kwargs(self):
-        """Should detect enum values in keyword arguments."""
+        """Should detect enum values in keyword arguments with module-qualified name."""
         code = '''
 encryption = ServerSideEncryptionByDefault(sse_algorithm="AES256")
 '''
         issues = lint_code(code, rules=[StringShouldBeEnum()])
         assert len(issues) == 1
-        assert "ServerSideEncryption.AES256" in issues[0].suggestion
+        assert issues[0].suggestion == "s3.ServerSideEncryption.AES256"
 
     def test_ignores_unknown_field_names(self):
         """Should not flag unknown field names."""
@@ -186,10 +189,10 @@ sse_algorithm = "UNKNOWN_VALUE"
         assert len(issues) == 0
 
     def test_fix_replaces_enum_value(self):
-        """Should replace string with enum constant."""
+        """Should replace string with module-qualified enum constant."""
         code = '''sse_algorithm = "AES256"'''
         fixed = fix_code(code, rules=[StringShouldBeEnum()], add_imports=False)
-        assert "ServerSideEncryption.AES256" in fixed
+        assert "s3.ServerSideEncryption.AES256" in fixed
         assert '"AES256"' not in fixed
 
 
@@ -264,6 +267,158 @@ value = some_object.to_dict()
         assert len(issues) == 0
 
 
+class TestRefShouldBeNoParens:
+    """Tests for WAW006: ref()/get_att() should use no-parens style."""
+
+    def test_detects_ref_with_class_name(self):
+        """Should detect ref(VPC) -> VPC."""
+        code = '''
+vpc_id = ref(VPC)
+'''
+        issues = lint_code(code, rules=[RefShouldBeNoParens()])
+        assert len(issues) == 1
+        assert issues[0].rule_id == "WAW006"
+        assert issues[0].suggestion == "VPC"
+
+    def test_ignores_ref_with_string(self):
+        """Should ignore ref("VPC") - string literals are forward references."""
+        code = '''
+vpc_id = ref("VPC")
+'''
+        issues = lint_code(code, rules=[RefShouldBeNoParens()])
+        # String literals are forward references and should not be flagged
+        assert len(issues) == 0
+
+    def test_detects_get_att_with_class_and_string(self):
+        """Should detect get_att(MyRole, "Arn") -> MyRole.Arn."""
+        code = '''
+role_arn = get_att(MyRole, "Arn")
+'''
+        issues = lint_code(code, rules=[RefShouldBeNoParens()])
+        assert len(issues) == 1
+        assert issues[0].suggestion == "MyRole.Arn"
+
+    def test_ignores_get_att_with_string_target(self):
+        """Should ignore get_att("MyRole", "Arn") - string literals are forward references."""
+        code = '''
+role_arn = get_att("MyRole", "Arn")
+'''
+        issues = lint_code(code, rules=[RefShouldBeNoParens()])
+        # String literals are forward references and should not be flagged
+        assert len(issues) == 0
+
+    def test_detects_get_att_with_constant(self):
+        """Should detect get_att(MyRole, ARN) -> MyRole.ARN."""
+        code = '''
+role_arn = get_att(MyRole, ARN)
+'''
+        issues = lint_code(code, rules=[RefShouldBeNoParens()])
+        assert len(issues) == 1
+        assert issues[0].suggestion == "MyRole.ARN"
+
+    def test_detects_multiple_refs(self):
+        """Should detect multiple ref() calls."""
+        code = '''
+vpc_id = ref(VPC)
+subnet_id = ref(Subnet)
+'''
+        issues = lint_code(code, rules=[RefShouldBeNoParens()])
+        assert len(issues) == 2
+
+    def test_fix_replaces_ref(self):
+        """Should replace ref(VPC) with VPC."""
+        code = '''vpc_id = ref(VPC)'''
+        fixed = fix_code(code, rules=[RefShouldBeNoParens()], add_imports=False)
+        assert "vpc_id = VPC" in fixed
+        assert "ref(VPC)" not in fixed
+
+    def test_fix_replaces_get_att(self):
+        """Should replace get_att(MyRole, "Arn") with MyRole.Arn."""
+        code = '''role_arn = get_att(MyRole, "Arn")'''
+        fixed = fix_code(code, rules=[RefShouldBeNoParens()], add_imports=False)
+        assert "role_arn = MyRole.Arn" in fixed
+        assert "get_att(" not in fixed
+
+
+class TestExplicitResourceImport:
+    """Tests for WAW007: explicit resource imports."""
+
+    def test_detects_lambda_runtime_import(self):
+        """Should detect from wetwire_aws.resources.lambda_ import Runtime."""
+        code = '''
+from wetwire_aws.resources.lambda_ import Runtime
+'''
+        issues = lint_code(code, rules=[ExplicitResourceImport()])
+        assert len(issues) == 1
+        assert issues[0].rule_id == "WAW007"
+        assert "Remove explicit resource import" in issues[0].message
+
+    def test_detects_s3_enum_import(self):
+        """Should detect from wetwire_aws.resources.s3 import ServerSideEncryption."""
+        code = '''
+from wetwire_aws.resources.s3 import ServerSideEncryption
+'''
+        issues = lint_code(code, rules=[ExplicitResourceImport()])
+        assert len(issues) == 1
+        assert "Remove explicit resource import" in issues[0].message
+
+    def test_detects_multiple_imports_same_line(self):
+        """Should detect one issue per import line (not per imported name)."""
+        code = '''
+from wetwire_aws.resources.lambda_ import Runtime, Architecture
+'''
+        issues = lint_code(code, rules=[ExplicitResourceImport()])
+        # Now only 1 issue per import line
+        assert len(issues) == 1
+
+    def test_ignores_non_resource_imports(self):
+        """Should not flag imports from wetwire_aws (not wetwire_aws.resources)."""
+        code = '''
+from wetwire_aws import wetwire_aws
+from wetwire_aws.intrinsics import Sub
+'''
+        issues = lint_code(code, rules=[ExplicitResourceImport()])
+        assert len(issues) == 0
+
+    def test_fix_removes_import_line(self):
+        """Should remove the explicit import line."""
+        code = '''from wetwire_aws.resources.lambda_ import Runtime'''
+        fixed = fix_code(code, rules=[ExplicitResourceImport()], add_imports=False)
+        assert "from wetwire_aws.resources.lambda_" not in fixed
+
+    def test_qualifies_usages_of_imported_names(self):
+        """Should qualify usages like Runtime.PYTHON3_12 -> lambda_.Runtime.PYTHON3_12."""
+        code = '''from wetwire_aws.resources.lambda_ import Runtime
+runtime = Runtime.PYTHON3_12
+'''
+        issues = lint_code(code, rules=[ExplicitResourceImport()])
+        # Should have 2 issues: 1 for import, 1 for usage
+        assert len(issues) == 2
+        # Filter for usage issues (ones that have a non-empty suggestion)
+        usage_issues = [i for i in issues if i.suggestion and "lambda_.Runtime" in i.suggestion]
+        assert len(usage_issues) == 1
+        assert usage_issues[0].suggestion == "lambda_.Runtime.PYTHON3_12"
+
+    def test_fix_qualifies_and_removes_import(self):
+        """Should both remove import and qualify usages."""
+        code = '''from wetwire_aws.resources.lambda_ import Runtime
+runtime = Runtime.PYTHON3_12
+'''
+        fixed = fix_code(code, rules=[ExplicitResourceImport()], add_imports=False)
+        assert "from wetwire_aws.resources.lambda_" not in fixed
+        assert "lambda_.Runtime.PYTHON3_12" in fixed
+
+    def test_detects_redundant_module_imports_in_init(self):
+        """Should detect redundant module imports in __init__.py with setup_resources."""
+        code = '''from wetwire_aws.loader import setup_resources
+from wetwire_aws.resources import ec2, lambda_
+setup_resources(__file__, __name__, globals())
+'''
+        issues = lint_code(code, rules=[ExplicitResourceImport()])
+        assert len(issues) == 1
+        assert "setup_resources()" in issues[0].message
+
+
 class TestLintCodeIntegration:
     """Integration tests for lint_code with multiple rules."""
 
@@ -292,41 +447,33 @@ sse_algorithm = "AES256"
 '''
         fixed = fix_code(code, add_imports=False)
         assert "STRING" in fixed
-        assert "ServerSideEncryption.AES256" in fixed
+        assert "s3.ServerSideEncryption.AES256" in fixed
         assert '"String"' not in fixed
         assert '"AES256"' not in fixed
 
-    def test_fix_code_adds_imports(self):
-        """Should add required imports."""
+    def test_fix_code_no_imports_needed_for_module_qualified(self):
+        """Module-qualified enums don't need imports (modules available via from . import *)."""
         code = '''sse_algorithm = "AES256"'''
         fixed = fix_code(code, add_imports=True)
-        assert "from wetwire_aws.resources.s3 import ServerSideEncryption" in fixed
-        assert "ServerSideEncryption.AES256" in fixed
+        # No explicit import added because s3.ServerSideEncryption.AES256 uses module-qualified name
+        assert "from wetwire_aws.resources.s3 import" not in fixed
+        assert "s3.ServerSideEncryption.AES256" in fixed
 
 
 class TestFixCodeImports:
     """Tests for import handling in fix_code."""
 
-    def test_groups_imports_by_module(self):
-        """Should group multiple imports from the same module."""
+    def test_module_qualified_enums_no_imports_needed(self):
+        """Module-qualified enums don't need explicit imports."""
         code = '''
 sse_algorithm = "AES256"
 status = "Enabled"
 '''
         fixed = fix_code(code, add_imports=True, rules=[StringShouldBeEnum()])
-        # Should have combined import
-        assert "wetwire_aws.resources.s3" in fixed
-
-    def test_preserves_existing_imports(self):
-        """Should not duplicate existing imports."""
-        code = '''from wetwire_aws.resources.s3 import ServerSideEncryption
-
-sse_algorithm = "AES256"
-'''
-        fixed = fix_code(code, add_imports=True, rules=[StringShouldBeEnum()])
-        # Should not have duplicate import
-        import_count = fixed.count("from wetwire_aws.resources.s3 import")
-        assert import_count == 1
+        # Should NOT add explicit imports - modules available via from . import *
+        assert "from wetwire_aws.resources.s3 import" not in fixed
+        assert "s3.ServerSideEncryption.AES256" in fixed
+        assert "s3.BucketVersioningStatus.ENABLED" in fixed
 
     def test_handles_syntax_errors_gracefully(self):
         """Should return original code for syntax errors."""
@@ -337,3 +484,156 @@ sse_algorithm = "AES256"
         fixed = fix_code(code)
         # Should return unchanged since we can't fix invalid code
         assert "this is not valid python" in fixed
+
+
+class TestFileTooLarge:
+    """Tests for WAW010: file size limit."""
+
+    def test_detects_file_over_limit(self):
+        """Should detect files with > 15 @wetwire_aws classes."""
+        # Generate code with 16 classes
+        classes = "\n\n".join(
+            f"@wetwire_aws\nclass Resource{i}:\n    resource: ec2.Instance"
+            for i in range(16)
+        )
+        code = f"from . import *\n\n{classes}"
+
+        issues = lint_code(code, rules=[FileTooLarge()])
+        assert len(issues) == 1
+        assert issues[0].rule_id == "WAW010"
+        assert "16 resources" in issues[0].message
+        assert "max 15" in issues[0].message
+
+    def test_allows_file_at_limit(self):
+        """Should not flag files with exactly 15 resources."""
+        classes = "\n\n".join(
+            f"@wetwire_aws\nclass Resource{i}:\n    resource: ec2.Instance"
+            for i in range(15)
+        )
+        code = f"from . import *\n\n{classes}"
+
+        issues = lint_code(code, rules=[FileTooLarge()])
+        assert len(issues) == 0
+
+    def test_allows_small_files(self):
+        """Should not flag small files."""
+        code = '''from . import *
+
+@wetwire_aws
+class MyBucket:
+    resource: s3.Bucket
+
+@wetwire_aws
+class MyRole:
+    resource: iam.Role
+'''
+        issues = lint_code(code, rules=[FileTooLarge()])
+        assert len(issues) == 0
+
+    def test_ignores_non_wetwire_classes(self):
+        """Should only count @wetwire_aws decorated classes."""
+        code = '''from . import *
+
+class HelperClass:
+    pass
+
+@dataclass
+class DataClass:
+    field: str
+
+@wetwire_aws
+class MyBucket:
+    resource: s3.Bucket
+'''
+        issues = lint_code(code, rules=[FileTooLarge()])
+        assert len(issues) == 0
+
+
+class TestSplittingUtilities:
+    """Tests for file splitting utilities in linter/splitting.py."""
+
+    def test_categorize_s3_as_storage(self):
+        """S3 resources should categorize as storage."""
+        from wetwire_aws.linter.splitting import categorize_resource_type
+
+        assert categorize_resource_type("AWS::S3::Bucket") == "storage"
+
+    def test_categorize_ec2_instance_as_compute(self):
+        """EC2 Instance should categorize as compute."""
+        from wetwire_aws.linter.splitting import categorize_resource_type
+
+        assert categorize_resource_type("AWS::EC2::Instance") == "compute"
+
+    def test_categorize_ec2_vpc_as_network(self):
+        """EC2 VPC should categorize as network (not compute)."""
+        from wetwire_aws.linter.splitting import categorize_resource_type
+
+        assert categorize_resource_type("AWS::EC2::VPC") == "network"
+        assert categorize_resource_type("AWS::EC2::Subnet") == "network"
+        assert categorize_resource_type("AWS::EC2::SecurityGroup") == "network"
+
+    def test_categorize_iam_as_security(self):
+        """IAM resources should categorize as security."""
+        from wetwire_aws.linter.splitting import categorize_resource_type
+
+        assert categorize_resource_type("AWS::IAM::Role") == "security"
+
+    def test_categorize_unknown_as_main(self):
+        """Unknown resources should categorize as main."""
+        from wetwire_aws.linter.splitting import categorize_resource_type
+
+        assert categorize_resource_type("AWS::Unknown::Resource") == "main"
+        assert categorize_resource_type("InvalidFormat") == "main"
+
+    def test_suggest_file_splits_basic(self):
+        """Test basic file splitting suggestion."""
+        from wetwire_aws.linter.splitting import ResourceInfo, suggest_file_splits
+
+        resources = [
+            ResourceInfo("MyBucket", "AWS::S3::Bucket", set()),
+            ResourceInfo("MyVPC", "AWS::EC2::VPC", set()),
+            ResourceInfo("MyRole", "AWS::IAM::Role", set()),
+        ]
+
+        splits = suggest_file_splits(resources)
+
+        assert "storage" in splits
+        assert "MyBucket" in splits["storage"]
+        assert "network" in splits
+        assert "MyVPC" in splits["network"]
+        assert "security" in splits
+        assert "MyRole" in splits["security"]
+
+    def test_suggest_file_splits_respects_max(self):
+        """Test that file splits respect max_per_file."""
+        from wetwire_aws.linter.splitting import ResourceInfo, suggest_file_splits
+
+        # Create 20 S3 buckets
+        resources = [
+            ResourceInfo(f"Bucket{i}", "AWS::S3::Bucket", set())
+            for i in range(20)
+        ]
+
+        # With max 15, should split into storage1, storage2
+        splits = suggest_file_splits(resources, max_per_file=15)
+
+        assert "storage1" in splits or "storage2" in splits
+        total_resources = sum(len(v) for v in splits.values())
+        assert total_resources == 20
+
+    def test_calculate_scc_weight(self):
+        """Test SCC weight calculation."""
+        from wetwire_aws.linter.splitting import (
+            ResourceInfo,
+            calculate_scc_weight,
+        )
+
+        resources = {
+            "A": ResourceInfo("A", "AWS::S3::Bucket", {"B", "C"}),
+            "B": ResourceInfo("B", "AWS::S3::Bucket", {"A"}),
+            "C": ResourceInfo("C", "AWS::S3::Bucket", set()),
+        }
+
+        # A->B, B->A = 2 internal edges
+        weight = calculate_scc_weight(["A", "B"], resources)
+        assert weight == 2  # A depends on B, B depends on A

@@ -46,9 +46,9 @@ If you're happy with your current tooling, you probably don't need this library.
 # wetwire-aws: Infrastructure as DATA
 @wetwire_aws
 class MyBucket:
-    resource: Bucket
+    resource: s3.Bucket
     bucket_name = "data"
-    versioning: Annotated[MyVersioning, Ref()] = None  # Type-safe reference
+    versioning = MyVersioning  # Type-safe reference - no parens
 ```
 
 ```python
@@ -157,13 +157,12 @@ wetwire-aws delegates state entirely to CloudFormation. You author templates; Cl
 wetwire-aws uses dataclass-dsl for static dependency analysis:
 
 ```python
-from typing import Annotated
-from dataclass_dsl import Attr, get_dependencies
+from dataclass_dsl import get_dependencies
 
 @wetwire_aws
 class ProcessorFunction:
-    resource: Function
-    role: Annotated[str, Attr(ProcessorRole, "Arn")] = None  # Introspectable
+    resource: lambda_.Function
+    role = ProcessorRole.Arn  # Introspectable via no-parens style
 
 # Get dependencies without instantiation
 deps = get_dependencies(ProcessorFunction)
@@ -277,7 +276,7 @@ class MyFunction:
     function_name = "my-handler"
     runtime = lambda_.Runtime.PYTHON3_12
     handler = "index.handler"
-    role = get_att(MyRole, ARN)
+    role = MyRole.Arn  # No-parens style reference
 ```
 
 **AWS CDK:**

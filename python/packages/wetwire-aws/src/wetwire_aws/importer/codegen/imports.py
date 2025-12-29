@@ -87,4 +87,18 @@ def generate_imports(ctx: CodegenContext) -> str:
                 lines.append(f"    {name},")
             lines.append(")")
 
+    # Constants imports (condition operators like BOOL, STRING_EQUALS, etc.)
+    constants_imports = ctx.imports.get("wetwire_aws.constants", set())
+    if constants_imports:
+        sorted_constants = sorted(constants_imports)
+        if len(sorted_constants) <= 3:
+            lines.append(
+                f"from wetwire_aws.constants import {', '.join(sorted_constants)}"
+            )
+        else:
+            lines.append("from wetwire_aws.constants import (")
+            for name in sorted_constants:
+                lines.append(f"    {name},")
+            lines.append(")")
+
     return "\n".join(lines)

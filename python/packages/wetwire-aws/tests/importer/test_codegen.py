@@ -35,7 +35,8 @@ class TestGenerateSimpleBucket:
     def test_has_output_class(self, code):
         assert "class BucketNameOutput:" in code
         assert "resource: Output" in code
-        assert "ref(MyBucket)" in code
+        # Uses no-parens pattern: bare class name instead of ref()
+        assert "value = MyBucket" in code
 
     def test_uses_template_from_registry(self, code):
         # Template class is no longer generated - resources auto-register
@@ -70,11 +71,12 @@ class TestGenerateBucketWithRef:
         assert "default = 'my-default-bucket'" in code
 
     def test_has_ref_to_parameter(self, code):
-        assert "ref(BucketNameParam)" in code
+        # Parameter refs still use ref() - only resource refs use bare class names
+        assert "bucket_name = ref(BucketNameParam)" in code
 
     def test_has_getatt(self, code):
-        # Output values now use class refs
-        assert 'get_att(MyBucket, "Arn")' in code
+        # GetAtt uses get_att() with bare class name (no-parens pattern for resource)
+        assert 'value = get_att(MyBucket, "Arn")' in code
 
     def test_generated_code_is_valid_python(self, code):
         compile(code, "<test>", "exec")

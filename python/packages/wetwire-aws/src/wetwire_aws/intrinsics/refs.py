@@ -46,29 +46,34 @@ __all__ = [
 ]
 
 
-def ref(resource_class: type | None = None) -> RefIntrinsic | DeferredRef:
+def ref(resource_class: type | str | None = None) -> RefIntrinsic | DeferredRef:
     """
     Create a reference to another resource.
 
-    Supports two patterns:
+    Supports three patterns:
 
     1. Direct class reference (simple):
         bucket_ref = ref(MyBucket)
 
-    2. Annotation-based (enables dataclass-dsl introspection):
+    2. Forward reference (string):
+        bucket_ref = ref("MyBucket")  # For forward references
+
+    3. Annotation-based (enables dataclass-dsl introspection):
         bucket: Annotated[MyBucket, Ref()] = ref()  # Resolved from type annotation
 
     The ref() function generates a CloudFormation {"Ref": "LogicalName"} reference.
 
     Args:
-        resource_class: Optional resource class to reference directly.
+        resource_class: Optional resource class or string name to reference directly.
             If None, the reference is deferred and resolved from type annotation.
 
     Returns:
         RefIntrinsic if resource_class provided, DeferredRef otherwise.
     """
     if resource_class is not None:
-        # Direct pattern: ref(MyBucket)
+        # Direct pattern: ref(MyBucket) or ref("MyBucket") for forward refs
+        if isinstance(resource_class, str):
+            return RefIntrinsic(resource_class)
         return RefIntrinsic(resource_class.__name__)
     else:
         # Annotation pattern: bucket: Ref[MyBucket] = ref()

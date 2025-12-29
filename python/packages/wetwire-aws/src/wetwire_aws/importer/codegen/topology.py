@@ -5,7 +5,12 @@ GetAtt intrinsics. This module provides algorithms to:
 
 1. Find strongly connected components (SCCs) using Tarjan's algorithm
 2. Sort resources in dependency order for proper Python class definition
-3. Detect forward references that need string-based refs
+3. Track file-level dependencies for multi-file package generation
+
+Note: With two-pass loading and placeholder support in dataclass-dsl,
+forward references within the same file are now handled automatically.
+SCC detection is still useful for grouping tightly-coupled resources
+and for file-level dependency tracking.
 """
 
 from __future__ import annotations
@@ -80,7 +85,10 @@ def find_strongly_connected_components(template: IRTemplate) -> list[list[str]]:
 
 
 def topological_sort(template: IRTemplate) -> list[str]:
-    """Sort resources so dependencies come first."""
+    """Sort resources so dependencies come first.
+
+    Considers both reference_graph (Ref/GetAtt) and depends_on dependencies.
+    """
     visited: set[str] = set()
     result: list[str] = []
 
@@ -89,9 +97,17 @@ def topological_sort(template: IRTemplate) -> list[str]:
             return
         visited.add(resource_id)
 
+        # Visit Ref/GetAtt dependencies
         for dep_id in template.reference_graph.get(resource_id, []):
             if dep_id in template.resources:
                 visit(dep_id)
+
+        # Visit depends_on dependencies
+        resource = template.resources.get(resource_id)
+        if resource:
+            for dep_id in resource.depends_on:
+                if dep_id in template.resources:
+                    visit(dep_id)
 
         result.append(resource_id)
 
@@ -234,7 +250,13 @@ def order_scc_resources(
     name_pattern_map: dict[str, str] | None = None,
     arn_pattern_map: dict[str, tuple[str, str]] | None = None,
 ) -> list[str]:
-    """Order resources within an SCC to minimize forward references."""
+    """Order resources within an SCC to minimize forward references.
+
+    DEPRECATED: With two-pass loading and placeholder support in dataclass-dsl,
+    forward references within the same file are now handled automatically.
+    This function is kept for backwards compatibility but ordering is no longer
+    required for correctness.
+    """
     scc_set = set(scc)
 
     if name_pattern_map is None:

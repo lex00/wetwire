@@ -9,7 +9,8 @@ Context is the base class for environment-specific configuration.
 from dataclasses import dataclass, field
 from typing import Annotated, Any, ClassVar
 
-from dataclass_dsl import ContextRef
+from dataclass_dsl import ContextRef, is_attr_ref, is_class_ref
+from dataclass_dsl._loader import _ClassPlaceholder
 
 
 def _serialize_value(value: Any) -> Any:
@@ -22,6 +23,21 @@ def _serialize_value(value: Any) -> Any:
     Returns:
         The serialized value suitable for CloudFormation JSON output.
     """
+    # Handle unresolved placeholders (should be resolved by loader, but handle gracefully)
+    if isinstance(value, _ClassPlaceholder):
+        from wetwire_aws.intrinsics import Ref
+
+        return Ref(value._name).to_dict()
+    # Handle no-parens pattern: AttrRef markers (e.g., MyRole.Arn)
+    if is_attr_ref(value):
+        from wetwire_aws.intrinsics import GetAtt
+
+        return GetAtt(value.target.__name__, value.attr).to_dict()
+    # Handle no-parens pattern: class references (e.g., MyBucket)
+    if is_class_ref(value):
+        from wetwire_aws.intrinsics import Ref
+
+        return Ref(value.__name__).to_dict()
     if hasattr(value, "to_dict"):
         return value.to_dict()
     if isinstance(value, list):
@@ -100,6 +116,106 @@ class Tag(PropertyType):
 
 
 @dataclass
+class PolicyStatement:
+    """
+    IAM Policy Statement for use with the wrapper dataclass pattern.
+
+    This class allows you to define IAM policy statements as separate
+    dataclasses that can be referenced by PolicyDocument and Role resources.
+
+    Note: Uses 'resource_arn' instead of 'resource' to avoid conflicts
+    with the wrapper pattern's 'resource:' type annotation field.
+
+    Example:
+        @wetwire_aws
+        class AllowS3ReadStatement:
+            resource: PolicyStatement
+            action = ["s3:GetObject", "s3:ListBucket"]
+            resource_arn = [MyBucket.Arn, Sub("${MyBucket.Arn}/*")]
+
+        @wetwire_aws
+        class MyPolicy:
+            resource: PolicyDocument
+            statement = [AllowS3ReadStatement]
+    """
+
+    sid: str | None = None
+    effect: str = "Allow"
+    principal: Any = None
+    action: Any = None
+    resource_arn: Any = None
+    condition: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize statement to IAM policy format."""
+        stmt: dict[str, Any] = {"Effect": self.effect}
+
+        if self.sid:
+            stmt["Sid"] = self.sid
+        if self.principal is not None:
+            stmt["Principal"] = _serialize_value(self.principal)
+        if self.action is not None:
+            stmt["Action"] = _serialize_value(self.action)
+        if self.resource_arn is not None:
+            stmt["Resource"] = _serialize_value(self.resource_arn)
+        if self.condition is not None:
+            stmt["Condition"] = _serialize_value(self.condition)
+
+        return stmt
+
+
+@dataclass
+class DenyStatement(PolicyStatement):
+    """
+    IAM Deny Policy Statement.
+
+    Subclass of PolicyStatement with effect pre-set to "Deny".
+
+    Example:
+        @wetwire_aws
+        class DenyDeleteStatement:
+            resource: DenyStatement
+            action = ["s3:DeleteObject", "s3:DeleteBucket"]
+            resource_arn = "*"
+    """
+
+    effect: str = "Deny"
+
+
+@dataclass
+class PolicyDocument:
+    """
+    IAM Policy Document for use with the wrapper dataclass pattern.
+
+    This class allows you to define IAM policy documents as separate
+    dataclasses that can be referenced by Role resources.
+
+    Example:
+        @wetwire_aws
+        class AssumeRolePolicy:
+            resource: PolicyDocument
+            statement = [AllowAssumeRoleStatement]
+
+        @wetwire_aws
+        class MyRole:
+            resource: iam.Role
+            assume_role_policy_document = AssumeRolePolicy
+    """
+
+    version: str = "2012-10-17"
+    statement: list[Any] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize policy document to IAM format."""
+        return {
+            "Version": self.version,
+            "Statement": [
+                s.to_dict() if hasattr(s, "to_dict") else s for s in self.statement
+            ],
+        }
+
+
+@dataclass
 class CloudFormationResource:
     """
     Base class for all CloudFormation resource types.
@@ -169,7 +285,10 @@ class CloudFormationResource:
 
         # Add optional metadata fields
         if self.depends_on:
-            result["DependsOn"] = [cls.__name__ for cls in self.depends_on]
+            result["DependsOn"] = [
+                dep if isinstance(dep, str) else dep.__name__
+                for dep in self.depends_on
+            ]
         if self.condition:
             result["Condition"] = self.condition
         if self.metadata:

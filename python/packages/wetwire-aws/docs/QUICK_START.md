@@ -49,7 +49,7 @@ That's it. Resources auto-register when the `@wetwire_aws` decorator is applied.
 
 ## Adding References
 
-Reference other resources using `ref()` and `get_att()`:
+Reference other resources using the no-parens style:
 
 **myapp/infra.py:**
 ```python
@@ -79,7 +79,7 @@ class ProcessorFunction:
     function_name = "processor"
     runtime = lambda_.Runtime.PYTHON3_12
     handler = "index.handler"
-    role = get_att(ProcessorRole, ARN)  # Reference to role
+    role = ProcessorRole.Arn  # Reference to role's Arn attribute
 ```
 
 ---

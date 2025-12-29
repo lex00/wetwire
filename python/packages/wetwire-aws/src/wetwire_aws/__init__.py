@@ -10,7 +10,13 @@ This package provides:
 - Generated resource classes for all AWS services
 """
 
-from wetwire_aws.base import CloudFormationResource, PropertyType
+from wetwire_aws.base import (
+    CloudFormationResource,
+    DenyStatement,
+    PolicyDocument,
+    PolicyStatement,
+    PropertyType,
+)
 from wetwire_aws.context import AWSContext
 from wetwire_aws.decorator import wetwire_aws
 from wetwire_aws.intrinsics import (
@@ -91,6 +97,10 @@ __all__ = [
     # Base classes
     "CloudFormationResource",
     "PropertyType",
+    # Policy helpers
+    "PolicyStatement",
+    "DenyStatement",
+    "PolicyDocument",
     # Provider
     "CloudFormationProvider",
     # Context

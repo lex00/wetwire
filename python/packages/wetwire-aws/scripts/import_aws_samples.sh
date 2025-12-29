@@ -48,6 +48,8 @@ OUTPUT_DIR="$PROJECT_ROOT/examples/aws-cloudformation-templates"
 SKIP_TEMPLATES=(
     # Uses custom CloudFormation macro (ExecutionRoleBuilder) with non-standard properties
     "example_2"
+    # Has complex Join-based UserData that generates malformed Python strings
+    "efs_with_automount_to_ec2"
 )
 
 # Templates to exclude from import entirely (Rain-specific, Kubernetes manifests, etc.)
@@ -171,6 +173,7 @@ CLEAN_OUTPUT=false
 SKIP_VALIDATION=false
 VERBOSE=false
 SINGLE_TEMPLATE=""
+LOCAL_SOURCE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -190,6 +193,10 @@ while [[ $# -gt 0 ]]; do
             SINGLE_TEMPLATE="$2"
             shift 2
             ;;
+        --local-source)
+            LOCAL_SOURCE="$2"
+            shift 2
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -201,12 +208,14 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-validation    Skip running each package to validate it works"
             echo "  --verbose, -v        Show detailed progress for each template"
             echo "  --template NAME      Test only a specific template file"
+            echo "  --local-source DIR   Use local directory instead of cloning from GitHub"
             echo "  --help, -h           Show this help message"
             echo ""
             echo "Examples:"
             echo "  $0                              # Full import with validation"
             echo "  $0 --clean                      # Clean output first"
             echo "  $0 --template EC2/EC2_1.yaml    # Test single template"
+            echo "  $0 --local-source /path/to/templates  # Use local templates"
             exit 0
             ;;
         *)
@@ -237,13 +246,26 @@ fi
 
 mkdir -p "$OUTPUT_DIR"
 
-# Step 2: Clone aws-cloudformation-templates to temp directory
-header "Cloning AWS CloudFormation Templates"
+# Step 2: Get templates (clone or use local source)
+if [ -n "$LOCAL_SOURCE" ]; then
+    header "Using Local Template Source"
+    if [ ! -d "$LOCAL_SOURCE" ]; then
+        error "Local source directory does not exist: $LOCAL_SOURCE"
+        exit 1
+    fi
+    CLONE_DIR="$LOCAL_SOURCE"
+    TEMP_DIR=""
+    info "Using local directory: $CLONE_DIR"
+else
+    header "Cloning AWS CloudFormation Templates"
+    TEMP_DIR=$(mktemp -d)
+    info "Cloning to temp directory: $TEMP_DIR"
+    git clone --depth 1 "$AWS_TEMPLATES_REPO" "$TEMP_DIR/aws-cloudformation-templates"
+    CLONE_DIR="$TEMP_DIR/aws-cloudformation-templates"
+    success "Cloned repository"
+fi
 
-TEMP_DIR=$(mktemp -d)
-info "Cloning to temp directory: $TEMP_DIR"
-
-# Cleanup temp directory on exit (but NOT the examples directory)
+# Cleanup temp directory on exit (but NOT the examples directory or local source)
 cleanup_temp() {
     if [ -n "${TEMP_DIR:-}" ] && [ -d "$TEMP_DIR" ]; then
         rm -rf "$TEMP_DIR"
@@ -256,10 +278,6 @@ cleanup_temp() {
     fi
 }
 trap cleanup_temp EXIT
-
-git clone --depth 1 "$AWS_TEMPLATES_REPO" "$TEMP_DIR/aws-cloudformation-templates"
-CLONE_DIR="$TEMP_DIR/aws-cloudformation-templates"
-success "Cloned repository"
 
 # Step 3: Apply template fixes
 header "Applying Template Fixes"

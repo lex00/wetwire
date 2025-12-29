@@ -60,6 +60,73 @@ def get_cf_resource_type(cls: type) -> str:
     return "Unknown"
 
 
+def _regenerate_stubs_for_path(path: Path, verbose: bool = False) -> int:
+    """Regenerate stubs for packages that use setup_resources().
+
+    Finds all __init__.py files that call setup_resources() and regenerates
+    their stubs by importing the package.
+
+    Returns:
+        Number of packages that had stubs regenerated.
+    """
+    from dataclass_dsl._stubs import generate_stub_file
+    from wetwire_aws.stubs import AWS_STUB_CONFIG
+
+    count = 0
+
+    # Find all __init__.py files
+    if path.is_file():
+        init_files = [path] if path.name == "__init__.py" else []
+    else:
+        init_files = list(path.rglob("__init__.py"))
+
+    for init_file in init_files:
+        try:
+            content = init_file.read_text()
+            if "setup_resources" not in content:
+                continue
+
+            # Parse to find exported classes
+            pkg_dir = init_file.parent
+            py_files = [f for f in pkg_dir.glob("*.py") if not f.name.startswith("_")]
+
+            # Extract class names from each file
+            import ast
+            all_names: set[str] = set()
+            module_classes: dict[str, list[str]] = {}
+
+            for py_file in py_files:
+                try:
+                    source = py_file.read_text()
+                    tree = ast.parse(source)
+                    classes = []
+                    for node in ast.walk(tree):
+                        if isinstance(node, ast.ClassDef):
+                            classes.append(node.name)
+                            all_names.add(node.name)
+                    if classes:
+                        module_classes[py_file.stem] = classes
+                except Exception:
+                    continue
+
+            if all_names:
+                generate_stub_file(
+                    pkg_dir,
+                    list(all_names),
+                    module_classes,
+                    config=AWS_STUB_CONFIG
+                )
+                count += 1
+                if verbose:
+                    print(f"Regenerated stubs: {pkg_dir}")
+
+        except Exception as e:
+            if verbose:
+                print(f"Error regenerating stubs for {init_file}: {e}")
+
+    return count
+
+
 def lint_command(args: argparse.Namespace) -> None:
     """Lint Python code for wetwire-aws issues."""
     from wetwire_aws.linter import fix_file, lint_file
@@ -102,6 +169,12 @@ def lint_command(args: argparse.Namespace) -> None:
         except Exception as e:
             if args.verbose:
                 print(f"Error processing {filepath}: {e}", file=sys.stderr)
+
+    # Regenerate stubs after fixing
+    if args.fix and files_with_issues > 0:
+        stub_count = _regenerate_stubs_for_path(path, verbose=args.verbose)
+        if args.verbose and stub_count > 0:
+            print(f"Regenerated stubs for {stub_count} packages")
 
     if not args.fix:
         if total_issues:

@@ -22,7 +22,12 @@ from .helpers import (
     resolve_resource_type,
     sanitize_class_name,
 )
-from .values import escape_docstring, escape_string, value_to_python
+from .blocks import property_value_to_python_block
+from .values import (
+    escape_docstring,
+    escape_string,
+    value_to_python,
+)
 
 if TYPE_CHECKING:
     from .context import CodegenContext
@@ -119,9 +124,21 @@ def generate_resource_class(resource: IRResource, ctx: CodegenContext) -> str:
         lines.append("    resource: CloudFormationResource")
         ctx.add_import("wetwire_aws.base", "CloudFormationResource")
 
-    # Properties
+    # Properties - use block mode for all values
     for prop in resource.properties.values():
-        value_result = value_to_python(prop.value, ctx)
+        # Get expected type from PropertyType info if available
+        expected_type = None  # TODO: Look up from resource spec
+
+        # Use block mode to generate wrapper classes for nested structures
+        value_result = property_value_to_python_block(
+            prop.value,
+            resource.logical_id,
+            prop.python_name,
+            expected_type,
+            module if resolved else None,
+            ctx,
+        )
+
         if isinstance(value_result, AnnotatedValue):
             lines.append(
                 f"    {prop.python_name}: {value_result.annotation} = {value_result.value}"
@@ -131,8 +148,18 @@ def generate_resource_class(resource: IRResource, ctx: CodegenContext) -> str:
 
     # Resource-level attributes
     if resource.depends_on:
-        deps = ", ".join(f'"{d}"' for d in resource.depends_on)
-        lines.append(f"    depends_on = [{deps}]")
+        # No-parens pattern: bare class names for depends_on
+        # Forward refs in SCC use strings to avoid NameError
+        dep_strs = []
+        for d in resource.depends_on:
+            class_name = sanitize_class_name(d)
+            if d in ctx.forward_references:
+                # Forward ref within SCC - must use string
+                dep_strs.append(f'"{class_name}"')
+            else:
+                # Bare class name - setup_resources() injects cross-file classes
+                dep_strs.append(class_name)
+        lines.append(f"    depends_on = [{', '.join(dep_strs)}]")
     if resource.condition:
         lines.append(f"    condition = {escape_string(resource.condition)}")
     if resource.deletion_policy:
