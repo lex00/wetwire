@@ -339,10 +339,9 @@ import_template() {
     local pkg_name=$(echo "$stem" | sed 's/[^a-zA-Z0-9_]/_/g' | tr '[:upper:]' '[:lower:]')
     local pkg_output="$OUTPUT_DIR/$pkg_name"
 
-    # Skip if already exists
+    # Remove existing to ensure fresh import
     if [ -d "$pkg_output" ]; then
-        echo "SKIP:$pkg_name"
-        return
+        rm -rf "$pkg_output"
     fi
 
     local error_output
@@ -371,16 +370,14 @@ printf '%s\n' "${TEMPLATES[@]}" | xargs -P "$JOBS" -I {} bash -c 'import_templat
 # Count import results
 IMPORT_OK=0
 IMPORT_FAIL=0
-IMPORT_SKIP=0
 while IFS=: read -r status pkg_name; do
     case "$status" in
         OK) IMPORT_OK=$((IMPORT_OK + 1)) ;;
         FAIL) IMPORT_FAIL=$((IMPORT_FAIL + 1)) ;;
-        SKIP) IMPORT_SKIP=$((IMPORT_SKIP + 1)) ;;
     esac
 done < "$IMPORT_RESULTS_FILE"
 
-success "Imported: $IMPORT_OK  Failed: $IMPORT_FAIL  Skipped: $IMPORT_SKIP"
+success "Imported: $IMPORT_OK  Failed: $IMPORT_FAIL"
 
 # Step 7: Lint packages to fix forward references and other issues
 header "Linting Packages"

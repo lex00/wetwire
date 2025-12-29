@@ -153,48 +153,50 @@ All resource types should use module-qualified names: `s3.Bucket`, `ec2.Instance
 ## Project Structure
 
 ```
-python/packages/
-├── wetwire/                 # Core framework (cloud-agnostic)
-│   └── src/wetwire/
-│       ├── decorator.py     # @wetwire decorator
-│       ├── registry.py      # Resource registration
-│       ├── template.py      # Base template class
-│       ├── loader.py        # setup_resources() for multi-file packages
-│       ├── stubs.py         # StubConfig, .pyi generation for IDE support
-│       └── codegen/         # Shared codegen utilities
-│           ├── schema.py    # IntermediateSchema, PropertyDef, etc.
-│           ├── transforms.py # to_snake_case, keyword escaping
-│           ├── fetcher.py   # HTTP fetching utilities
-│           └── generator.py # Code generation utilities
-│
-├── wetwire-aws/             # AWS domain package
-│   ├── src/wetwire_aws/
-│   │   ├── base.py          # CloudFormationResource base
-│   │   ├── decorator.py     # @wetwire_aws decorator
-│   │   ├── template.py      # CloudFormationTemplate
-│   │   ├── loader.py        # AWS-specific setup_resources() wrapper
-│   │   ├── stubs.py         # AWS_STUB_CONFIG for stub generation
-│   │   ├── intrinsics/      # Ref, GetAtt, Sub, etc.
-│   │   └── resources/       # GENERATED at build time (not in git)
-│   │       ├── s3/
-│   │       ├── ec2/
-│   │       └── ...          # ~260 service modules
-│   ├── codegen/             # AWS-specific code generation
-│   │   ├── config.py        # CF spec URL, service priorities
-│   │   ├── fetch.py         # Download CloudFormation specs
-│   │   ├── parse.py         # Parse CF spec to intermediate format
-│   │   ├── extract_enums.py # Extract enums from botocore
-│   │   └── generate.py      # Generate Python dataclasses
-│   ├── scripts/
-│   │   ├── regenerate.sh    # Run codegen pipeline
-│   │   └── ci.sh            # Local CI checks
-│   └── hatch_build.py       # Build hook (runs codegen)
-│
-└── wetwire-gcp/             # GCP domain package (future)
+# Core framework (separate repo: dataclass-dsl)
+dataclass-dsl/
+└── src/dataclass_dsl/
+    ├── _decorator.py    # create_decorator() factory
+    ├── _registry.py     # ResourceRegistry for tracking classes
+    ├── _template.py     # Base Template class
+    ├── _loader.py       # setup_resources() for multi-file packages
+    ├── _stubs.py        # StubConfig, .pyi generation for IDE support
+    ├── _resource.py     # Base Resource class
+    ├── _property_type.py # Base PropertyType class
+    ├── _ir.py           # IR base classes (IRResource, IRTemplate, etc.)
+    ├── _cli.py          # CLI framework utilities
+    ├── _codegen.py      # Shared codegen utilities (to_snake_case, etc.)
+    └── _serialization.py # FieldMapper, ValueSerializer bases
+
+# AWS domain package (this repo)
+python/packages/wetwire-aws/
+├── src/wetwire_aws/
+│   ├── base.py          # CloudFormationResource (extends Resource)
+│   ├── decorator.py     # @wetwire_aws decorator
+│   ├── template.py      # CloudFormationTemplate
+│   ├── loader.py        # AWS-specific setup_resources() wrapper
+│   ├── stubs.py         # AWS_STUB_CONFIG for stub generation
+│   ├── intrinsics/      # Ref, GetAtt, Sub, etc.
+│   ├── importer/        # CloudFormation template importer
+│   ├── linter/          # AWS-specific linting rules
+│   └── resources/       # GENERATED at build time (not in git)
+│       ├── s3/
+│       ├── ec2/
+│       └── ...          # ~260 service modules
+├── codegen/             # AWS-specific code generation
+│   ├── config.py        # CF spec URL, service priorities
+│   ├── fetch.py         # Download CloudFormation specs
+│   ├── parse.py         # Parse CF spec to intermediate format
+│   ├── extract_enums.py # Extract enums from botocore
+│   └── generate.py      # Generate Python dataclasses
+├── scripts/
+│   ├── regenerate.sh    # Run codegen pipeline
+│   └── ci.sh            # Local CI checks
+└── hatch_build.py       # Build hook (runs codegen)
 ```
 
-**wetwire.codegen** provides shared codegen utilities that can be reused by any domain package.
-Install with: `pip install wetwire[codegen]`
+**dataclass-dsl** provides the runtime framework for declarative DSLs.
+Install with: `pip install dataclass-dsl`
 
 ## Development Commands
 
@@ -308,7 +310,7 @@ CloudFormation resource names do NOT include service prefixes:
 ### 4. Dependencies
 
 **Runtime dependencies**:
-- `wetwire` - Core framework
+- `dataclass-dsl` - Core framework for declarative DSLs
 - `pyyaml` - Required for YAML template parsing and serialization
 
 **Codegen dependencies** (build-time only):

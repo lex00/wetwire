@@ -99,11 +99,6 @@ def generate_resource_class(resource: IRResource, ctx: CodegenContext) -> str:
     ctx.current_resource_id = resource.logical_id
     lines = []
 
-    # Docstring
-    if ctx.include_docstrings:
-        lines.append(f'    """{resource.resource_type} resource."""')
-        lines.append("")
-
     # Resolve resource type
     resolved = resolve_resource_type(resource.resource_type)
 

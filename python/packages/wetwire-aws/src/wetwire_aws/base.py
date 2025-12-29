@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from typing import Annotated, Any, ClassVar
 
 from dataclass_dsl import ContextRef, is_attr_ref, is_class_ref
+from dataclass_dsl import PropertyType as PropertyTypeBase
+from dataclass_dsl import Resource
 from dataclass_dsl._loader import _ClassPlaceholder
 
 
@@ -128,7 +130,7 @@ def _to_cf_name(snake_name: str) -> str:
 
 
 @dataclass
-class PropertyType:
+class PropertyType(PropertyTypeBase):
     """
     Base class for CloudFormation property types (nested structures).
 
@@ -280,7 +282,7 @@ class PolicyDocument:
 
 
 @dataclass
-class CloudFormationResource:
+class CloudFormationResource(Resource):
     """
     Base class for all CloudFormation resource types.
 
@@ -293,6 +295,8 @@ class CloudFormationResource:
 
     _resource_type: ClassVar[str] = ""
     _property_mappings: ClassVar[dict[str, str]] = {}
+    # Alias for consistency with base Resource class
+    resource_type: ClassVar[str] = ""
 
     # Optional resource metadata (kw_only to allow subclasses to have required fields)
     depends_on: list[type] | None = field(default=None, repr=False, kw_only=True)
