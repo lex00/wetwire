@@ -18,7 +18,7 @@ Rules:
     WAW007: Use flat imports with module-qualified names instead of explicit resource imports
     WAW008: Remove verbose imports that setup_params/setup_resources handle
     WAW010: Split large files (>15 resources) into smaller category-based files
-    WAW011: PropertyType wrappers should be instantiated with ()
+    WAW011: Use no-parens style for PropertyType wrappers (remove ())
     WAW012: Detect duplicate resource class names within a file
 
 Example:
@@ -1080,26 +1080,25 @@ class DuplicateResource(LintRule):
 
 
 class PropertyTypeAsRef(LintRule):
-    """Detect PropertyType wrappers used as class refs instead of instances.
+    """Detect PropertyType wrapper instantiation that should use no-parens style.
 
-    PropertyType wrapper classes (those with resource: annotations pointing to
-    PolicyDocument, PolicyStatement, DenyStatement, or nested property types)
-    must be instantiated with `()` when used as values.
+    PropertyType wrapper classes should be referenced as bare class names, not
+    instantiated with `()`. The serialization layer auto-instantiates these.
 
-    The serialization layer has a safety net that auto-instantiates these, but
-    for code clarity and consistency, wrappers should be explicitly instantiated.
+    This follows the no-parens declarative pattern where all wiring is expressed
+    as class references rather than instance construction.
 
     Detects:
-    - field = MyPropertyTypeWrapper  (where MyPropertyTypeWrapper has resource: PolicyDocument)
-    - statement = [AllowStatement]  (where AllowStatement has resource: PolicyStatement)
+    - field = MyPropertyTypeWrapper()  (with empty parens)
+    - statement = [AllowStatement()]  (with empty parens in list)
 
     Suggests:
-    - field = MyPropertyTypeWrapper()
-    - statement = [AllowStatement()]
+    - field = MyPropertyTypeWrapper
+    - statement = [AllowStatement]
     """
 
     rule_id = "WAW011"
-    description = "PropertyType wrappers should be instantiated with ()"
+    description = "Use no-parens style for PropertyType wrappers"
 
     # Known PropertyType base classes from wetwire_aws
     PROPERTY_TYPE_BASES = {
@@ -1132,9 +1131,9 @@ class PropertyTypeAsRef(LintRule):
         if not property_type_wrappers:
             return issues
 
-        # Second pass: find usages of these wrappers as bare class refs
+        # Second pass: find usages of these wrappers with ()
         for node in ast.walk(context.tree):
-            # Check direct assignments: field = WrapperClass
+            # Check direct assignments: field = WrapperClass()
             if isinstance(node, ast.Assign):
                 for target in node.targets:
                     if isinstance(target, ast.Name):
@@ -1143,40 +1142,52 @@ class PropertyTypeAsRef(LintRule):
                             continue
 
                         value = node.value
-                        # Check for bare Name: field = WrapperClass
-                        if isinstance(value, ast.Name):
-                            if value.id in property_type_wrappers:
+                        # Check for Call with no args: field = WrapperClass()
+                        if isinstance(value, ast.Call):
+                            if (
+                                isinstance(value.func, ast.Name)
+                                and value.func.id in property_type_wrappers
+                                and not value.args
+                                and not value.keywords
+                            ):
                                 original = ast.get_source_segment(context.source, value)
                                 if original:
+                                    class_name = value.func.id
                                     issues.append(
                                         LintIssue(
                                             rule_id=self.rule_id,
-                                            message=f"Instantiate PropertyType wrapper: {value.id}()",
+                                            message=f"Use no-parens style: {class_name}",
                                             line=value.lineno,
                                             column=value.col_offset,
                                             original=original,
-                                            suggestion=f"{value.id}()",
+                                            suggestion=class_name,
                                             fix_imports=[],
                                         )
                                     )
 
-                        # Check lists: field = [WrapperClass, WrapperClass2]
+                        # Check lists: field = [WrapperClass(), WrapperClass2()]
                         elif isinstance(value, ast.List):
                             for elt in value.elts:
-                                if isinstance(elt, ast.Name):
-                                    if elt.id in property_type_wrappers:
+                                if isinstance(elt, ast.Call):
+                                    if (
+                                        isinstance(elt.func, ast.Name)
+                                        and elt.func.id in property_type_wrappers
+                                        and not elt.args
+                                        and not elt.keywords
+                                    ):
                                         original = ast.get_source_segment(
                                             context.source, elt
                                         )
                                         if original:
+                                            class_name = elt.func.id
                                             issues.append(
                                                 LintIssue(
                                                     rule_id=self.rule_id,
-                                                    message=f"Instantiate PropertyType wrapper: {elt.id}()",
+                                                    message=f"Use no-parens style: {class_name}",
                                                     line=elt.lineno,
                                                     column=elt.col_offset,
                                                     original=original,
-                                                    suggestion=f"{elt.id}()",
+                                                    suggestion=class_name,
                                                     fix_imports=[],
                                                 )
                                             )

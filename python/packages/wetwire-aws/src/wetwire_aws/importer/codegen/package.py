@@ -267,14 +267,10 @@ def _generate_init_py(pkg_ctx: PackageContext, template: IRTemplate) -> str:
     lines.append("from .params import *  # noqa: F403, F401")
     lines.append("")
 
-    # Setup resources - loads resource files and injects remaining types
+    # Setup resources - loads all resource and output files, auto-decorates classes
+    # No need for explicit imports after this - everything is in globals()
     lines.append("setup_resources(__file__, __name__, globals())")
     lines.append("")
-
-    # Import outputs after resources are loaded
-    if template.outputs:
-        lines.append("from .outputs import *  # noqa: F403, F401")
-        lines.append("")
 
     return "\n".join(lines) + "\n"
 

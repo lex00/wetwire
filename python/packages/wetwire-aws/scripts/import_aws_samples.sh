@@ -394,7 +394,27 @@ else
     success "Linted all packages"
 fi
 
-# Step 8: Validate packages
+# Step 8: Validate no-parens pattern
+header "Validating No-Parens Pattern"
+
+# Check for any ref() or get_att() calls in generated code
+REF_MATCHES=$(grep -rE '\bref\s*\(' "$OUTPUT_DIR" --include="*.py" 2>/dev/null || true)
+GET_ATT_MATCHES=$(grep -rE '\bget_att\s*\(' "$OUTPUT_DIR" --include="*.py" 2>/dev/null || true)
+
+if [ -n "$REF_MATCHES" ] || [ -n "$GET_ATT_MATCHES" ]; then
+    error "Found ref() or get_att() calls in generated code - should use no-parens pattern"
+    if [ -n "$REF_MATCHES" ]; then
+        echo "$REF_MATCHES" | head -10
+    fi
+    if [ -n "$GET_ATT_MATCHES" ]; then
+        echo "$GET_ATT_MATCHES" | head -10
+    fi
+    exit 1
+else
+    success "No ref() or get_att() patterns found - using no-parens style"
+fi
+
+# Step 9: Validate packages
 VALIDATION_FAILED=()
 
 if [ "$SKIP_VALIDATION" = false ]; then
@@ -491,7 +511,7 @@ else
     warn "Skipping validation (--skip-validation flag)"
 fi
 
-# Step 9: Report
+# Step 10: Report
 header "Summary"
 
 FINAL_DIRS=$(find "$OUTPUT_DIR" -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')

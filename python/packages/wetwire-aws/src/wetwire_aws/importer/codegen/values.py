@@ -174,12 +174,10 @@ def intrinsic_to_python(
             ctx.add_intrinsic_import("Ref")
             return f'Ref("{target}")'
         if target in ctx.template.parameters:
-            # Parameters use ref() for runtime resolution
-            return f"ref({_format_ref_target(target)})"
+            # Parameters use bare class name - no parens pattern
+            return _format_ref_target(target)
         if target in ctx.template.resources:
-            # No-parens pattern: bare class name for resource references
-            # Two-pass loading with placeholders handles same-file forward refs
-            # setup_resources() handles cross-file refs by loading in dependency order
+            # Resources use bare class name - setup_resources() handles forward refs
             return _format_ref_target(target)
         ctx.add_intrinsic_import("Ref")
         return f'Ref("{target}")'
@@ -187,10 +185,9 @@ def intrinsic_to_python(
     if intrinsic.type == IntrinsicType.GET_ATT:
         logical_id, attr = intrinsic.args
         if logical_id in ctx.template.resources:
-            # No-parens pattern: use bare class name for resource references
-            # Two-pass loading with placeholders handles same-file forward refs
-            # setup_resources() handles cross-file refs by loading in dependency order
-            return f'get_att({_format_ref_target(logical_id)}, "{attr}")'
+            # Use no-parens pattern: ClassName.Attr
+            # setup_resources() handles forward refs via placeholders
+            return f'{_format_ref_target(logical_id)}.{attr}'
         ctx.add_intrinsic_import("GetAtt")
         return f'GetAtt("{logical_id}", "{attr}")'
 
@@ -211,19 +208,18 @@ def intrinsic_to_python(
                 if not all_params:
                     formatted_id = _format_ref_target(resource_id)
                     if suffix == "":
-                        return AnnotatedValue(
-                            annotation=f"GetAtt[{formatted_id}]",
-                            value='get_att("Arn")',
-                        )
+                        # Use no-parens pattern: ClassName.Arn
+                        return f'{formatted_id}.Arn'
                     else:
+                        # Join with .Arn suffix
                         ctx.add_intrinsic_import("Join")
-                        return f"Join('', [get_att(\"{formatted_id}\", \"Arn\"), '{suffix}'])"
+                        return f"Join('', [{formatted_id}.Arn, '{suffix}'])"
 
         # Check for name pattern match
         if not variables and template_str in ctx.name_pattern_map:
             resource_id = ctx.name_pattern_map[template_str]
             if resource_id != ctx.current_resource_id:
-                # No-parens pattern: just the bare resource class name
+                # Use bare class name - setup_resources() handles forward refs
                 return _format_ref_target(resource_id)
 
         ctx.add_intrinsic_import("Sub")

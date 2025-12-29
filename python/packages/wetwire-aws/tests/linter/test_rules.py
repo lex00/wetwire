@@ -691,10 +691,10 @@ class TestSplittingUtilities:
 
 
 class TestPropertyTypeAsRef:
-    """Tests for WAW011: PropertyType wrappers should be instantiated."""
+    """Tests for WAW011: PropertyType wrappers should use no-parens style."""
 
-    def test_detects_policy_document_wrapper(self):
-        """Should detect PolicyDocument wrapper used without ()."""
+    def test_detects_policy_document_wrapper_with_parens(self):
+        """Should detect PolicyDocument wrapper used with ()."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
         code = '''
@@ -706,15 +706,15 @@ class MyPolicyDoc:
 @wetwire_aws
 class MyRole:
     resource: iam.Role
-    assume_role_policy_document = MyPolicyDoc
+    assume_role_policy_document = MyPolicyDoc()
 '''
         issues = lint_code(code, rules=[PropertyTypeAsRef()])
         assert len(issues) == 1
         assert issues[0].rule_id == "WAW011"
-        assert "MyPolicyDoc()" in issues[0].suggestion
+        assert issues[0].suggestion == "MyPolicyDoc"
 
-    def test_detects_policy_statement_wrapper(self):
-        """Should detect PolicyStatement wrapper used without ()."""
+    def test_detects_policy_statement_wrapper_with_parens(self):
+        """Should detect PolicyStatement wrapper used with ()."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
         code = '''
@@ -726,14 +726,14 @@ class AllowStatement:
 @wetwire_aws
 class MyPolicyDoc:
     resource: PolicyDocument
-    statement = [AllowStatement]
+    statement = [AllowStatement()]
 '''
         issues = lint_code(code, rules=[PropertyTypeAsRef()])
         assert len(issues) == 1
-        assert "AllowStatement()" in issues[0].suggestion
+        assert issues[0].suggestion == "AllowStatement"
 
-    def test_detects_nested_property_type_wrapper(self):
-        """Should detect nested PropertyType wrapper (e.g., s3.bucket.BucketEncryption)."""
+    def test_detects_nested_property_type_wrapper_with_parens(self):
+        """Should detect nested PropertyType wrapper (e.g., s3.bucket.BucketEncryption) with ()."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
         code = '''
@@ -745,11 +745,11 @@ class MyBucketEncryption:
 @wetwire_aws
 class MyBucket:
     resource: s3.Bucket
-    bucket_encryption = MyBucketEncryption
+    bucket_encryption = MyBucketEncryption()
 '''
         issues = lint_code(code, rules=[PropertyTypeAsRef()])
         assert len(issues) == 1
-        assert "MyBucketEncryption()" in issues[0].suggestion
+        assert issues[0].suggestion == "MyBucketEncryption"
 
     def test_ignores_resource_wrappers(self):
         """Should not flag resource wrappers (these are valid as class refs)."""
@@ -769,8 +769,8 @@ class MySubnet:
         issues = lint_code(code, rules=[PropertyTypeAsRef()])
         assert len(issues) == 0
 
-    def test_ignores_already_instantiated(self):
-        """Should not flag PropertyType wrappers that are already instantiated."""
+    def test_ignores_already_no_parens(self):
+        """Should not flag PropertyType wrappers that already use no-parens style."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
         code = '''
@@ -782,13 +782,13 @@ class MyPolicyDoc:
 @wetwire_aws
 class MyRole:
     resource: iam.Role
-    assume_role_policy_document = MyPolicyDoc()
+    assume_role_policy_document = MyPolicyDoc
 '''
         issues = lint_code(code, rules=[PropertyTypeAsRef()])
         assert len(issues) == 0
 
-    def test_detects_multiple_in_list(self):
-        """Should detect multiple PropertyType wrappers in a list."""
+    def test_detects_multiple_in_list_with_parens(self):
+        """Should detect multiple PropertyType wrappers with () in a list."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
         code = '''
@@ -805,15 +805,15 @@ class AllowStatement2:
 @wetwire_aws
 class MyPolicyDoc:
     resource: PolicyDocument
-    statement = [AllowStatement1, AllowStatement2]
+    statement = [AllowStatement1(), AllowStatement2()]
 '''
         issues = lint_code(code, rules=[PropertyTypeAsRef()])
         assert len(issues) == 2
-        assert "AllowStatement1()" in issues[0].suggestion
-        assert "AllowStatement2()" in issues[1].suggestion
+        assert issues[0].suggestion == "AllowStatement1"
+        assert issues[1].suggestion == "AllowStatement2"
 
-    def test_fix_adds_parentheses(self):
-        """Should fix by adding () to instantiate the wrapper."""
+    def test_fix_removes_parentheses(self):
+        """Should fix by removing () from the wrapper."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
         code = '''@wetwire_aws
@@ -824,9 +824,10 @@ class MyPolicyDoc:
 @wetwire_aws
 class MyRole:
     resource: iam.Role
-    assume_role_policy_document = MyPolicyDoc'''
+    assume_role_policy_document = MyPolicyDoc()'''
         fixed = fix_code(code, rules=[PropertyTypeAsRef()], add_imports=False)
-        assert "assume_role_policy_document = MyPolicyDoc()" in fixed
+        assert "assume_role_policy_document = MyPolicyDoc\n" in fixed or \
+               fixed.strip().endswith("assume_role_policy_document = MyPolicyDoc")
 
 
 class TestDuplicateResource:
