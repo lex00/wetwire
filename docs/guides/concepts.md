@@ -211,23 +211,25 @@ Context provides values that are resolved at serialization time, not definition 
 - Cloud provider pseudo-parameters
 - Dynamic values like account IDs
 
-```
+```python
+from . import *
+
 @wetwire_aws
 class MyBucket:
-    resource: Bucket
-    bucket_name = "{AWSContext.account_id}-app-data"
+    resource: s3.Bucket
+    bucket_name = Sub("${AWS::AccountId}-app-data")
 ```
 
-When serialized, `AWSContext.account_id` becomes `{"Ref": "AWS::AccountId"}` in CloudFormation.
+When serialized, pseudo-parameters like `AWS::AccountId` are resolved by CloudFormation at deployment time.
 
-### Common AWS Context Values
+### Common AWS Pseudo-Parameters
 
-| Context | CloudFormation Equivalent |
+| Constant | CloudFormation Equivalent |
 |---------|--------------------------|
-| `AWSContext.account_id` | `AWS::AccountId` |
-| `AWSContext.region` | `AWS::Region` |
-| `AWSContext.stack_name` | `AWS::StackName` |
-| `AWSContext.stack_id` | `AWS::StackId` |
+| `AWS_ACCOUNT_ID` | `AWS::AccountId` |
+| `AWS_REGION` | `AWS::Region` |
+| `AWS_STACK_NAME` | `AWS::StackName` |
+| `AWS_STACK_ID` | `AWS::StackId` |
 
 ---
 
@@ -352,41 +354,40 @@ class WebServer:
 
 Here's a complete example showing multiple concepts:
 
-```
+```python
+from . import *
+
 # Base networking
 @wetwire_aws
 class AppVPC:
-    resource: VPC
+    resource: ec2.VPC
     cidr_block = "10.0.0.0/16"
     enable_dns_hostnames = True
 
 @wetwire_aws
 class WebSubnet:
-    resource: Subnet
-    vpc = AppVPC                      # Reference
+    resource: ec2.Subnet
+    vpc_id = AppVPC                   # Reference (no-parens)
     cidr_block = "10.0.1.0/24"
-    availability_zone = "{AWSContext.region}a"  # Context
+    availability_zone = Sub("${AWS::Region}a")  # Context via Sub()
 
 @wetwire_aws
 class WebSecurityGroup:
-    resource: SecurityGroup
-    vpc = AppVPC                      # Reference
+    resource: ec2.SecurityGroup
+    vpc_id = AppVPC                   # Reference (no-parens)
     group_description = "Web server security group"
 
-# Compute with computed property
+# Compute
 @wetwire_aws
 class WebServer:
-    resource: Instance
-    subnet = WebSubnet                # Reference
-    security_groups = [WebSecurityGroup]  # List of references
+    resource: ec2.Instance
+    subnet_id = WebSubnet             # Reference (no-parens)
+    security_group_ids = [WebSecurityGroup]  # List of references
     instance_type = "t3.medium"
-
-    @computed
-    def tags(self):
-        return {
-            "Name": "web-{AWSContext.stack_name}",
-            "Environment": "production"
-        }
+    tags = [
+        {"Key": "Name", "Value": Sub("web-${AWS::StackName}")},
+        {"Key": "Environment", "Value": "production"},
+    ]
 
 # Generate template
 template = CloudFormationTemplate.from_registry()

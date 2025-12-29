@@ -93,13 +93,18 @@ class Subnet:
 Cloud-specific implementations with pre-generated resources.
 
 ```python
+from . import *
+
 @wetwire_aws
 class MyBucket:
     resource: s3.Bucket
     bucket_name = "data"
-    versioning_configuration = s3.bucket.VersioningConfiguration(
-        status="Enabled"
-    )
+    versioning_configuration = MyVersioning  # Reference to another wrapper
+
+@wetwire_aws
+class MyVersioning:
+    resource: s3.bucket.VersioningConfiguration
+    status = s3.BucketVersioningStatus.ENABLED
 ```
 
 **Key Components:**
@@ -117,13 +122,15 @@ class MyBucket:
 
 Every resource is a user-defined class wrapping a domain type:
 
-```
+```python
+from . import *
+
 @wetwire_aws
 class MyDatabase:
-    resource: RDSInstance      # The underlying type
-    instance_class = "db.t3.micro"
-    storage_size = 100
-    encryption = Enabled
+    resource: rds.DBInstance   # Module-qualified underlying type
+    db_instance_class = "db.t3.micro"
+    allocated_storage = 100
+    storage_encrypted = True
 ```
 
 ### The No-Parens Principle
