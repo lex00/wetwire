@@ -59,7 +59,6 @@ MISSING_DEPS=""
 python -c "import requests" 2>/dev/null || MISSING_DEPS="$MISSING_DEPS requests"
 python -c "import jinja2" 2>/dev/null || MISSING_DEPS="$MISSING_DEPS jinja2"
 python -c "import botocore" 2>/dev/null || MISSING_DEPS="$MISSING_DEPS botocore"
-python -c "import black" 2>/dev/null || MISSING_DEPS="$MISSING_DEPS black"
 
 if [ -n "$MISSING_DEPS" ]; then
     echo "Installing missing codegen dependencies:$MISSING_DEPS"

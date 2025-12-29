@@ -627,20 +627,20 @@ def main():
     print(f"\nGenerated {total_files} files")
     print(f"  Including {total_enums} enum constant classes")
 
-    # Format with black (optional - skip if not installed)
-    if shutil.which("black"):
-        print("\nFormatting with black...")
+    # Format with ruff (optional - skip if not installed)
+    if shutil.which("ruff"):
+        print("\nFormatting with ruff...")
         result = subprocess.run(
-            ["black", str(output_dir), "--quiet"],
+            ["ruff", "format", str(output_dir), "--quiet"],
             capture_output=True,
             text=True,
         )
         if result.returncode == 0:
             print(f"  Formatted {total_files}/{total_files} files")
         else:
-            print(f"  Warning: black formatting failed: {result.stderr}")
+            print(f"  Warning: ruff formatting failed: {result.stderr}")
     else:
-        print("\nSkipping black formatting (not installed)")
+        print("\nSkipping ruff formatting (not installed)")
 
     print(f"\nOutput written to {output_dir}")
     print("\nGenerate completed successfully!")

@@ -256,11 +256,11 @@ uv run mypy src/wetwire_aws/core/
 ### Linting and Formatting
 
 ```bash
-# Format code
-uv run black src/ tests/
+# Lint and auto-fix
+uv run ruff check --fix src/ tests/
 
-# Lint
-uv run ruff check src/ tests/
+# Format code
+uv run ruff format src/ tests/
 ```
 
 ### Building
@@ -317,12 +317,11 @@ CloudFormation resource names do NOT include service prefixes:
 - `requests` - Download CloudFormation specs
 - `jinja2` - Template rendering
 - `botocore` - Extract enum values from AWS SDK
-- `black` - Format generated code
 
 **Development dependencies**:
 - `mypy`, `pyright` - Static type checking
 - `pytest`, `pytest-cov` - Testing
-- `ruff` - Linting and formatting
+- `ruff` - Linting and formatting (also used to format generated code)
 
 ### 5. Python Version
 
