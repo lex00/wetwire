@@ -55,27 +55,12 @@ NULL = "Null"
 # Parameter Type Mapping
 # =============================================================================
 
-# Map CloudFormation parameter types to wetwire_aws constants
-PARAMETER_TYPE_MAP: dict[str, str] = {
-    "String": "STRING",
-    "Number": "NUMBER",
-    "List<Number>": "LIST_NUMBER",
-    "CommaDelimitedList": "COMMA_DELIMITED_LIST",
-    "AWS::SSM::Parameter::Value<String>": "SSM_PARAMETER_STRING",
-    "AWS::SSM::Parameter::Value<List<String>>": "SSM_PARAMETER_STRING_LIST",
-    "AWS::EC2::AvailabilityZone::Name": "AVAILABILITY_ZONE",
-    "List<AWS::EC2::AvailabilityZone::Name>": "LIST_AVAILABILITY_ZONE",
-    "AWS::EC2::Image::Id": "AMI_ID",
-    "AWS::EC2::Instance::Id": "INSTANCE_ID",
-    "AWS::EC2::KeyPair::KeyName": "KEY_PAIR",
-    "AWS::EC2::SecurityGroup::Id": "SECURITY_GROUP_ID",
-    "List<AWS::EC2::SecurityGroup::Id>": "LIST_SECURITY_GROUP_ID",
-    "AWS::EC2::Subnet::Id": "SUBNET_ID",
-    "List<AWS::EC2::Subnet::Id>": "LIST_SUBNET_ID",
-    "AWS::EC2::VPC::Id": "VPC_ID",
-    "AWS::EC2::Volume::Id": "VOLUME_ID",
-    "AWS::Route53::HostedZone::Id": "HOSTED_ZONE_ID",
-}
+# Map CloudFormation parameter types to wetwire_aws constant names
+# Dynamically generated from wetwire_aws.params module
+from dataclass_dsl import build_reverse_constant_map
+from wetwire_aws import params as _params
+
+PARAMETER_TYPE_MAP: dict[str, str] = build_reverse_constant_map(_params, str)
 
 # =============================================================================
 # Pseudo-Parameter Mapping
