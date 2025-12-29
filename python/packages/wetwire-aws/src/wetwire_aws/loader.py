@@ -368,6 +368,46 @@ def setup_params(package_globals: dict[str, Any]) -> None:
     })
 
 
+def _auto_decorate_resources(package_globals: dict[str, Any]) -> None:
+    """Auto-decorate classes that have a resource: annotation.
+
+    This enables the "invisible decorator" pattern where classes
+    with `resource:` annotations are automatically decorated without
+    needing an explicit @wetwire_aws decorator.
+
+    Classes that are already decorated (have _refs_marker) are skipped.
+
+    Updates both package_globals and the original defining modules.
+    """
+    import sys
+
+    from wetwire_aws.decorator import wetwire_aws
+
+    for name, obj in list(package_globals.items()):
+        if not isinstance(obj, type):
+            continue
+
+        # Check for resource: annotation
+        annotations = getattr(obj, "__annotations__", {})
+        if "resource" not in annotations:
+            continue
+
+        # Skip if already decorated (has _refs_marker from @wetwire_aws)
+        if hasattr(obj, "_refs_marker"):
+            continue
+
+        # Apply decorator
+        decorated = wetwire_aws(obj)
+        package_globals[name] = decorated
+
+        # Also update the original module where the class was defined
+        orig_module_name = getattr(obj, "__module__", None)
+        if orig_module_name and orig_module_name in sys.modules:
+            orig_module = sys.modules[orig_module_name]
+            if hasattr(orig_module, name):
+                setattr(orig_module, name, decorated)
+
+
 def setup_resources(
     init_file: str,
     package_name: str,
@@ -375,18 +415,22 @@ def setup_resources(
     *,
     generate_stubs: bool = True,
 ) -> None:
-    """Set up AWS CloudFormation resource imports.
+    """Set up AWS CloudFormation resource imports with auto-decoration.
 
     Wrapper around dataclass_dsl.setup_resources with AWS-specific
     namespace injection and stub configuration pre-applied.
 
+    Classes with a `resource:` annotation are auto-decorated.
+    No need for explicit @wetwire_aws decorator.
+
     This function:
     1. Finds all .py files in the package directory
-    2. Parses them to find class definitions and ref()/get_att() calls
+    2. Parses them to find class definitions and Ref[T]/Attr[T,...] references
     3. Builds a dependency graph from the references
     4. Imports modules in topological order
     5. Injects AWS decorators, types, and service modules into each module's namespace
-    6. Generates .pyi stubs with AWS-specific imports for IDE support
+    6. Auto-decorates classes with `resource:` annotation
+    7. Generates .pyi stubs with AWS-specific imports for IDE support
 
     Args:
         init_file: Path to __init__.py (__file__)
@@ -398,6 +442,14 @@ def setup_resources(
         # In myapp/resources/__init__.py
         from wetwire_aws.loader import setup_resources
         setup_resources(__file__, __name__, globals())
+
+        # Resource files can use pure Python classes:
+        # myapp/resources/storage.py
+        from . import *
+
+        class DataBucket:
+            resource: s3.Bucket
+            bucket_name = "data-lake"
     """
     _setup_resources(
         init_file,
@@ -407,3 +459,6 @@ def setup_resources(
         generate_stubs=generate_stubs,
         extra_namespace=_get_aws_namespace(),
     )
+
+    # Auto-decorate classes with resource: annotation
+    _auto_decorate_resources(package_globals)

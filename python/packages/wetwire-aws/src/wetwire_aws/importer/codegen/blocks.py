@@ -8,15 +8,15 @@ For example, instead of:
     bucket_encryption = {'ServerSideEncryptionConfiguration': [...]}
 
 Block mode generates:
-    @wetwire_aws
     class MyBucketBucketEncryption:
         resource: s3.bucket.BucketEncryption
         server_side_encryption_configuration = [MyBucketServerSideEncryptionRule]
 
-    @wetwire_aws
     class MyBucket:
         resource: s3.Bucket
         bucket_encryption = MyBucketBucketEncryption
+
+Classes with `resource:` annotations are auto-decorated by setup_resources().
 
 Key function: property_value_to_python_block()
 """
@@ -200,7 +200,7 @@ def generate_property_type_wrapper(
     pt_info: dict[str, Any],
     ctx: "CodegenContext",
 ) -> str:
-    """Generate a @wetwire_aws wrapper for a PropertyType value.
+    """Generate a wrapper class for a PropertyType value.
 
     Returns the generated class name.
     """
@@ -295,15 +295,12 @@ def _generate_property_type_wrapper_impl(
             val_str = value_to_python(val, ctx, indent=1)
             lines.append(f"    # Unknown CF key: {cf_key} = {val_str}")
 
-    # Add import for decorator
-    ctx.add_import("wetwire_aws", "wetwire_aws")
-
     # Store class definition
-    class_def = f"@wetwire_aws\nclass {class_name}:\n" + "\n".join(lines)
+    class_def = f"class {class_name}:\n" + "\n".join(lines)
     ctx.property_type_class_defs.append(class_def)
 
-    # Return instantiated form - PropertyType wrappers must be instances, not class refs
-    return f"{class_name}()"
+    # Return bare class name - no-parens pattern
+    return class_name
 
 
 # =============================================================================
@@ -336,7 +333,7 @@ def _generate_policy_statement_wrapper_block(
     stmt_index: int,
     ctx: "CodegenContext",
 ) -> str:
-    """Generate a @wetwire_aws wrapper for a PolicyStatement.
+    """Generate a wrapper class for a PolicyStatement.
 
     Returns the generated class name.
     """
@@ -382,8 +379,6 @@ def _generate_policy_statement_wrapper_impl(
     else:
         ctx.add_import("wetwire_aws", "PolicyStatement")
         base_class = "PolicyStatement"
-    ctx.add_import("wetwire_aws", "wetwire_aws")
-
     lines = []
     lines.append(f"    resource: {base_class}")
 
@@ -408,11 +403,11 @@ def _generate_policy_statement_wrapper_impl(
         lines.append(f"    condition = {condition_str}")
 
     # Store class definition
-    class_def = f"@wetwire_aws\nclass {class_name}:\n" + "\n".join(lines)
+    class_def = f"class {class_name}:\n" + "\n".join(lines)
     ctx.property_type_class_defs.append(class_def)
 
-    # Return instantiated form - PolicyStatement wrappers must be instances, not class refs
-    return f"{class_name}()"
+    # Return bare class name - no-parens pattern
+    return class_name
 
 
 def _generate_policy_document_wrapper_block(
@@ -421,7 +416,7 @@ def _generate_policy_document_wrapper_block(
     property_path: str,
     ctx: "CodegenContext",
 ) -> str:
-    """Generate a @wetwire_aws wrapper for a PolicyDocument.
+    """Generate a wrapper class for a PolicyDocument.
 
     Returns the generated class name.
     """
@@ -463,7 +458,6 @@ def _generate_policy_document_wrapper_impl(
 
     # Add imports
     ctx.add_import("wetwire_aws", "PolicyDocument")
-    ctx.add_import("wetwire_aws", "wetwire_aws")
 
     lines = []
     lines.append("    resource: PolicyDocument")
@@ -500,11 +494,11 @@ def _generate_policy_document_wrapper_impl(
             lines.append(f"    statement = [{', '.join(stmt_class_names)}]")
 
     # Store class definition
-    class_def = f"@wetwire_aws\nclass {class_name}:\n" + "\n".join(lines)
+    class_def = f"class {class_name}:\n" + "\n".join(lines)
     ctx.property_type_class_defs.append(class_def)
 
-    # Return instantiated form - PolicyDocument wrappers must be instances, not class refs
-    return f"{class_name}()"
+    # Return bare class name - no-parens pattern
+    return class_name
 
 
 # =============================================================================

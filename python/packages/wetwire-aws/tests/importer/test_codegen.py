@@ -26,7 +26,7 @@ class TestGenerateSimpleBucket:
         assert "from wetwire_aws" in code
 
     def test_has_resource_class(self, code):
-        assert "@wetwire_aws" in code
+        # Invisible decorator pattern: no @wetwire_aws needed
         assert "class MyBucket:" in code
         # Bucket exists in multiple modules, so qualified name may be used
         assert "resource:" in code
@@ -71,12 +71,12 @@ class TestGenerateBucketWithRef:
         assert "default = 'my-default-bucket'" in code
 
     def test_has_ref_to_parameter(self, code):
-        # Parameter refs still use ref() - only resource refs use bare class names
-        assert "bucket_name = ref(BucketNameParam)" in code
+        # No-parens pattern: bare class name for parameter refs
+        assert "bucket_name = BucketNameParam" in code
 
     def test_has_getatt(self, code):
-        # GetAtt uses get_att() with bare class name (no-parens pattern for resource)
-        assert 'value = get_att(MyBucket, "Arn")' in code
+        # No-parens pattern: ClassName.Attr for GetAtt
+        assert "value = MyBucket.Arn" in code
 
     def test_generated_code_is_valid_python(self, code):
         compile(code, "<test>", "exec")
@@ -147,7 +147,7 @@ class TestBlockModeWithTags:
 
     def test_has_wrapper_classes(self, code):
         # Block mode uses wrapper classes for PropertyTypes
-        assert "@wetwire_aws" in code
+        # Invisible decorator pattern: no @wetwire_aws needed
         assert "class ProdBucket:" in code
 
     def test_all_resources_present(self, code):
@@ -169,7 +169,9 @@ class TestBlockModeWithPolicies:
 
     def test_has_wrapper_classes_for_policy(self, code):
         # Should have wrapper classes for policy structures
-        assert "@wetwire_aws" in code
+        # Invisible decorator pattern: no @wetwire_aws needed
+        assert "class MyBucketPolicyPolicyDocument:" in code
+        assert "class MyBucketPolicyAllowStatement0:" in code
 
     def test_generated_code_is_valid_python(self, code):
         compile(code, "<test>", "exec")

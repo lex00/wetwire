@@ -85,10 +85,8 @@ def generate_parameter_class(param: IRParameter, ctx: CodegenContext) -> str:
     if param.no_echo:
         lines.append("    no_echo = True")
 
-    ctx.add_import("wetwire_aws", "wetwire_aws")
-
     class_name = sanitize_class_name(param.logical_id)
-    return f"@wetwire_aws\nclass {class_name}:\n" + "\n".join(lines)
+    return f"class {class_name}:\n" + "\n".join(lines)
 
 
 # =============================================================================
@@ -148,27 +146,17 @@ def generate_resource_class(resource: IRResource, ctx: CodegenContext) -> str:
 
     # Resource-level attributes
     if resource.depends_on:
-        # No-parens pattern: bare class names for depends_on
-        # Forward refs in SCC use strings to avoid NameError
-        dep_strs = []
-        for d in resource.depends_on:
-            class_name = sanitize_class_name(d)
-            if d in ctx.forward_references:
-                # Forward ref within SCC - must use string
-                dep_strs.append(f'"{class_name}"')
-            else:
-                # Bare class name - setup_resources() injects cross-file classes
-                dep_strs.append(class_name)
+        # No-parens pattern: always use bare class names for depends_on
+        # setup_resources() handles forward refs via placeholders
+        dep_strs = [sanitize_class_name(d) for d in resource.depends_on]
         lines.append(f"    depends_on = [{', '.join(dep_strs)}]")
     if resource.condition:
         lines.append(f"    condition = {escape_string(resource.condition)}")
     if resource.deletion_policy:
         lines.append(f"    deletion_policy = {escape_string(resource.deletion_policy)}")
 
-    ctx.add_import("wetwire_aws", "wetwire_aws")
-
     class_name = sanitize_class_name(resource.logical_id)
-    return f"@wetwire_aws\nclass {class_name}:\n" + "\n".join(lines)
+    return f"class {class_name}:\n" + "\n".join(lines)
 
 
 # =============================================================================
@@ -201,10 +189,8 @@ def generate_output_class(output: IROutput, ctx: CodegenContext) -> str:
     if output.condition:
         lines.append(f"    condition = {escape_string(output.condition)}")
 
-    ctx.add_import("wetwire_aws", "wetwire_aws")
-
     class_name = sanitize_class_name(output.logical_id)
-    return f"@wetwire_aws\nclass {class_name}Output:\n" + "\n".join(lines)
+    return f"class {class_name}Output:\n" + "\n".join(lines)
 
 
 # =============================================================================
@@ -223,10 +209,8 @@ def generate_mapping_class(mapping: IRMapping, ctx: CodegenContext) -> str:
     map_str = value_to_python(mapping.map_data, ctx, indent=1)
     lines.append(f"    map_data = {map_str}")
 
-    ctx.add_import("wetwire_aws", "wetwire_aws")
-
     class_name = sanitize_class_name(mapping.logical_id)
-    return f"@wetwire_aws\nclass {class_name}Mapping:\n" + "\n".join(lines)
+    return f"class {class_name}Mapping:\n" + "\n".join(lines)
 
 
 # =============================================================================
@@ -248,7 +232,5 @@ def generate_condition_class(condition: IRCondition, ctx: CodegenContext) -> str
     expr_str = value_to_python(condition.expression, ctx, indent=1)
     lines.append(f"    expression = {expr_str}")
 
-    ctx.add_import("wetwire_aws", "wetwire_aws")
-
     class_name = sanitize_class_name(condition.logical_id)
-    return f"@wetwire_aws\nclass {class_name}Condition:\n" + "\n".join(lines)
+    return f"class {class_name}Condition:\n" + "\n".join(lines)
