@@ -69,7 +69,7 @@ python -m wetwire_aws.codegen.parse --validate  # Extra validation
 
 # Stage 3: Generate Python code
 python -m wetwire_aws.codegen.generate
-python -m wetwire_aws.codegen.generate --format  # Run black
+python -m wetwire_aws.codegen.generate --format  # Run ruff format
 python -m wetwire_aws.codegen.generate --dry-run  # Preview only
 
 # All stages
@@ -375,7 +375,6 @@ dependencies = [
 codegen = [
     "requests>=2.28",
     "jinja2>=3.1",
-    "black>=23.12",
     "botocore>=1.34",  # For enum extraction
 ]
 ```

@@ -53,7 +53,7 @@ class TestParseSimpleBucket:
         resource = template.resources["MyBucket"]
         assert "BucketName" in resource.properties
         prop = resource.properties["BucketName"]
-        assert prop.cf_name == "BucketName"
+        assert prop.domain_name == "BucketName"
         assert prop.python_name == "bucket_name"
         assert prop.value == "my-test-bucket"
 

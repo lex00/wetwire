@@ -213,13 +213,13 @@ from wetwire_aws.resources.s3.bucket import BucketEncryption, ServerSideEncrypti
 
 ### Code Style
 
-- **Formatting**: Use `black` (line length 100)
-- **Linting**: Use `ruff`
+- **Formatting**: Use `ruff format`
+- **Linting**: Use `ruff check`
 - **Type Hints**: Required for all public APIs
 
 ```bash
 # Format code
-uv run black src/ tests/
+uv run ruff format src/ tests/
 
 # Lint
 uv run ruff check src/ tests/

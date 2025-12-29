@@ -11,12 +11,17 @@ Note: With two-pass loading and placeholder support in dataclass-dsl,
 forward references within the same file are now handled automatically.
 SCC detection is still useful for grouping tightly-coupled resources
 and for file-level dependency tracking.
+
+This module uses generic graph algorithms from dataclass-dsl and adds
+CloudFormation-specific graph building logic.
 """
 
 from __future__ import annotations
 
 import re
 from typing import Any
+
+from dataclass_dsl import find_sccs_in_graph, topological_sort_graph
 
 from wetwire_aws.importer.ir import (
     IntrinsicType,
@@ -34,87 +39,61 @@ def find_strongly_connected_components(template: IRTemplate) -> list[list[str]]:
     Resources in the same SCC form a cycle and should be in the same file.
     SCCs are returned in reverse topological order (dependencies first).
     """
-    resources = set(template.resources.keys())
+    # Build dependency graph from template
+    graph = build_dependency_graph(template)
 
+    # Use generic SCC algorithm from dataclass-dsl
+    return find_sccs_in_graph(graph)
+
+
+def build_dependency_graph(template: IRTemplate) -> dict[str, set[str]]:
+    """Build a dependency graph from a CloudFormation template.
+
+    Returns a dict mapping resource IDs to sets of resource IDs they depend on.
+    """
+    resources = set(template.resources.keys())
     name_pattern_map = build_name_pattern_map(template)
     arn_pattern_map = build_arn_pattern_map(template)
 
-    graph: dict[str, list[str]] = {}
+    graph: dict[str, set[str]] = {}
     for resource_id in resources:
         deps = find_resource_dependencies(
             template, resource_id, name_pattern_map, arn_pattern_map
         )
-        graph[resource_id] = [d for d in deps if d in resources]
+        graph[resource_id] = {d for d in deps if d in resources}
 
-    index_counter = [0]
-    stack: list[str] = []
-    lowlinks: dict[str, int] = {}
-    index: dict[str, int] = {}
-    on_stack: set[str] = set()
-    sccs: list[list[str]] = []
-
-    def strongconnect(node: str) -> None:
-        index[node] = index_counter[0]
-        lowlinks[node] = index_counter[0]
-        index_counter[0] += 1
-        stack.append(node)
-        on_stack.add(node)
-
-        for successor in graph.get(node, []):
-            if successor not in index:
-                strongconnect(successor)
-                lowlinks[node] = min(lowlinks[node], lowlinks[successor])
-            elif successor in on_stack:
-                lowlinks[node] = min(lowlinks[node], index[successor])
-
-        if lowlinks[node] == index[node]:
-            scc: list[str] = []
-            while True:
-                successor = stack.pop()
-                on_stack.remove(successor)
-                scc.append(successor)
-                if successor == node:
-                    break
-            sccs.append(scc)
-
-    for node in resources:
-        if node not in index:
-            strongconnect(node)
-
-    return sccs
+    return graph
 
 
 def topological_sort(template: IRTemplate) -> list[str]:
     """Sort resources so dependencies come first.
 
     Considers both reference_graph (Ref/GetAtt) and depends_on dependencies.
+    Uses the generic topological sort algorithm from dataclass-dsl.
     """
-    visited: set[str] = set()
-    result: list[str] = []
+    # Build combined dependency graph (reference_graph + depends_on)
+    resources = set(template.resources.keys())
+    graph: dict[str, set[str]] = {}
 
-    def visit(resource_id: str) -> None:
-        if resource_id in visited:
-            return
-        visited.add(resource_id)
+    for resource_id in resources:
+        deps: set[str] = set()
 
-        # Visit Ref/GetAtt dependencies
+        # Add Ref/GetAtt dependencies
         for dep_id in template.reference_graph.get(resource_id, []):
-            if dep_id in template.resources:
-                visit(dep_id)
+            if dep_id in resources:
+                deps.add(dep_id)
 
-        # Visit depends_on dependencies
+        # Add depends_on dependencies
         resource = template.resources.get(resource_id)
         if resource:
             for dep_id in resource.depends_on:
-                if dep_id in template.resources:
-                    visit(dep_id)
+                if dep_id in resources:
+                    deps.add(dep_id)
 
-        result.append(resource_id)
+        graph[resource_id] = deps
 
-    for resource_id in template.resources:
-        visit(resource_id)
-
-    return result
+    # Use generic topological sort from dataclass-dsl
+    return topological_sort_graph(graph)
 
 
 def find_resource_dependencies(
