@@ -184,8 +184,8 @@ wetwire-aws lint myapp/
 # Auto-fix issues
 wetwire-aws lint myapp/ --fix
 
-# Check specific rules only
-wetwire-aws lint myapp/ --rule WAW001 --rule WAW006
+# Verbose output
+wetwire-aws lint myapp/ --verbose
 ```
 
 ### Options
@@ -194,7 +194,7 @@ wetwire-aws lint myapp/ --rule WAW001 --rule WAW006
 |--------|-------------|
 | `PATH` | File or directory to lint |
 | `--fix` | Auto-fix detected issues |
-| `--rule RULE_ID` | Only check specific rules (can be repeated) |
+| `--verbose, -v` | Verbose output |
 
 ### Lint Rules
 
