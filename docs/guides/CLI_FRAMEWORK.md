@@ -1,6 +1,6 @@
 # CLI Framework
 
-The wetwire core package provides reusable CLI utilities for building domain-specific command-line tools.
+The dataclass-dsl package provides reusable CLI utilities for building domain-specific command-line tools.
 
 ## Overview
 
@@ -18,7 +18,7 @@ Domain packages like wetwire-aws can use these utilities to build their CLIs wit
 ```python
 # my_domain_cli.py
 import argparse
-from wetwire import (
+from dataclass_dsl import (
     discover_resources,
     add_common_args,
     create_list_command,
@@ -68,7 +68,7 @@ if __name__ == "__main__":
 Import a module to trigger resource registration.
 
 ```python
-from wetwire import discover_resources
+from dataclass_dsl import discover_resources
 
 count = discover_resources(
     module_path="myapp.infra",
@@ -94,7 +94,7 @@ print(f"Discovered {count} resources")
 Add standard CLI arguments to a parser.
 
 ```python
-from wetwire import add_common_args
+from dataclass_dsl import add_common_args
 
 parser = argparse.ArgumentParser()
 add_common_args(parser)
@@ -112,7 +112,7 @@ add_common_args(parser)
 Create a 'list' command handler.
 
 ```python
-from wetwire import create_list_command
+from dataclass_dsl import create_list_command
 
 def get_type(cls):
     return cls.__annotations__.get("resource", "Unknown")
@@ -142,7 +142,7 @@ Registered resources (3):
 Create a 'validate' command handler that checks references.
 
 ```python
-from wetwire import create_validate_command
+from dataclass_dsl import create_validate_command
 
 validate_cmd = create_validate_command(registry)
 ```
