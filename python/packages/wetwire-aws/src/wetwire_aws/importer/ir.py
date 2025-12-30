@@ -27,6 +27,18 @@ Example:
 
 from __future__ import annotations
 
+__all__ = [
+    "IntrinsicType",
+    "IRCondition",
+    "IRIntrinsic",
+    "IRMapping",
+    "IROutput",
+    "IRParameter",
+    "IRProperty",
+    "IRResource",
+    "IRTemplate",
+]
+
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any

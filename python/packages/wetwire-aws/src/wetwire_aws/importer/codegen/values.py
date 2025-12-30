@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 from wetwire_aws.importer.ir import IntrinsicType, IRIntrinsic
 
 from .context import AnnotatedValue
-from .helpers import PSEUDO_PARAMETER_MAP, sanitize_class_name
+from .helpers import PSEUDO_PARAMETER_MAP
 
 if TYPE_CHECKING:
     from .context import CodegenContext

@@ -1598,7 +1598,7 @@ class InlinePropertyType(LintRule):
                                             line=node.lineno,
                                             column=node.col_offset,
                                             original=original[:50] + "..." if len(original) > 50 else original,
-                                            suggestion=f"# Define a wrapper class with resource: <service>.<PropertyType>",
+                                            suggestion="# Define a wrapper class with resource: <service>.<PropertyType>",
                                             fix_imports=[],
                                         )
                                     )
@@ -1615,7 +1615,7 @@ class InlinePropertyType(LintRule):
                                                     line=elt.lineno,
                                                     column=elt.col_offset,
                                                     original=original[:50] + "..." if len(original) > 50 else original,
-                                                    suggestion=f"# Define a wrapper class with resource: <service>.<PropertyType>",
+                                                    suggestion="# Define a wrapper class with resource: <service>.<PropertyType>",
                                                     fix_imports=[],
                                                 )
                                             )
@@ -1746,8 +1746,8 @@ class InlinePolicyDocument(LintRule):
                                         LintIssue(
                                             rule_id=self.rule_id,
                                             message=(
-                                                f"Use wrapper classes for policy documents. "
-                                                f"Define a class with 'resource: iam.PolicyDocument'"
+                                                "Use wrapper classes for policy documents. "
+                                                "Define a class with 'resource: iam.PolicyDocument'"
                                             ),
                                             line=node.lineno,
                                             column=node.col_offset,

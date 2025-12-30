@@ -180,8 +180,7 @@ def _resource_class_exists(module_name: str, class_name: str) -> bool:
 
 
 # Import parameter mappings from constants (re-exported for backwards compatibility)
-from wetwire_aws.constants import PARAMETER_TYPE_MAP, PSEUDO_PARAMETER_MAP
-
+from wetwire_aws.constants import PARAMETER_TYPE_MAP, PSEUDO_PARAMETER_MAP  # noqa: E402
 
 # =============================================================================
 # PropertyType Registry
@@ -208,7 +207,6 @@ def _build_property_type_map() -> None:
 
     import re
     from pathlib import Path
-    from typing import Any
 
     _PROPERTY_TYPE_MAP = {}
     _CF_PROPERTY_TO_CLASSES = {}

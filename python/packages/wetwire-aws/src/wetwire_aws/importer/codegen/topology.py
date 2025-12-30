@@ -93,7 +93,13 @@ def topological_sort(template: IRTemplate) -> list[str]:
         graph[resource_id] = deps
 
     # Use generic topological sort from dataclass-dsl
-    return topological_sort_graph(graph)
+    # Cast is needed because dict is invariant but the function accepts Iterable values
+    from collections.abc import Iterable
+    from typing import cast
+
+    return topological_sort_graph(
+        cast(dict[str, set[str] | list[str] | Iterable[str]], graph)
+    )
 
 
 def find_resource_dependencies(

@@ -42,6 +42,34 @@ def _get_aws_namespace() -> dict[str, Any]:
         PropertyType,
         Tag,
     )
+    from wetwire_aws.constants import (
+        ARN_EQUALS,
+        ARN_LIKE,
+        ARN_NOT_EQUALS,
+        ARN_NOT_LIKE,
+        BOOL,
+        DATE_EQUALS,
+        DATE_GREATER_THAN,
+        DATE_GREATER_THAN_EQUALS,
+        DATE_LESS_THAN,
+        DATE_LESS_THAN_EQUALS,
+        DATE_NOT_EQUALS,
+        IP_ADDRESS,
+        NOT_IP_ADDRESS,
+        NULL,
+        NUMERIC_EQUALS,
+        NUMERIC_GREATER_THAN,
+        NUMERIC_GREATER_THAN_EQUALS,
+        NUMERIC_LESS_THAN,
+        NUMERIC_LESS_THAN_EQUALS,
+        NUMERIC_NOT_EQUALS,
+        STRING_EQUALS,
+        STRING_EQUALS_IGNORE_CASE,
+        STRING_LIKE,
+        STRING_NOT_EQUALS,
+        STRING_NOT_EQUALS_IGNORE_CASE,
+        STRING_NOT_LIKE,
+    )
     from wetwire_aws.decorator import wetwire_aws
     from wetwire_aws.intrinsics import ARN, get_att, ref
     from wetwire_aws.intrinsics.functions import (
@@ -62,6 +90,7 @@ def _get_aws_namespace() -> dict[str, Any]:
         Sub,
         Transform,
     )
+    from wetwire_aws.intrinsics.functions import Condition as ConditionIntrinsic
     from wetwire_aws.intrinsics.functions import Ref as RefIntrinsic
     from wetwire_aws.intrinsics.pseudo import (
         AWS_ACCOUNT_ID,
@@ -73,7 +102,6 @@ def _get_aws_namespace() -> dict[str, Any]:
         AWS_STACK_NAME,
         AWS_URL_SUFFIX,
     )
-    from wetwire_aws.intrinsics.functions import Condition as ConditionIntrinsic
     from wetwire_aws.params import (
         AMI_ID,
         AVAILABILITY_ZONE,
@@ -96,38 +124,12 @@ def _get_aws_namespace() -> dict[str, Any]:
     )
     from wetwire_aws.template import (
         CloudFormationTemplate,
-        Condition as TemplateCondition,
         Mapping,
         Output,
         Parameter,
     )
-    from wetwire_aws.constants import (
-        BOOL,
-        STRING_EQUALS,
-        STRING_NOT_EQUALS,
-        STRING_EQUALS_IGNORE_CASE,
-        STRING_NOT_EQUALS_IGNORE_CASE,
-        STRING_LIKE,
-        STRING_NOT_LIKE,
-        NUMERIC_EQUALS,
-        NUMERIC_NOT_EQUALS,
-        NUMERIC_LESS_THAN,
-        NUMERIC_LESS_THAN_EQUALS,
-        NUMERIC_GREATER_THAN,
-        NUMERIC_GREATER_THAN_EQUALS,
-        DATE_EQUALS,
-        DATE_NOT_EQUALS,
-        DATE_LESS_THAN,
-        DATE_LESS_THAN_EQUALS,
-        DATE_GREATER_THAN,
-        DATE_GREATER_THAN_EQUALS,
-        IP_ADDRESS,
-        NOT_IP_ADDRESS,
-        ARN_EQUALS,
-        ARN_NOT_EQUALS,
-        ARN_LIKE,
-        ARN_NOT_LIKE,
-        NULL,
+    from wetwire_aws.template import (
+        Condition as TemplateCondition,
     )
 
     # Build namespace with all service modules
@@ -314,6 +316,8 @@ def setup_params(package_globals: dict[str, Any]) -> None:
     )
     from wetwire_aws.template import (
         Condition as TemplateCondition,
+    )
+    from wetwire_aws.template import (
         Mapping,
         Output,
         Parameter,

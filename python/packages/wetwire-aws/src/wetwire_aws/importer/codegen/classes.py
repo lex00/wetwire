@@ -16,13 +16,13 @@ from wetwire_aws.importer.ir import (
     IRResource,
 )
 
+from .blocks import property_value_to_python_block
 from .context import AnnotatedValue
 from .helpers import (
     PARAMETER_TYPE_MAP,
     resolve_resource_type,
     sanitize_class_name,
 )
-from .blocks import property_value_to_python_block
 from .values import (
     escape_docstring,
     escape_string,

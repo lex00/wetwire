@@ -33,7 +33,6 @@ from .context import AnnotatedValue
 from .helpers import (
     extract_class_from_type_hint,
     resolve_property_type,
-    to_pascal_case,
 )
 from .values import (
     escape_string,
@@ -56,7 +55,7 @@ def property_value_to_python_block(
     property_path: str,
     expected_type: str | None,
     expected_module: str | None,
-    ctx: "CodegenContext",
+    ctx: CodegenContext,
 ) -> str | AnnotatedValue:
     """Convert a property value to Python code in block mode.
 
@@ -105,12 +104,12 @@ def property_value_to_python_block(
 
 
 def _convert_list_block(
-    value: list,
+    value: list[Any],
     parent_logical_id: str,
     property_path: str,
     expected_type: str | None,
     expected_module: str | None,
-    ctx: "CodegenContext",
+    ctx: CodegenContext,
 ) -> str:
     """Convert a list value in block mode."""
     if not value:
@@ -147,12 +146,12 @@ def _convert_list_block(
 
 
 def _convert_dict_block(
-    value: dict,
+    value: dict[str, Any],
     parent_logical_id: str,
     property_path: str,
     expected_type: str | None,
     expected_module: str | None,
-    ctx: "CodegenContext",
+    ctx: CodegenContext,
 ) -> str:
     """Convert a dict value in block mode."""
     # Handle policy documents specially
@@ -198,7 +197,7 @@ def generate_property_type_wrapper(
     pt_module: str,
     pt_class: str,
     pt_info: dict[str, Any],
-    ctx: "CodegenContext",
+    ctx: CodegenContext,
 ) -> str:
     """Generate a wrapper class for a PropertyType value.
 
@@ -224,7 +223,7 @@ def _generate_property_type_wrapper_impl(
     pt_module: str,
     pt_class: str,
     pt_info: dict[str, Any],
-    ctx: "CodegenContext",
+    ctx: CodegenContext,
 ) -> str:
     """Internal implementation of generate_property_type_wrapper."""
     # Generate class name: {ParentLogicalId}{PropertyTypeName}
@@ -331,7 +330,7 @@ def _generate_policy_statement_wrapper_block(
     parent_logical_id: str,
     property_path: str,
     stmt_index: int,
-    ctx: "CodegenContext",
+    ctx: CodegenContext,
 ) -> str:
     """Generate a wrapper class for a PolicyStatement.
 
@@ -355,7 +354,7 @@ def _generate_policy_statement_wrapper_impl(
     parent_logical_id: str,
     property_path: str,
     stmt_index: int,
-    ctx: "CodegenContext",
+    ctx: CodegenContext,
 ) -> str:
     """Internal implementation of _generate_policy_statement_wrapper_block."""
     # Generate class name based on effect and index
@@ -414,7 +413,7 @@ def _generate_policy_document_wrapper_block(
     doc: dict[str, Any],
     parent_logical_id: str,
     property_path: str,
-    ctx: "CodegenContext",
+    ctx: CodegenContext,
 ) -> str:
     """Generate a wrapper class for a PolicyDocument.
 
@@ -437,7 +436,7 @@ def _generate_policy_document_wrapper_impl(
     doc: dict[str, Any],
     parent_logical_id: str,
     property_path: str,
-    ctx: "CodegenContext",
+    ctx: CodegenContext,
 ) -> str:
     """Internal implementation of _generate_policy_document_wrapper_block."""
     # Generate class name
@@ -536,7 +535,7 @@ CONDITION_OPERATOR_MAP: dict[str, str] = {
 
 
 def _condition_to_python(
-    condition: dict[str, Any], ctx: "CodegenContext", indent: int = 0
+    condition: dict[str, Any], ctx: CodegenContext, indent: int = 0
 ) -> str:
     """Convert a policy condition dict to Python code with operator constants.
 

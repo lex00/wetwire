@@ -31,8 +31,9 @@ Examples:
 import argparse
 import sys
 from pathlib import Path
+from typing import cast
 
-from dataclass_dsl import create_lint_command
+from dataclass_dsl import LintIssue, create_lint_command
 
 from wetwire_aws.cli_utils import (
     add_common_args,
@@ -41,9 +42,22 @@ from wetwire_aws.cli_utils import (
     discover_resources,
 )
 from wetwire_aws.decorator import get_aws_registry
-from wetwire_aws.linter import fix_file, lint_file
+from wetwire_aws.linter import fix_file as _fix_file
+from wetwire_aws.linter import lint_file as _lint_file
 from wetwire_aws.stubs import AWS_STUB_CONFIG
 from wetwire_aws.template import CloudFormationTemplate
+
+
+# Wrapper functions to match the protocol signatures expected by create_lint_command
+def lint_file(filepath: str) -> list[LintIssue]:
+    """Wrapper matching LinterProtocol signature."""
+    # Cast is needed because wetwire_aws.linter.LintIssue is a superset of dataclass_dsl.LintIssue
+    return cast(list[LintIssue], _lint_file(filepath))
+
+
+def fix_file(filepath: str, write: bool = True) -> str:
+    """Wrapper matching FixerProtocol signature."""
+    return _fix_file(filepath, write=write)
 
 
 def get_cf_resource_type(cls: type) -> str:

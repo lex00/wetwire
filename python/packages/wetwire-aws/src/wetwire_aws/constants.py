@@ -57,8 +57,9 @@ NULL = "Null"
 
 # Map CloudFormation parameter types to wetwire_aws constant names
 # Dynamically generated from wetwire_aws.params module
-from dataclass_dsl import build_reverse_constant_map
-from wetwire_aws import params as _params
+from dataclass_dsl import build_reverse_constant_map  # noqa: E402
+
+from wetwire_aws import params as _params  # noqa: E402
 
 PARAMETER_TYPE_MAP: dict[str, str] = build_reverse_constant_map(_params, str)
 

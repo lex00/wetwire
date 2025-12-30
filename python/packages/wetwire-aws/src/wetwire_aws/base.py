@@ -9,9 +9,8 @@ Context is the base class for environment-specific configuration.
 from dataclasses import dataclass, field
 from typing import Annotated, Any, ClassVar
 
-from dataclass_dsl import ContextRef, is_attr_ref, is_class_ref
+from dataclass_dsl import ContextRef, Resource, is_attr_ref, is_class_ref
 from dataclass_dsl import PropertyType as PropertyTypeBase
-from dataclass_dsl import Resource
 from dataclass_dsl._loader import _ClassPlaceholder
 
 

@@ -498,7 +498,6 @@ def _generate_resource_files(
 
         # Find the minimal set of resources to move to break the cycle
         # Look for edges within the cycle and move resources from the smaller side
-        cycle_set = set(cycle)
         best_resources_to_move: list[str] = []
         best_count = float("inf")
 
