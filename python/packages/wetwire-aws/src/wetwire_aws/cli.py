@@ -85,7 +85,10 @@ def init_command(args: argparse.Namespace) -> None:
 
     # Validate package name
     if not package_name.replace("_", "").isalnum():
-        print(f"Error: Invalid package name '{package_name}'. Use snake_case.", file=sys.stderr)
+        print(
+            f"Error: Invalid package name '{package_name}'. Use snake_case.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     package_dir = output_dir / package_name

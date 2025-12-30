@@ -403,7 +403,9 @@ def _parse_property(cf_name: str, value: Any) -> IRProperty:
     """
     python_name = sanitize_python_name(to_snake_case(cf_name))
     resolved_value = _resolve_long_form_intrinsics(value)
-    return IRProperty(domain_name=cf_name, python_name=python_name, value=resolved_value)
+    return IRProperty(
+        domain_name=cf_name, python_name=python_name, value=resolved_value
+    )
 
 
 def _parse_resource(logical_id: str, resource_def: dict[str, Any]) -> IRResource:

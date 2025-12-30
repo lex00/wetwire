@@ -428,7 +428,9 @@ class StringShouldBeEnum(LintRule):
                             ]
                             if value in value_map:
                                 # Only suggest if the enum actually exists
-                                if not self._is_enum_available(module_short, enum_class):
+                                if not self._is_enum_available(
+                                    module_short, enum_class
+                                ):
                                     continue
 
                                 const_name = value_map[value]
@@ -1319,23 +1321,102 @@ class InlineConstructor(LintRule):
 
     # Known AWS service modules from wetwire_aws
     AWS_SERVICE_MODULES = {
-        "s3", "ec2", "lambda_", "iam", "rds", "dynamodb", "sqs", "sns",
-        "cloudwatch", "logs", "events", "apigateway", "route53", "cloudfront",
-        "ecs", "eks", "elasticache", "elasticloadbalancing", "elasticloadbalancingv2",
-        "kms", "secretsmanager", "ssm", "stepfunctions", "cognito", "kinesis",
-        "firehose", "glue", "athena", "redshift", "emr", "batch", "codebuild",
-        "codepipeline", "codecommit", "codedeploy", "waf", "wafv2", "acm",
-        "amplify", "appconfig", "appsync", "backup", "budgets", "chatbot",
-        "cloudformation", "cloudtrail", "config", "connect", "datapipeline",
-        "directoryservice", "dms", "docdb", "elasticsearch", "elasticmapreduce",
-        "fsx", "gamelift", "greengrass", "guardduty", "inspector", "iot",
-        "kafka", "lakeformation", "lex", "licensemanager", "lightsail",
-        "macie", "mediaconvert", "medialive", "mediapackage", "mediastore",
-        "msk", "neptune", "networkfirewall", "opsworks", "organizations",
-        "personalize", "pinpoint", "polly", "qldb", "quicksight", "ram",
-        "rekognition", "resourcegroups", "robomaker", "sagemaker", "servicecatalog",
-        "servicediscovery", "ses", "shield", "signer", "simspaceweaver",
-        "timestream", "transfer", "wafregional", "workspaces", "xray",
+        "s3",
+        "ec2",
+        "lambda_",
+        "iam",
+        "rds",
+        "dynamodb",
+        "sqs",
+        "sns",
+        "cloudwatch",
+        "logs",
+        "events",
+        "apigateway",
+        "route53",
+        "cloudfront",
+        "ecs",
+        "eks",
+        "elasticache",
+        "elasticloadbalancing",
+        "elasticloadbalancingv2",
+        "kms",
+        "secretsmanager",
+        "ssm",
+        "stepfunctions",
+        "cognito",
+        "kinesis",
+        "firehose",
+        "glue",
+        "athena",
+        "redshift",
+        "emr",
+        "batch",
+        "codebuild",
+        "codepipeline",
+        "codecommit",
+        "codedeploy",
+        "waf",
+        "wafv2",
+        "acm",
+        "amplify",
+        "appconfig",
+        "appsync",
+        "backup",
+        "budgets",
+        "chatbot",
+        "cloudformation",
+        "cloudtrail",
+        "config",
+        "connect",
+        "datapipeline",
+        "directoryservice",
+        "dms",
+        "docdb",
+        "elasticsearch",
+        "elasticmapreduce",
+        "fsx",
+        "gamelift",
+        "greengrass",
+        "guardduty",
+        "inspector",
+        "iot",
+        "kafka",
+        "lakeformation",
+        "lex",
+        "licensemanager",
+        "lightsail",
+        "macie",
+        "mediaconvert",
+        "medialive",
+        "mediapackage",
+        "mediastore",
+        "msk",
+        "neptune",
+        "networkfirewall",
+        "opsworks",
+        "organizations",
+        "personalize",
+        "pinpoint",
+        "polly",
+        "qldb",
+        "quicksight",
+        "ram",
+        "rekognition",
+        "resourcegroups",
+        "robomaker",
+        "sagemaker",
+        "servicecatalog",
+        "servicediscovery",
+        "ses",
+        "shield",
+        "signer",
+        "simspaceweaver",
+        "timestream",
+        "transfer",
+        "wafregional",
+        "workspaces",
+        "xray",
     }
 
     def check(self, context: LintContext) -> list[LintIssue]:
@@ -1420,7 +1501,12 @@ class InlineSecurityGroupRules(LintRule):
     description = "Use wrapper classes instead of inline security group rules"
 
     # Field names for security group rules
-    SG_RULE_FIELDS = ["security_group_ingress", "security_group_egress", "ingress", "egress"]
+    SG_RULE_FIELDS = [
+        "security_group_ingress",
+        "security_group_egress",
+        "ingress",
+        "egress",
+    ]
 
     def check(self, context: LintContext) -> list[LintIssue]:
         issues = []
@@ -1436,9 +1522,15 @@ class InlineSecurityGroupRules(LintRule):
                                 for elt in node.value.elts:
                                     if isinstance(elt, ast.Dict):
                                         if self._is_sg_rule(elt):
-                                            original = ast.get_source_segment(context.source, elt)
+                                            original = ast.get_source_segment(
+                                                context.source, elt
+                                            )
                                             if original:
-                                                rule_type = "Ingress" if "ingress" in field_name else "Egress"
+                                                rule_type = (
+                                                    "Ingress"
+                                                    if "ingress" in field_name
+                                                    else "Egress"
+                                                )
                                                 issues.append(
                                                     LintIssue(
                                                         rule_id=self.rule_id,
@@ -1447,7 +1539,9 @@ class InlineSecurityGroupRules(LintRule):
                                                         ),
                                                         line=elt.lineno,
                                                         column=elt.col_offset,
-                                                        original=original[:50] + "..." if len(original) > 50 else original,
+                                                        original=original[:50] + "..."
+                                                        if len(original) > 50
+                                                        else original,
                                                         suggestion=(
                                                             f"# Define a wrapper class:\n"
                                                             f"# class My{rule_type}Rule:\n"
@@ -1493,7 +1587,9 @@ class RedundantRelativeImport(LintRule):
     """
 
     rule_id = "WAW018"
-    description = "Remove redundant relative import (already available via 'from . import *')"
+    description = (
+        "Remove redundant relative import (already available via 'from . import *')"
+    )
 
     def check(self, context: LintContext) -> list[LintIssue]:
         issues = []
@@ -1589,7 +1685,9 @@ class InlinePropertyType(LintRule):
                                 # Skip simple dicts (1 key or less)
                                 if len(node.value.keys) <= 1:
                                     continue
-                                original = ast.get_source_segment(context.source, node.value)
+                                original = ast.get_source_segment(
+                                    context.source, node.value
+                                )
                                 if original:
                                     issues.append(
                                         LintIssue(
@@ -1597,7 +1695,9 @@ class InlinePropertyType(LintRule):
                                             message=f"Use wrapper class for {field_name}",
                                             line=node.lineno,
                                             column=node.col_offset,
-                                            original=original[:50] + "..." if len(original) > 50 else original,
+                                            original=original[:50] + "..."
+                                            if len(original) > 50
+                                            else original,
                                             suggestion="# Define a wrapper class with resource: <service>.<PropertyType>",
                                             fix_imports=[],
                                         )
@@ -1606,7 +1706,9 @@ class InlinePropertyType(LintRule):
                                 # Check for list of dicts
                                 for elt in node.value.elts:
                                     if isinstance(elt, ast.Dict) and len(elt.keys) > 1:
-                                        original = ast.get_source_segment(context.source, elt)
+                                        original = ast.get_source_segment(
+                                            context.source, elt
+                                        )
                                         if original:
                                             issues.append(
                                                 LintIssue(
@@ -1614,7 +1716,9 @@ class InlinePropertyType(LintRule):
                                                     message=f"Use wrapper class for {field_name} item",
                                                     line=elt.lineno,
                                                     column=elt.col_offset,
-                                                    original=original[:50] + "..." if len(original) > 50 else original,
+                                                    original=original[:50] + "..."
+                                                    if len(original) > 50
+                                                    else original,
                                                     suggestion="# Define a wrapper class with resource: <service>.<PropertyType>",
                                                     fix_imports=[],
                                                 )
@@ -1659,7 +1763,9 @@ class InlinePolicyStatement(LintRule):
                             for elt in node.value.elts:
                                 if isinstance(elt, ast.Dict):
                                     if self._is_policy_statement(elt):
-                                        original = ast.get_source_segment(context.source, elt)
+                                        original = ast.get_source_segment(
+                                            context.source, elt
+                                        )
                                         if original:
                                             issues.append(
                                                 LintIssue(
@@ -1667,12 +1773,14 @@ class InlinePolicyStatement(LintRule):
                                                     message="Use wrapper class for policy statement",
                                                     line=elt.lineno,
                                                     column=elt.col_offset,
-                                                    original=original[:50] + "..." if len(original) > 50 else original,
+                                                    original=original[:50] + "..."
+                                                    if len(original) > 50
+                                                    else original,
                                                     suggestion=(
                                                         "# Define a wrapper class:\n"
                                                         "# class MyStatement:\n"
                                                         "#     resource: iam.PolicyStatement\n"
-                                                        "#     effect = \"Allow\"\n"
+                                                        '#     effect = "Allow"\n'
                                                         "#     action = [...]\n"
                                                         "#     resource_ = [...]  # note: resource_"
                                                     ),
@@ -1740,7 +1848,9 @@ class InlinePolicyDocument(LintRule):
 
                         if is_policy_field and isinstance(node.value, ast.Dict):
                             if self._is_policy_document(node.value):
-                                original = ast.get_source_segment(context.source, node.value)
+                                original = ast.get_source_segment(
+                                    context.source, node.value
+                                )
                                 if original:
                                     issues.append(
                                         LintIssue(
@@ -1751,12 +1861,14 @@ class InlinePolicyDocument(LintRule):
                                             ),
                                             line=node.lineno,
                                             column=node.col_offset,
-                                            original=original[:50] + "..." if len(original) > 50 else original,
+                                            original=original[:50] + "..."
+                                            if len(original) > 50
+                                            else original,
                                             suggestion=(
                                                 "# Define wrapper classes:\n"
                                                 "# class MyPolicyStatement:\n"
                                                 "#     resource: iam.PolicyStatement\n"
-                                                "#     effect = \"Allow\"\n"
+                                                '#     effect = "Allow"\n'
                                                 "#     action = [...]\n"
                                                 "#     resource = [...]\n"
                                                 "#\n"

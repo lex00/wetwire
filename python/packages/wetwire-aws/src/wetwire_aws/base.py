@@ -95,7 +95,8 @@ def _serialize_value(value: Any) -> Any:
     # Handle no-parens pattern: class references (e.g., MyBucket)
     # Also handle plain class types with resource annotation (undecorated wrappers)
     if is_class_ref(value) or (
-        isinstance(value, type) and hasattr(value, "__annotations__")
+        isinstance(value, type)
+        and hasattr(value, "__annotations__")
         and "resource" in getattr(value, "__annotations__", {})
     ):
         # Check if this is a PropertyType wrapper - if so, instantiate and serialize
