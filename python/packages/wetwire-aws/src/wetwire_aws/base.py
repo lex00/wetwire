@@ -94,7 +94,11 @@ def _serialize_value(value: Any) -> Any:
 
         return GetAtt(value.target.__name__, value.attr).to_dict()
     # Handle no-parens pattern: class references (e.g., MyBucket)
-    if is_class_ref(value):
+    # Also handle plain class types with resource annotation (undecorated wrappers)
+    if is_class_ref(value) or (
+        isinstance(value, type) and hasattr(value, "__annotations__")
+        and "resource" in getattr(value, "__annotations__", {})
+    ):
         # Check if this is a PropertyType wrapper - if so, instantiate and serialize
         if _is_property_type_wrapper(value):
             property_instance = _instantiate_property_type_wrapper(value)
@@ -104,8 +108,11 @@ def _serialize_value(value: Any) -> Any:
         from wetwire_aws.intrinsics import Ref
 
         return Ref(value.__name__).to_dict()
-    if hasattr(value, "to_dict"):
-        return value.to_dict()
+    # Check for to_dict method - use callable() to avoid AttrRef false positives
+    # (AttrRef's __getattr__ returns AttrRef for any attribute access)
+    to_dict_method = getattr(value, "to_dict", None)
+    if to_dict_method is not None and callable(to_dict_method):
+        return to_dict_method()
     if isinstance(value, list):
         return [_serialize_value(item) for item in value]
     if isinstance(value, dict):

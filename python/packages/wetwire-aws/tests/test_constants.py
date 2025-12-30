@@ -1,6 +1,29 @@
-"""Tests for enum constants generated from botocore."""
+"""Tests for enum constants generated from botocore.
+
+These tests require enums to be generated from botocore, which happens
+when botocore is installed and `codegen.extract_enums` is run. They are
+skipped when enums are not available.
+"""
+
+import pytest
 
 
+def _enums_available():
+    """Check if enum constants are available."""
+    try:
+        from wetwire_aws.resources.lambda_ import Runtime
+        return True
+    except ImportError:
+        return False
+
+
+skip_without_enums = pytest.mark.skipif(
+    not _enums_available(),
+    reason="Enums not available (botocore not installed or extract_enums not run)"
+)
+
+
+@skip_without_enums
 class TestLambdaConstants:
     """Tests for Lambda constants."""
 
@@ -27,6 +50,7 @@ class TestLambdaConstants:
         assert PackageType.IMAGE == "Image"
 
 
+@skip_without_enums
 class TestDynamoDBConstants:
     """Tests for DynamoDB constants."""
 
@@ -47,6 +71,7 @@ class TestDynamoDBConstants:
         assert StreamViewType.NEW_AND_OLD_IMAGES == "NEW_AND_OLD_IMAGES"
 
 
+@skip_without_enums
 class TestConstantsInResources:
     """Tests for using constants in resource definitions."""
 

@@ -249,10 +249,14 @@ class StringShouldBeEnum(LintRule):
     Note: This rule uses static analysis with known patterns.
     The module-qualified form (e.g., s3.ServerSideEncryption) is preferred
     because the modules are available via `from . import *` in the package pattern.
+    Only suggests enums that actually exist in the generated code.
     """
 
     rule_id = "WAW003"
     description = "Use enum constants instead of string literals"
+
+    # Cache for enum availability checks
+    _enum_availability_cache: dict[str, bool] = {}
 
     # Known enum patterns: field_name -> (enum_class, module_short, {value: constant_name})
     # module_short is the short module name (e.g., "s3", "lambda_") not the full path
@@ -337,6 +341,31 @@ class StringShouldBeEnum(LintRule):
         ),
     }
 
+    def _is_enum_available(self, module_short: str, enum_class: str) -> bool:
+        """Check if an enum class actually exists in the generated code.
+
+        Args:
+            module_short: The short module name (e.g., "s3", "lambda_").
+            enum_class: The enum class name (e.g., "ServerSideEncryption").
+
+        Returns:
+            True if the enum class exists and is importable, False otherwise.
+        """
+        cache_key = f"{module_short}.{enum_class}"
+        if cache_key in self._enum_availability_cache:
+            return self._enum_availability_cache[cache_key]
+
+        try:
+            module = __import__(
+                f"wetwire_aws.resources.{module_short}", fromlist=[enum_class]
+            )
+            result = hasattr(module, enum_class)
+        except (ImportError, ModuleNotFoundError):
+            result = False
+
+        self._enum_availability_cache[cache_key] = result
+        return result
+
     def check(self, context: LintContext) -> list[LintIssue]:
         issues = []
 
@@ -355,6 +384,12 @@ class StringShouldBeEnum(LintRule):
                                     field_name
                                 ]
                                 if value in value_map:
+                                    # Only suggest if the enum actually exists
+                                    if not self._is_enum_available(
+                                        module_short, enum_class
+                                    ):
+                                        continue
+
                                     const_name = value_map[value]
                                     # Use module-qualified form: s3.ServerSideEncryption.AES256
                                     suggestion = (
@@ -386,6 +421,10 @@ class StringShouldBeEnum(LintRule):
                                 keyword.arg
                             ]
                             if value in value_map:
+                                # Only suggest if the enum actually exists
+                                if not self._is_enum_available(module_short, enum_class):
+                                    continue
+
                                 const_name = value_map[value]
                                 # Use module-qualified form
                                 suggestion = f"{module_short}.{enum_class}.{const_name}"
@@ -416,6 +455,12 @@ class StringShouldBeEnum(LintRule):
                                     self.KNOWN_DICT_KEYS[key_str]
                                 )
                                 if value in value_map:
+                                    # Only suggest if the enum actually exists
+                                    if not self._is_enum_available(
+                                        module_short, enum_class
+                                    ):
+                                        continue
+
                                     const_name = value_map[value]
                                     # Use module-qualified form
                                     suggestion = (

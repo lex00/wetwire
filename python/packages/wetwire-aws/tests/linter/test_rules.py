@@ -1,6 +1,7 @@
 """Tests for individual lint rules."""
 
 import pytest
+from unittest.mock import patch
 
 from wetwire_aws.linter import (
     lint_code,
@@ -16,6 +17,14 @@ from wetwire_aws.linter import (
     FileTooLarge,
     DuplicateResource,
 )
+
+
+# Fixture to mock enum availability for WAW003 tests
+@pytest.fixture
+def mock_enum_available():
+    """Mock _is_enum_available to always return True for testing."""
+    with patch.object(StringShouldBeEnum, "_is_enum_available", return_value=True):
+        yield
 
 
 class TestStringShouldBeParameterType:
@@ -125,9 +134,13 @@ param_ref = Ref("Environment")
 
 
 class TestStringShouldBeEnum:
-    """Tests for WAW003: string literals that should be enums."""
+    """Tests for WAW003: string literals that should be enums.
 
-    def test_detects_sse_algorithm_aes256(self):
+    These tests mock _is_enum_available to test pattern detection logic
+    without requiring actual enum generation (which needs botocore).
+    """
+
+    def test_detects_sse_algorithm_aes256(self, mock_enum_available):
         """Should detect sse_algorithm = 'AES256' and suggest module-qualified name."""
         code = """
 sse_algorithm = "AES256"
@@ -137,7 +150,7 @@ sse_algorithm = "AES256"
         assert issues[0].rule_id == "WAW003"
         assert issues[0].suggestion == "s3.ServerSideEncryption.AES256"
 
-    def test_detects_sse_algorithm_aws_kms(self):
+    def test_detects_sse_algorithm_aws_kms(self, mock_enum_available):
         """Should detect sse_algorithm = 'aws:kms' and suggest module-qualified name."""
         code = """
 sse_algorithm = "aws:kms"
@@ -146,7 +159,7 @@ sse_algorithm = "aws:kms"
         assert len(issues) == 1
         assert issues[0].suggestion == "s3.ServerSideEncryption.AWSKMS"
 
-    def test_detects_dynamodb_key_type(self):
+    def test_detects_dynamodb_key_type(self, mock_enum_available):
         """Should detect DynamoDB key_type = 'HASH' and suggest module-qualified name."""
         code = """
 key_type = "HASH"
@@ -155,7 +168,7 @@ key_type = "HASH"
         assert len(issues) == 1
         assert issues[0].suggestion == "dynamodb.KeyType.HASH"
 
-    def test_detects_dynamodb_attribute_type(self):
+    def test_detects_dynamodb_attribute_type(self, mock_enum_available):
         """Should detect DynamoDB attribute_type = 'S' and suggest module-qualified name."""
         code = """
 attribute_type = "S"
@@ -164,7 +177,7 @@ attribute_type = "S"
         assert len(issues) == 1
         assert issues[0].suggestion == "dynamodb.ScalarAttributeType.S"
 
-    def test_detects_enum_in_kwargs(self):
+    def test_detects_enum_in_kwargs(self, mock_enum_available):
         """Should detect enum values in keyword arguments with module-qualified name."""
         code = """
 encryption = ServerSideEncryptionByDefault(sse_algorithm="AES256")
@@ -189,7 +202,7 @@ sse_algorithm = "UNKNOWN_VALUE"
         issues = lint_code(code, rules=[StringShouldBeEnum()])
         assert len(issues) == 0
 
-    def test_fix_replaces_enum_value(self):
+    def test_fix_replaces_enum_value(self, mock_enum_available):
         """Should replace string with module-qualified enum constant."""
         code = '''sse_algorithm = "AES256"'''
         fixed = fix_code(code, rules=[StringShouldBeEnum()], add_imports=False)
@@ -425,7 +438,7 @@ setup_resources(__file__, __name__, globals())
 class TestLintCodeIntegration:
     """Integration tests for lint_code with multiple rules."""
 
-    def test_detects_multiple_issue_types(self):
+    def test_detects_multiple_issue_types(self, mock_enum_available):
         """Should detect issues from multiple rules."""
         code = """
 from wetwire_aws.intrinsics import Ref
@@ -443,7 +456,7 @@ sse_algorithm = "AES256"
         assert "WAW002" in rule_ids  # Pseudo parameter
         assert "WAW003" in rule_ids  # Enum
 
-    def test_fix_code_fixes_all_issues(self):
+    def test_fix_code_fixes_all_issues(self, mock_enum_available):
         """Should fix all detected issues."""
         code = """type = "String"
 sse_algorithm = "AES256"
@@ -454,7 +467,7 @@ sse_algorithm = "AES256"
         assert '"String"' not in fixed
         assert '"AES256"' not in fixed
 
-    def test_fix_code_no_imports_needed_for_module_qualified(self):
+    def test_fix_code_no_imports_needed_for_module_qualified(self, mock_enum_available):
         """Module-qualified enums don't need imports (modules available via from . import *)."""
         code = '''sse_algorithm = "AES256"'''
         fixed = fix_code(code, add_imports=True)
@@ -466,7 +479,7 @@ sse_algorithm = "AES256"
 class TestFixCodeImports:
     """Tests for import handling in fix_code."""
 
-    def test_module_qualified_enums_no_imports_needed(self):
+    def test_module_qualified_enums_no_imports_needed(self, mock_enum_available):
         """Module-qualified enums don't need explicit imports."""
         code = """
 sse_algorithm = "AES256"

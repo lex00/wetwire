@@ -29,6 +29,7 @@ PYTHON_KEYWORDS: dict[str, str] = {
     "else": "else_",
     "except": "except_",
     "False": "false_",
+    "field": "field_",  # Conflicts with dataclasses.field
     "finally": "finally_",
     "for": "for_",
     "from": "from_",
