@@ -285,7 +285,7 @@ wetwire-aws/tests/agent/
 └── results/
 ```
 
-See [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) for details.
+See [AGENT_WORKFLOW.md](../../python/packages/wetwire-agent/docs/AGENT_WORKFLOW.md) for details.
 
 ---
 
@@ -307,6 +307,5 @@ See [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) for details.
 
 ## Related Documents
 
-- [AGENT_WORKFLOW.md](AGENT_WORKFLOW.md) — Agent testing and design workflow
+- [AGENT_WORKFLOW.md](../../python/packages/wetwire-agent/docs/AGENT_WORKFLOW.md) — Agent testing and design workflow
 - [CODEGEN_WORKFLOW.md](CODEGEN_WORKFLOW.md) — Schema fetching and code generation
-- [WETWIRE_SPEC.md](../spec/WETWIRE_SPEC.md) — Pattern specification

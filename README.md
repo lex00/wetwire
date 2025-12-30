@@ -159,8 +159,7 @@ See [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for d
 | Document | Description |
 |----------|-------------|
 | [ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) | System architecture |
-| [AGENT_WORKFLOW.md](docs/architecture/AGENT_WORKFLOW.md) | Design and testing workflow |
-| [WETWIRE_SPEC.md](docs/spec/WETWIRE_SPEC.md) | Pattern specification |
+| [AGENT_WORKFLOW.md](python/packages/wetwire-agent/docs/AGENT_WORKFLOW.md) | Design and testing workflow |
 
 ## Contributing
 

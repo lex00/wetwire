@@ -468,6 +468,4 @@ jobs:
 
 ## Related Documents
 
-- [CODEGEN_WORKFLOW.md](../../docs/architecture/CODEGEN_WORKFLOW.md) — Language-agnostic specification
-- [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) — Overall Python implementation plan
-- [CF_DATACLASSES.md](CF_DATACLASSES.md) — CloudFormation-specific patterns
+- [CODEGEN_WORKFLOW.md](../../../../docs/architecture/CODEGEN_WORKFLOW.md) — Language-agnostic specification
