@@ -242,6 +242,27 @@ from wetwire_aws.base import CloudFormationResource, PropertyType, Tag
 '''
 
 
+def _needs_property_mapping(prop: PropertyDef) -> bool:
+    """Check if a property needs explicit mapping (won't round-trip via simple conversion).
+
+    CloudFormation uses PascalCase with uppercase acronyms (SSEAlgorithm, KMSKeyId, VPCId).
+    Our to_snake_case converts these correctly, but _to_cf_name's simple capitalize()
+    produces SseAlgorithm instead of SSEAlgorithm.
+
+    Args:
+        prop: Property definition with name (snake_case) and original_name (CloudFormation).
+
+    Returns:
+        True if the property needs an explicit mapping.
+    """
+    # Convert snake_case back to PascalCase using the same algorithm as _to_cf_name
+    snake_name = prop.name
+    if snake_name.endswith("_") and not snake_name.endswith("__"):
+        snake_name = snake_name[:-1]
+    reconstructed = "".join(word.capitalize() for word in snake_name.split("_"))
+    return reconstructed != prop.original_name
+
+
 def generate_property_type_class(
     nested: NestedTypeDef,
     class_name: str | None = None,
@@ -266,6 +287,21 @@ def generate_property_type_class(
     if not nested.properties:
         lines.append("    pass")
         return "\n".join(lines)
+
+    # Check for properties that need explicit mappings
+    property_mappings = {
+        prop.name: prop.original_name
+        for prop in nested.properties
+        if _needs_property_mapping(prop)
+    }
+
+    if property_mappings:
+        # Generate _property_mappings class variable
+        lines.append("    _property_mappings: ClassVar[dict[str, str]] = {")
+        for py_name, cf_name in sorted(property_mappings.items()):
+            lines.append(f'        "{py_name}": "{cf_name}",')
+        lines.append("    }")
+        lines.append("")
 
     for prop in nested.properties:
         python_type = python_type_for_property(prop)
@@ -321,11 +357,25 @@ def generate_resource_class(
 
     # Class variables
     lines.append(f'    _resource_type: ClassVar[str] = "{resource.full_type}"')
-    lines.append("")
 
     if not resource.properties:
+        lines.append("")
         lines.append("    pass")
         return "\n".join(lines)
+
+    # Check for properties that need explicit mappings
+    property_mappings = {
+        prop.name: prop.original_name
+        for prop in resource.properties
+        if _needs_property_mapping(prop)
+    }
+
+    if property_mappings:
+        lines.append("    _property_mappings: ClassVar[dict[str, str]] = {")
+        for py_name, cf_name in sorted(property_mappings.items()):
+            lines.append(f'        "{py_name}": "{cf_name}",')
+        lines.append("    }")
+    lines.append("")
 
     # Generate properties
     for prop in resource.properties:

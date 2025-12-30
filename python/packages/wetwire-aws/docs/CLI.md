@@ -209,8 +209,14 @@ wetwire-aws lint myapp/ --verbose
 | WAW007 | Use flat imports with module-qualified names | ✅ |
 | WAW008 | Remove verbose imports handled by `setup_resources()` | ✅ |
 | WAW010 | Split large files (>15 resources) into smaller files | ❌ |
-| WAW011 | PropertyType wrappers should be instantiated with `()` | ✅ |
+| WAW011 | Use no-parens style for PropertyType wrappers (remove `()`) | ✅ |
 | WAW012 | Detect duplicate resource class names | ❌ |
+| WAW013 | Use wrapper classes instead of inline constructors | ❌ |
+| WAW014 | Use wrapper classes instead of inline policy documents | ❌ |
+| WAW015 | Use wrapper classes instead of inline security group rules | ❌ |
+| WAW016 | Use wrapper classes instead of inline policy statements | ❌ |
+| WAW017 | Use wrapper classes instead of inline property type dicts | ❌ |
+| WAW018 | Remove redundant relative imports with `from . import *` | ❌ |
 
 ### Example: Auto-fixing Code
 

@@ -122,9 +122,9 @@ The generator produces Python modules for each AWS service by combining two data
 ./scripts/regenerate.sh
 
 # Or run stages individually (from package root)
-python -m codegen.fetch
-python -m codegen.parse
-python -m codegen.generate
+uv run python -m codegen.fetch
+uv run python -m codegen.parse
+uv run python -m codegen.generate
 
 # Regenerate specific service
 python -m codegen.generate --service s3

@@ -145,6 +145,10 @@ class PropertyType(PropertyTypeBase):
     such as S3 Bucket's VersioningConfiguration or EC2 Instance's BlockDeviceMapping.
     """
 
+    # Mapping from Python property names to CloudFormation names for special cases
+    # (e.g., sse_algorithm -> SSEAlgorithm where simple PascalCase won't work)
+    _property_mappings: ClassVar[dict[str, str]] = {}
+
     def to_dict(self) -> dict[str, Any]:
         """Convert property to CloudFormation-compatible dict.
 
@@ -165,8 +169,12 @@ class PropertyType(PropertyTypeBase):
             if isinstance(prop_value, (list, dict)) and len(prop_value) == 0:
                 continue
 
-            # Convert to CloudFormation property name (snake_case to PascalCase)
-            cf_name = _to_cf_name(prop_name)
+            # Check for explicit property mapping first
+            if prop_name in self._property_mappings:
+                cf_name = self._property_mappings[prop_name]
+            else:
+                # Convert to CloudFormation property name (snake_case to PascalCase)
+                cf_name = _to_cf_name(prop_name)
             result[cf_name] = _serialize_value(prop_value)
 
         return result

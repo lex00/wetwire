@@ -4,10 +4,9 @@ Testing and design orchestration for wetwire domain packages.
 
 ## Overview
 
-wetwire-agent provides a two-agent workflow for:
-
-1. **Interactive Design** - Human developer works with AI runner to create infrastructure packages
-2. **Automated Testing** - AI developer (persona) tests AI runner's ability to generate correct packages
+Two-agent workflow for:
+1. **Interactive Design** - Human developer + AI runner creates infrastructure
+2. **Automated Testing** - AI developer (persona) + AI runner tests generation
 
 ## Installation
 
@@ -15,95 +14,68 @@ wetwire-agent provides a two-agent workflow for:
 pip install wetwire-agent
 ```
 
-This automatically installs domain packages (wetwire-aws) as dependencies.
+## Claude Code Skill
 
-## Quick Start
+When using Claude Code in this repository, you can run scenarios interactively:
 
-### List Available Resources
+```
+/run-scenario tests/domains/aws/scenarios/s3_log_bucket
+/run-scenario tests/domains/aws/scenarios/s3_log_bucket --persona expert
+/run-scenario all --persona beginner
+```
+
+Claude will act as the Runner agent:
+1. Read the scenario prompt
+2. Generate a wetwire-aws package
+3. Run `wetwire-aws lint` validation
+4. Build CloudFormation template
+5. Run `cfn-lint` validation
+6. Save results to `<scenario>/results/<persona>/`
+
+## CLI Commands
 
 ```bash
-# List domains
-wetwire-agent list domains
+# Run a scenario (validates expected output)
+uv run wetwire-agent run-scenario tests/domains/aws/scenarios/s3_log_bucket
 
-# List personas
-wetwire-agent list personas
+# Run scenario with AI generation
+uv run wetwire-agent run-scenario <path> --generate --persona beginner
 
-# List AWS prompts
-wetwire-agent list prompts --domain aws
-```
+# Run all personas
+uv run wetwire-agent run-scenario <path> --persona all --save-results
 
-### Interactive Design Session
+# Validate all scenarios (for CI)
+uv run wetwire-agent validate-scenarios tests/domains/aws/scenarios
 
-```bash
-# Start design session for AWS
-wetwire-agent design --domain aws
-```
-
-### Automated Testing
-
-```bash
-# Test AWS with beginner persona
-wetwire-agent test --domain aws --persona beginner
-
-# Test all domains
-wetwire-agent test --all
-
-# Test specific difficulty
-wetwire-agent test --domain aws --difficulty simple
-```
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    SAME WORKFLOW                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│   [Persona + Prompt] ───► [Runner Agent] ───► [Package]     │
-│         │                      │                  │         │
-│         ▼                      ▼                  ▼         │
-│   ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
-│   │  TESTING     │    │  BOTH        │    │  BOTH        │  │
-│   │  Developer   │    │  Questions/  │    │  RESULTS.md  │  │
-│   │  = AI Agent  │    │  Answers     │    │  + Package   │  │
-│   ├──────────────┤    │              │    │              │  │
-│   │  PRODUCTION  │    │              │    │              │  │
-│   │  Developer   │    │              │    │              │  │
-│   │  = Human     │    │              │    │              │  │
-│   └──────────────┘    └──────────────┘    └──────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+# List resources
+uv run wetwire-agent list domains
+uv run wetwire-agent list personas
 ```
 
 ## Personas
 
-Personas configure Developer behavior during testing:
-
 | Persona | Behavior | Tests |
 |---------|----------|-------|
-| beginner | Vague requirements, defers to suggestions | Handling ambiguity |
-| intermediate | Mixed clarity, asks clarifying questions | Back-and-forth dialogue |
-| expert | Precise requirements, corrects mistakes | Meeting high standards |
-| terse | Minimal responses ("yes", "no") | Working without guidance |
-| verbose | Over-explains, adds tangents | Filtering signal from noise |
+| beginner | Vague, defers to suggestions | Handling ambiguity |
+| intermediate | Mixed clarity, asks questions | Back-and-forth dialogue |
+| expert | Precise, corrects mistakes | Meeting high standards |
+| terse | Minimal responses | Working without guidance |
+| verbose | Over-explains | Filtering signal from noise |
 
-## Scoring
+## Scoring (0-15)
 
-Sessions are scored on 5 dimensions (0-3 scale):
+| Dimension | Description |
+|-----------|-------------|
+| Completeness | All resources created (0-3) |
+| Lint Quality | Passes on first try (0-3) |
+| Code Quality | Idiomatic patterns (0-3) |
+| Output Validity | Clean CloudFormation (0-3) |
+| Question Efficiency | Minimal questions (0-3) |
 
-| Dimension | 0 | 1 | 2 | 3 |
-|-----------|---|---|---|---|
-| Completeness | Failed | Missing resources | Most resources | All resources |
-| Lint Quality | Never passed | Passed after 3 | Passed after 1-2 | Passed first try |
-| Code Quality | Invalid syntax | Poor patterns | Good patterns | Idiomatic |
-| Output Validity | Invalid | Valid with errors | Valid with warnings | Clean |
-| Question Efficiency | 5+ questions | 3-4 questions | 1-2 questions | 0 (when appropriate) |
-
-**Overall Score:** 0-15
-
-- 0-5: Failure
-- 6-9: Partial success
-- 10-12: Success
-- 13-15: Excellent
+- **0-5**: Failure
+- **6-9**: Partial success
+- **10-12**: Success
+- **13-15**: Excellent
 
 ## Documentation
 

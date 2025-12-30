@@ -817,6 +817,7 @@ codegen = [
     { name = "jinja2" },
 ]
 dev = [
+    { name = "botocore" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pyright" },
@@ -847,6 +848,7 @@ codegen = [
     { name = "jinja2", specifier = ">=3.1" },
 ]
 dev = [
+    { name = "botocore", specifier = ">=1.34" },
     { name = "mypy", specifier = ">=1.8" },
     { name = "pre-commit", specifier = ">=3.6" },
     { name = "pyright", specifier = ">=1.1" },

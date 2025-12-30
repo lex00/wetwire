@@ -4,7 +4,6 @@ This guide explains how to create a new wetwire domain package (e.g., wetwire-k8
 
 ## Prerequisites
 
-- Read [ARCHITECTURE.md](./ARCHITECTURE.md) to understand the three-layer design
 - Familiarity with the target platform (Kubernetes, GCP, Azure, etc.)
 
 ---

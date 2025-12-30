@@ -60,18 +60,25 @@ class DataBucket:
     resource: s3.Bucket
     bucket_name = "data"
 
+# Policy statement as wrapper class (flattened)
+@wetwire_aws
+class LambdaAssumeRoleStatement:
+    resource: iam.PolicyStatement
+    effect = "Allow"
+    principal = {"Service": "lambda.amazonaws.com"}
+    action = "sts:AssumeRole"
+
+@wetwire_aws
+class LambdaAssumeRolePolicy:
+    resource: iam.PolicyDocument
+    version = "2012-10-17"
+    statement = [LambdaAssumeRoleStatement]
+
 @wetwire_aws
 class ProcessorRole:
     resource: iam.Role
     role_name = "processor"
-    assume_role_policy_document = {
-        "Version": "2012-10-17",
-        "Statement": [{
-            "Effect": "Allow",
-            "Principal": {"Service": "lambda.amazonaws.com"},
-            "Action": "sts:AssumeRole"
-        }]
-    }
+    assume_role_policy_document = LambdaAssumeRolePolicy
 
 @wetwire_aws
 class ProcessorFunction:
@@ -89,7 +96,7 @@ class ProcessorFunction:
 For introspectable references, use type annotations:
 
 ```python
-from . import *
+from . import *  # Includes Annotated, Attr, Ref from dataclass-dsl
 
 @wetwire_aws
 class ProcessorRole:
@@ -172,7 +179,7 @@ class DataBucket:
 
 **compute.py:**
 ```python
-from . import *
+from . import *  # Includes Annotated, Ref, all exported symbols
 
 __all__ = ["ProcessorFunction"]
 
@@ -266,7 +273,6 @@ aws cloudformation deploy \
 
 ## Next Steps
 
-- See the [Package Structure Guide](../../wetwire/docs/package-structure.md) for advanced multi-file patterns
 - See the full [CLI Reference](CLI.md)
 - Learn about [migration strategies](ADOPTION.md)
 - Understand [how it compares](COMPARISON.md) to CDK and Terraform

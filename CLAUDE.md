@@ -126,7 +126,7 @@ class ProcessorFunction:
     role: Attr[ProcessorRole, "Arn"] = None  # noqa: F821
 ```
 
-See `python/packages/wetwire/docs/package-structure.md` for complete documentation.
+See `python/packages/wetwire-aws/docs/QUICK_START.md` for complete documentation.
 
 **Qualified resource types for name collisions:**
 
@@ -266,8 +266,9 @@ uv run ruff format src/ tests/
 ### Building
 
 ```bash
-# Full build pipeline (download spec, generate, format, test, build)
-./scripts/build.sh
+# Regenerate resources and run CI checks
+./scripts/regenerate.sh
+./scripts/ci.sh
 
 # Build package only
 uv build
