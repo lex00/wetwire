@@ -14,6 +14,18 @@ Rules:
     WAW003: Use enum constants instead of string literals
     WAW004: Use intrinsic function classes instead of raw dicts
     WAW005: Remove unnecessary .to_dict() calls on intrinsic functions
+    WAW006: Use no-parens references instead of ref()/get_att()
+    WAW007: Use flat imports with module-qualified names instead of explicit resource imports
+    WAW008: Remove verbose imports that setup_params/setup_resources handle
+    WAW010: Split large files (>15 resources) into smaller category-based files
+    WAW011: Use no-parens style for PropertyType wrappers (remove ())
+    WAW012: Detect duplicate resource class names within a file
+    WAW013: Use wrapper classes instead of inline constructors on service modules
+    WAW014: Use wrapper classes instead of inline policy documents
+    WAW015: Use wrapper classes instead of inline security group rules
+    WAW016: Use wrapper classes instead of inline policy statements
+    WAW017: Use wrapper classes instead of inline property type dicts
+    WAW018: Remove redundant relative imports when using 'from . import *'
 
 Example:
     >>> from wetwire_aws.linter.rules import get_all_rules, LintContext
@@ -32,7 +44,7 @@ import ast
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from wetwire_aws.importer.codegen.helpers import (
+from wetwire_aws.constants import (
     PARAMETER_TYPE_MAP,
     PSEUDO_PARAMETER_MAP,
 )
@@ -235,50 +247,57 @@ class StringShouldBeEnum(LintRule):
     - {'SSEAlgorithm': 'AES256'}
     - {'Status': 'Enabled'}
 
-    Suggests:
-    - sse_algorithm = ServerSideEncryption.AES256
-    - {'SSEAlgorithm': ServerSideEncryption.AES256}
-    - {'Status': BucketVersioningStatus.ENABLED}
+    Suggests (module-qualified, no imports needed):
+    - sse_algorithm = s3.ServerSideEncryption.AES256
+    - {'SSEAlgorithm': s3.ServerSideEncryption.AES256}
+    - {'Status': s3.BucketVersioningStatus.ENABLED}
 
     Note: This rule uses static analysis with known patterns.
+    The module-qualified form (e.g., s3.ServerSideEncryption) is preferred
+    because the modules are available via `from . import *` in the package pattern.
+    Only suggests enums that actually exist in the generated code.
     """
 
     rule_id = "WAW003"
     description = "Use enum constants instead of string literals"
 
-    # Known enum patterns: field_name -> (enum_class, module, {value: constant_name})
+    # Cache for enum availability checks
+    _enum_availability_cache: dict[str, bool] = {}
+
+    # Known enum patterns: field_name -> (enum_class, module_short, {value: constant_name})
+    # module_short is the short module name (e.g., "s3", "lambda_") not the full path
     KNOWN_ENUMS: dict[str, tuple[str, str, dict[str, str]]] = {
         # S3 enums - snake_case keys
         "sse_algorithm": (
             "ServerSideEncryption",
-            "wetwire_aws.resources.s3",
+            "s3",
             {"AES256": "AES256", "aws:kms": "AWSKMS", "aws:kms:dsse": "AWSKMSDSSE"},
         ),
         "status": (
             "BucketVersioningStatus",
-            "wetwire_aws.resources.s3",
+            "s3",
             {"Enabled": "ENABLED", "Suspended": "SUSPENDED"},
         ),
         # DynamoDB enums
         "key_type": (
             "KeyType",
-            "wetwire_aws.resources.dynamodb",
+            "dynamodb",
             {"HASH": "HASH", "RANGE": "RANGE"},
         ),
         "attribute_type": (
             "ScalarAttributeType",
-            "wetwire_aws.resources.dynamodb",
+            "dynamodb",
             {"S": "S", "N": "N", "B": "B"},
         ),
         "billing_mode": (
             "BillingMode",
-            "wetwire_aws.resources.dynamodb",
+            "dynamodb",
             {"PROVISIONED": "PROVISIONED", "PAY_PER_REQUEST": "PAY_PER_REQUEST"},
         ),
         # Lambda enums
         "runtime": (
             "Runtime",
-            "wetwire_aws.resources.lambda_",
+            "lambda_",
             {
                 "python3.8": "PYTHON3_8",
                 "python3.9": "PYTHON3_9",
@@ -295,27 +314,27 @@ class StringShouldBeEnum(LintRule):
     KNOWN_DICT_KEYS: dict[str, tuple[str, str, dict[str, str]]] = {
         "SSEAlgorithm": (
             "ServerSideEncryption",
-            "wetwire_aws.resources.s3",
+            "s3",
             {"AES256": "AES256", "aws:kms": "AWSKMS", "aws:kms:dsse": "AWSKMSDSSE"},
         ),
         "Status": (
             "BucketVersioningStatus",
-            "wetwire_aws.resources.s3",
+            "s3",
             {"Enabled": "ENABLED", "Suspended": "SUSPENDED"},
         ),
         "KeyType": (
             "KeyType",
-            "wetwire_aws.resources.dynamodb",
+            "dynamodb",
             {"HASH": "HASH", "RANGE": "RANGE"},
         ),
         "AttributeType": (
             "ScalarAttributeType",
-            "wetwire_aws.resources.dynamodb",
+            "dynamodb",
             {"S": "S", "N": "N", "B": "B"},
         ),
         "Runtime": (
             "Runtime",
-            "wetwire_aws.resources.lambda_",
+            "lambda_",
             {
                 "python3.8": "PYTHON3_8",
                 "python3.9": "PYTHON3_9",
@@ -327,6 +346,31 @@ class StringShouldBeEnum(LintRule):
             },
         ),
     }
+
+    def _is_enum_available(self, module_short: str, enum_class: str) -> bool:
+        """Check if an enum class actually exists in the generated code.
+
+        Args:
+            module_short: The short module name (e.g., "s3", "lambda_").
+            enum_class: The enum class name (e.g., "ServerSideEncryption").
+
+        Returns:
+            True if the enum class exists and is importable, False otherwise.
+        """
+        cache_key = f"{module_short}.{enum_class}"
+        if cache_key in self._enum_availability_cache:
+            return self._enum_availability_cache[cache_key]
+
+        try:
+            module = __import__(
+                f"wetwire_aws.resources.{module_short}", fromlist=[enum_class]
+            )
+            result = hasattr(module, enum_class)
+        except (ImportError, ModuleNotFoundError):
+            result = False
+
+        self._enum_availability_cache[cache_key] = result
+        return result
 
     def check(self, context: LintContext) -> list[LintIssue]:
         issues = []
@@ -342,13 +386,21 @@ class StringShouldBeEnum(LintRule):
                                 node.value.value, str
                             ):
                                 value = node.value.value
-                                enum_class, module, value_map = self.KNOWN_ENUMS[
+                                enum_class, module_short, value_map = self.KNOWN_ENUMS[
                                     field_name
                                 ]
                                 if value in value_map:
+                                    # Only suggest if the enum actually exists
+                                    if not self._is_enum_available(
+                                        module_short, enum_class
+                                    ):
+                                        continue
+
                                     const_name = value_map[value]
-                                    suggestion = f"{enum_class}.{const_name}"
-                                    import_stmt = f"from {module} import {enum_class}"
+                                    # Use module-qualified form: s3.ServerSideEncryption.AES256
+                                    suggestion = (
+                                        f"{module_short}.{enum_class}.{const_name}"
+                                    )
 
                                     issues.append(
                                         LintIssue(
@@ -358,7 +410,8 @@ class StringShouldBeEnum(LintRule):
                                             column=node.value.col_offset,
                                             original=f'"{value}"',
                                             suggestion=suggestion,
-                                            fix_imports=[import_stmt],
+                                            # No imports needed - modules available via from . import *
+                                            fix_imports=[],
                                         )
                                     )
 
@@ -370,13 +423,19 @@ class StringShouldBeEnum(LintRule):
                             keyword.value.value, str
                         ):
                             value = keyword.value.value
-                            enum_class, module, value_map = self.KNOWN_ENUMS[
+                            enum_class, module_short, value_map = self.KNOWN_ENUMS[
                                 keyword.arg
                             ]
                             if value in value_map:
+                                # Only suggest if the enum actually exists
+                                if not self._is_enum_available(
+                                    module_short, enum_class
+                                ):
+                                    continue
+
                                 const_name = value_map[value]
-                                suggestion = f"{enum_class}.{const_name}"
-                                import_stmt = f"from {module} import {enum_class}"
+                                # Use module-qualified form
+                                suggestion = f"{module_short}.{enum_class}.{const_name}"
 
                                 issues.append(
                                     LintIssue(
@@ -386,7 +445,7 @@ class StringShouldBeEnum(LintRule):
                                         column=keyword.value.col_offset,
                                         original=f'"{value}"',
                                         suggestion=suggestion,
-                                        fix_imports=[import_stmt],
+                                        fix_imports=[],
                                     )
                                 )
 
@@ -400,13 +459,21 @@ class StringShouldBeEnum(LintRule):
                                 val.value, str
                             ):
                                 value = val.value
-                                enum_class, module, value_map = self.KNOWN_DICT_KEYS[
-                                    key_str
-                                ]
+                                enum_class, module_short, value_map = (
+                                    self.KNOWN_DICT_KEYS[key_str]
+                                )
                                 if value in value_map:
+                                    # Only suggest if the enum actually exists
+                                    if not self._is_enum_available(
+                                        module_short, enum_class
+                                    ):
+                                        continue
+
                                     const_name = value_map[value]
-                                    suggestion = f"{enum_class}.{const_name}"
-                                    import_stmt = f"from {module} import {enum_class}"
+                                    # Use module-qualified form
+                                    suggestion = (
+                                        f"{module_short}.{enum_class}.{const_name}"
+                                    )
 
                                     issues.append(
                                         LintIssue(
@@ -416,7 +483,7 @@ class StringShouldBeEnum(LintRule):
                                             column=val.col_offset,
                                             original=f'"{value}"',
                                             suggestion=suggestion,
-                                            fix_imports=[import_stmt],
+                                            fix_imports=[],
                                         )
                                     )
 
@@ -597,6 +664,1237 @@ class UnnecessaryToDict(LintRule):
         return issues
 
 
+class RefShouldBeNoParens(LintRule):
+    """Detect ref()/get_att() calls that should use no-parens style.
+
+    The no-parens style is more declarative and readable. References to other
+    resources should be expressed as bare class names, and attribute references
+    as Class.Attribute.
+
+    Detects:
+    - ref(VPC) or ref("VPC")
+    - get_att(MyRole, "Arn") or get_att("MyRole", "Arn")
+
+    Suggests:
+    - VPC
+    - MyRole.Arn
+    """
+
+    rule_id = "WAW006"
+    description = "Use no-parens references instead of ref()/get_att()"
+
+    def check(self, context: LintContext) -> list[LintIssue]:
+        issues = []
+
+        for node in ast.walk(context.tree):
+            if isinstance(node, ast.Call):
+                func = node.func
+                func_name = None
+
+                if isinstance(func, ast.Name):
+                    func_name = func.id
+                elif isinstance(func, ast.Attribute):
+                    func_name = func.attr
+
+                # Check for ref() calls - only convert when target is a Name node
+                # (already a class reference). String literals like ref("VPC") are
+                # forward references and should not be converted to bare names.
+                if func_name == "ref" and node.args:
+                    arg = node.args[0]
+                    # Only convert Name nodes (ref(VPC)), not string literals (ref("VPC"))
+                    if isinstance(arg, ast.Name):
+                        target = arg.id
+                        original = ast.get_source_segment(context.source, node)
+                        if original:
+                            issues.append(
+                                LintIssue(
+                                    rule_id=self.rule_id,
+                                    message=f"Use {target} instead of ref({target})",
+                                    line=node.lineno,
+                                    column=node.col_offset,
+                                    original=original,
+                                    suggestion=target,
+                                    fix_imports=[],
+                                )
+                            )
+
+                # Check for get_att() calls - only convert when target is a Name node
+                # String-based forward references like get_att("VPC", "Arn") are needed
+                # for classes defined later in the file (e.g., in PropertyType wrappers).
+                if func_name == "get_att" and len(node.args) >= 2:
+                    target_arg = node.args[0]
+                    attr_arg = node.args[1]
+
+                    # Only convert Name nodes, not string literals
+                    if isinstance(target_arg, ast.Name):
+                        target = target_arg.id
+                        attr_name = self._extract_attr_name(attr_arg, context)
+
+                        # Support both simple and nested attributes:
+                        # - get_att(MyRole, "Arn") -> MyRole.Arn
+                        # - get_att(MainDB, "Endpoint.Address") -> MainDB.Endpoint.Address
+                        if attr_name:
+                            original = ast.get_source_segment(context.source, node)
+                            suggestion = f"{target}.{attr_name}"
+                            if original:
+                                issues.append(
+                                    LintIssue(
+                                        rule_id=self.rule_id,
+                                        message=f"Use {suggestion} instead of get_att()",
+                                        line=node.lineno,
+                                        column=node.col_offset,
+                                        original=original,
+                                        suggestion=suggestion,
+                                        fix_imports=[],
+                                    )
+                                )
+
+        return issues
+
+    def _extract_target(self, node: ast.expr) -> str | None:
+        """Extract target class name from a ref/get_att argument.
+
+        Handles both Name nodes (ref(VPC)) and string literals (ref("VPC")).
+        """
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        return None
+
+    def _extract_attr_name(self, node: ast.expr, context: LintContext) -> str | None:
+        """Extract attribute name from a get_att second argument.
+
+        Handles string literals ("Arn") and constant references (ARN).
+        """
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if isinstance(node, ast.Name):
+            # It's a constant like ARN - get the source text
+            return ast.get_source_segment(context.source, node)
+        return None
+
+
+class VerboseInitImports(LintRule):
+    """Detect verbose imports in __init__.py that setup_params/setup_resources handle.
+
+    When a package uses `setup_params()` and `setup_resources()`, they inject all
+    needed AWS types. The __init__.py only needs:
+        from wetwire_aws.loader import setup_params, setup_resources
+        setup_params(globals())
+        from .params import *
+        setup_resources(__file__, __name__, globals())
+
+    Detects:
+    - from wetwire_aws import (...)  (multi-line import blocks)
+    - from wetwire_aws.params import (...)  (should use setup_params instead)
+    - from wetwire_aws.intrinsics import (...)  (should use setup_params instead)
+    - __all__ = [...]  (explicit exports, not needed)
+
+    Suggests:
+    - Remove the verbose import block
+    - Remove the __all__ definition
+    """
+
+    rule_id = "WAW008"
+    description = "Remove verbose imports that setup_params/setup_resources handle"
+
+    def check(self, context: LintContext) -> list[LintIssue]:
+        issues = []
+
+        # Only apply to files that use setup_resources (package __init__ files)
+        if "setup_resources" not in context.source:
+            return issues
+
+        lines = context.source.splitlines(keepends=True)
+
+        # Find and mark verbose import blocks for removal
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            stripped = line.lstrip()
+
+            # Detect verbose multi-line imports that setup_params handles:
+            # - from wetwire_aws import (...)
+            # - from wetwire_aws.params import (...)
+            # - from wetwire_aws.intrinsics import (...)
+            # But keep: from wetwire_aws.loader import setup_params, setup_resources
+            verbose_prefixes = [
+                "from wetwire_aws import (",
+                "from wetwire_aws.params import (",
+                "from wetwire_aws.intrinsics import (",
+            ]
+
+            if any(stripped.startswith(prefix) for prefix in verbose_prefixes):
+                # Find the end of this import block
+                start_line = i
+                end_line = i
+                paren_count = line.count("(") - line.count(")")
+                while paren_count > 0 and end_line < len(lines) - 1:
+                    end_line += 1
+                    paren_count += lines[end_line].count("(")
+                    paren_count -= lines[end_line].count(")")
+
+                # Get the full multi-line import as original
+                original_lines = lines[start_line : end_line + 1]
+                original = "".join(original_lines).rstrip("\n")
+
+                issues.append(
+                    LintIssue(
+                        rule_id=self.rule_id,
+                        message="Remove verbose import; use setup_params() instead",
+                        line=start_line + 1,  # 1-indexed
+                        column=0,
+                        original=original,
+                        suggestion="",  # Remove entirely
+                        fix_imports=[],
+                    )
+                )
+                i = end_line + 1
+                continue
+
+            # Detect: __all__ = [
+            if stripped.startswith("__all__") and "=" in stripped and "[" in stripped:
+                # Find the end of this __all__ block
+                start_line = i
+                end_line = i
+                bracket_count = line.count("[") - line.count("]")
+                while bracket_count > 0 and end_line < len(lines) - 1:
+                    end_line += 1
+                    bracket_count += lines[end_line].count("[")
+                    bracket_count -= lines[end_line].count("]")
+
+                # Get the full multi-line __all__ as original
+                original_lines = lines[start_line : end_line + 1]
+                original = "".join(original_lines).rstrip("\n")
+
+                issues.append(
+                    LintIssue(
+                        rule_id=self.rule_id,
+                        message="Remove __all__; setup_resources() exports all classes automatically",
+                        line=start_line + 1,  # 1-indexed
+                        column=0,
+                        original=original,
+                        suggestion="",  # Remove entirely
+                        fix_imports=[],
+                    )
+                )
+                i = end_line + 1
+                continue
+
+            i += 1
+
+        return issues
+
+
+class ExplicitResourceImport(LintRule):
+    """Detect explicit imports from wetwire_aws.resources that should use flat imports.
+
+    Resource files should use `from . import *` and access types via module-qualified
+    names (e.g., `lambda_.Runtime`, `s3.ServerSideEncryption`) rather than explicit
+    imports. The `setup_resources()` function injects all service modules automatically.
+
+    Detects:
+    - from wetwire_aws.resources.lambda_ import Runtime
+    - from wetwire_aws.resources.s3 import ServerSideEncryption
+    - from wetwire_aws.resources import ec2, lambda_  (redundant in packages using setup_resources)
+
+    Suggests:
+    - Remove the import line
+    - Qualify usages: Runtime.PYTHON3_12 -> lambda_.Runtime.PYTHON3_12
+    """
+
+    rule_id = "WAW007"
+    description = "Use flat imports with module-qualified names instead of explicit resource imports"
+
+    def check(self, context: LintContext) -> list[LintIssue]:
+        issues = []
+
+        # Check if this file uses setup_resources (indicating it's a package __init__)
+        uses_setup_resources = "setup_resources" in context.source
+
+        # First pass: collect all explicit resource imports
+        # Maps imported name -> service module (e.g., "Runtime" -> "lambda_")
+        imported_names: dict[str, str] = {}
+        import_lines_to_remove: set[int] = set()
+
+        for node in ast.walk(context.tree):
+            if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+
+                # Check for imports from wetwire_aws.resources.* (e.g., lambda_, s3)
+                if module.startswith("wetwire_aws.resources."):
+                    # Extract the service module name (e.g., "lambda_", "s3")
+                    parts = module.split(".")
+                    if len(parts) >= 3:
+                        service_module = parts[2]  # e.g., "lambda_", "s3"
+
+                        for alias in node.names:
+                            imported_name = alias.asname or alias.name
+                            imported_names[imported_name] = service_module
+
+                        # Mark this line for removal (only once per line)
+                        if node.lineno not in import_lines_to_remove:
+                            import_lines_to_remove.add(node.lineno)
+                            original = ast.get_source_segment(context.source, node)
+                            if original:
+                                issues.append(
+                                    LintIssue(
+                                        rule_id=self.rule_id,
+                                        message="Remove explicit resource import; use module-qualified names",
+                                        line=node.lineno,
+                                        column=node.col_offset,
+                                        original=original,
+                                        suggestion="",  # Remove the line
+                                        fix_imports=[],
+                                    )
+                                )
+
+                # Check for imports from wetwire_aws.resources (module imports)
+                # These are redundant in packages using setup_resources()
+                elif module == "wetwire_aws.resources" and uses_setup_resources:
+                    if node.lineno not in import_lines_to_remove:
+                        import_lines_to_remove.add(node.lineno)
+                        original = ast.get_source_segment(context.source, node)
+                        if original:
+                            issues.append(
+                                LintIssue(
+                                    rule_id=self.rule_id,
+                                    message="Remove redundant import; setup_resources() handles module injection",
+                                    line=node.lineno,
+                                    column=node.col_offset,
+                                    original=original,
+                                    suggestion="",  # Remove the line
+                                    fix_imports=[],
+                                )
+                            )
+
+        # Second pass: find usages of imported names and qualify them
+        if imported_names:
+            for node in ast.walk(context.tree):
+                # Look for attribute access like Runtime.PYTHON3_12
+                if isinstance(node, ast.Attribute):
+                    if isinstance(node.value, ast.Name):
+                        name = node.value.id
+                        if name in imported_names:
+                            service_module = imported_names[name]
+                            # Get the full attribute access expression
+                            original = ast.get_source_segment(context.source, node)
+                            if original:
+                                # Replace Name.attr with module.Name.attr
+                                qualified = f"{service_module}.{original}"
+                                issues.append(
+                                    LintIssue(
+                                        rule_id=self.rule_id,
+                                        message=f"Use module-qualified name: {qualified}",
+                                        line=node.lineno,
+                                        column=node.col_offset,
+                                        original=original,
+                                        suggestion=qualified,
+                                        fix_imports=[],
+                                    )
+                                )
+
+        return issues
+
+
+# NOTE: WAW009 (DependsOnShouldBeClassRef) was removed because converting
+# depends_on from strings to class references causes forward reference issues.
+# Resources may depend on classes defined later in the file, and Python class
+# bodies are evaluated at definition time, before later classes exist.
+# String literals like depends_on = ["VPCGatewayAttachment"] work reliably.
+
+
+class FileTooLarge(LintRule):
+    """Detect files with too many resources that should be split.
+
+    Large files are harder to read, navigate, and maintain. Files with more
+    than MAX_RESOURCES (default 15) resources should be split into smaller,
+    focused files by category (storage, compute, network, security, etc.).
+
+    The rule counts @wetwire_aws decorated classes in the file.
+
+    Detects:
+    - Files with > 15 @wetwire_aws decorated classes
+
+    Suggests:
+    - Split file into category-based files (storage.py, compute.py, etc.)
+    """
+
+    rule_id = "WAW010"
+    description = "Split large files into smaller ones"
+    MAX_RESOURCES = 15
+
+    def check(self, context: LintContext) -> list[LintIssue]:
+        issues = []
+
+        # Count @wetwire_aws decorated classes
+        resource_classes: list[tuple[str, int]] = []  # (name, line)
+
+        for node in ast.walk(context.tree):
+            if isinstance(node, ast.ClassDef):
+                # Check if this class has @wetwire_aws decorator
+                if self._has_wetwire_aws_decorator(node):
+                    resource_classes.append((node.name, node.lineno))
+
+        count = len(resource_classes)
+        if count > self.MAX_RESOURCES:
+            # Build a list of the resource names for the message
+            names = [name for name, _ in resource_classes[:5]]
+            if count > 5:
+                names.append(f"... and {count - 5} more")
+
+            issues.append(
+                LintIssue(
+                    rule_id=self.rule_id,
+                    message=(
+                        f"File has {count} resources (max {self.MAX_RESOURCES}). "
+                        f"Consider splitting by category: storage.py, compute.py, "
+                        f"network.py, security.py"
+                    ),
+                    line=1,  # File-level issue
+                    column=0,
+                    original="",  # No specific code to replace
+                    suggestion=f"# Split {count} resources into multiple files",
+                    fix_imports=[],
+                )
+            )
+
+        return issues
+
+    def _has_wetwire_aws_decorator(self, class_node: ast.ClassDef) -> bool:
+        """Check if a class has the @wetwire_aws decorator."""
+        for decorator in class_node.decorator_list:
+            if isinstance(decorator, ast.Name) and decorator.id == "wetwire_aws":
+                return True
+            if isinstance(decorator, ast.Attribute) and decorator.attr == "wetwire_aws":
+                return True
+        return False
+
+
+class DuplicateResource(LintRule):
+    """Detect duplicate @wetwire_aws class names within a file.
+
+    CloudFormation logical resource names must be unique within a template.
+    This rule catches duplicate class definitions early, at the Python level.
+
+    Detects:
+    - Two or more @wetwire_aws decorated classes with the same name in one file
+
+    Note: Cross-file duplicate detection requires package-level analysis and
+    is handled separately by setup_resources() at runtime.
+    """
+
+    rule_id = "WAW012"
+    description = "Detect duplicate resource class names"
+
+    def check(self, context: LintContext) -> list[LintIssue]:
+        issues = []
+
+        # Track class names and their locations
+        class_locations: dict[str, list[tuple[int, int]]] = {}  # name -> [(line, col)]
+
+        for node in ast.walk(context.tree):
+            if isinstance(node, ast.ClassDef):
+                # Check if this class has @wetwire_aws decorator
+                if self._has_wetwire_aws_decorator(node):
+                    name = node.name
+                    if name not in class_locations:
+                        class_locations[name] = []
+                    class_locations[name].append((node.lineno, node.col_offset))
+
+        # Report duplicates
+        for name, locations in class_locations.items():
+            if len(locations) > 1:
+                # First occurrence is okay, report subsequent ones
+                for line, col in locations[1:]:
+                    first_line = locations[0][0]
+                    issues.append(
+                        LintIssue(
+                            rule_id=self.rule_id,
+                            message=(
+                                f"Duplicate resource class '{name}' "
+                                f"(first defined at line {first_line})"
+                            ),
+                            line=line,
+                            column=col,
+                            original=f"class {name}:",
+                            suggestion=f"# DUPLICATE: class {name}:",
+                            fix_imports=[],
+                        )
+                    )
+
+        return issues
+
+    def _has_wetwire_aws_decorator(self, class_node: ast.ClassDef) -> bool:
+        """Check if a class has the @wetwire_aws decorator."""
+        for decorator in class_node.decorator_list:
+            if isinstance(decorator, ast.Name) and decorator.id == "wetwire_aws":
+                return True
+            if isinstance(decorator, ast.Attribute) and decorator.attr == "wetwire_aws":
+                return True
+        return False
+
+
+class PropertyTypeAsRef(LintRule):
+    """Detect PropertyType wrapper instantiation that should use no-parens style.
+
+    PropertyType wrapper classes should be referenced as bare class names, not
+    instantiated with `()`. The serialization layer auto-instantiates these.
+
+    This follows the no-parens declarative pattern where all wiring is expressed
+    as class references rather than instance construction.
+
+    Detects:
+    - field = MyPropertyTypeWrapper()  (with empty parens)
+    - statement = [AllowStatement()]  (with empty parens in list)
+
+    Suggests:
+    - field = MyPropertyTypeWrapper
+    - statement = [AllowStatement]
+    """
+
+    rule_id = "WAW011"
+    description = "Use no-parens style for PropertyType wrappers"
+
+    # Known PropertyType base classes from wetwire_aws
+    PROPERTY_TYPE_BASES = {
+        "PolicyDocument",
+        "PolicyStatement",
+        "DenyStatement",
+        "Tag",
+        "PropertyType",
+    }
+
+    def check(self, context: LintContext) -> list[LintIssue]:
+        issues = []
+
+        # First pass: identify PropertyType wrapper classes in this file
+        # A PropertyType wrapper has a `resource:` annotation pointing to a PropertyType
+        property_type_wrappers: set[str] = set()
+
+        for node in ast.walk(context.tree):
+            if isinstance(node, ast.ClassDef):
+                # Check for resource: annotation in class body
+                for stmt in node.body:
+                    if isinstance(stmt, ast.AnnAssign):
+                        target = stmt.target
+                        if isinstance(target, ast.Name) and target.id == "resource":
+                            # Check what the annotation points to
+                            if self._is_property_type_annotation(stmt.annotation):
+                                property_type_wrappers.add(node.name)
+                                break
+
+        if not property_type_wrappers:
+            return issues
+
+        # Second pass: find usages of these wrappers with ()
+        for node in ast.walk(context.tree):
+            # Check direct assignments: field = WrapperClass()
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        # Skip if target is 'resource' (the type annotation field)
+                        if target.id == "resource":
+                            continue
+
+                        value = node.value
+                        # Check for Call with no args: field = WrapperClass()
+                        if isinstance(value, ast.Call):
+                            if (
+                                isinstance(value.func, ast.Name)
+                                and value.func.id in property_type_wrappers
+                                and not value.args
+                                and not value.keywords
+                            ):
+                                original = ast.get_source_segment(context.source, value)
+                                if original:
+                                    class_name = value.func.id
+                                    issues.append(
+                                        LintIssue(
+                                            rule_id=self.rule_id,
+                                            message=f"Use no-parens style: {class_name}",
+                                            line=value.lineno,
+                                            column=value.col_offset,
+                                            original=original,
+                                            suggestion=class_name,
+                                            fix_imports=[],
+                                        )
+                                    )
+
+                        # Check lists: field = [WrapperClass(), WrapperClass2()]
+                        elif isinstance(value, ast.List):
+                            for elt in value.elts:
+                                if isinstance(elt, ast.Call):
+                                    if (
+                                        isinstance(elt.func, ast.Name)
+                                        and elt.func.id in property_type_wrappers
+                                        and not elt.args
+                                        and not elt.keywords
+                                    ):
+                                        original = ast.get_source_segment(
+                                            context.source, elt
+                                        )
+                                        if original:
+                                            class_name = elt.func.id
+                                            issues.append(
+                                                LintIssue(
+                                                    rule_id=self.rule_id,
+                                                    message=f"Use no-parens style: {class_name}",
+                                                    line=elt.lineno,
+                                                    column=elt.col_offset,
+                                                    original=original,
+                                                    suggestion=class_name,
+                                                    fix_imports=[],
+                                                )
+                                            )
+
+        return issues
+
+    def _is_property_type_annotation(self, annotation: ast.expr) -> bool:
+        """Check if an annotation refers to a PropertyType.
+
+        Returns True for:
+        - Name nodes like PolicyDocument, PolicyStatement, DenyStatement
+        - Attribute nodes like s3.bucket.SomePropertyType (nested in a module)
+        """
+        if isinstance(annotation, ast.Name):
+            return annotation.id in self.PROPERTY_TYPE_BASES
+
+        if isinstance(annotation, ast.Attribute):
+            # Check for nested property types like s3.bucket.BucketEncryption
+            # or rds.db_proxy.TagFormat
+            # These have at least one nested module (not just s3.Bucket which is a Resource)
+            parts = self._get_attribute_parts(annotation)
+            if len(parts) >= 3:
+                # Format: module.submodule.ClassName (e.g., s3.bucket.BucketEncryption)
+                # This is a nested PropertyType
+                return True
+            if len(parts) >= 2:
+                # Check if the class name is in our known PropertyType bases
+                class_name = parts[-1]
+                return class_name in self.PROPERTY_TYPE_BASES
+
+        return False
+
+    def _get_attribute_parts(self, node: ast.expr) -> list[str]:
+        """Extract parts from a nested Attribute node.
+
+        For s3.bucket.BucketEncryption, returns ['s3', 'bucket', 'BucketEncryption'].
+        """
+        parts: list[str] = []
+        current = node
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+        if isinstance(current, ast.Name):
+            parts.append(current.id)
+        parts.reverse()
+        return parts
+
+
+class InlineConstructor(LintRule):
+    """Detect inline constructor calls on AWS service modules.
+
+    In wetwire-aws, all property types and nested structures should be defined
+    as wrapper classes with `resource:` annotations, not as inline constructor
+    calls on service modules.
+
+    Detects:
+    - s3.ServerSideEncryptionConfiguration(...)
+    - ec2.SecurityGroupIngress(...)
+    - s3.Transition(days=30, ...)
+    - Any call where the function is service.ClassName(...)
+
+    Suggests:
+    - Define a wrapper class instead:
+      class MyClassName:
+          resource: service.submodule.ClassName
+          # properties here
+
+    This is a common mistake when users try to use constructor syntax instead
+    of the declarative wrapper pattern.
+    """
+
+    rule_id = "WAW013"
+    description = "Use wrapper classes instead of inline constructors"
+
+    # Known AWS service modules from wetwire_aws
+    AWS_SERVICE_MODULES = {
+        "s3",
+        "ec2",
+        "lambda_",
+        "iam",
+        "rds",
+        "dynamodb",
+        "sqs",
+        "sns",
+        "cloudwatch",
+        "logs",
+        "events",
+        "apigateway",
+        "route53",
+        "cloudfront",
+        "ecs",
+        "eks",
+        "elasticache",
+        "elasticloadbalancing",
+        "elasticloadbalancingv2",
+        "kms",
+        "secretsmanager",
+        "ssm",
+        "stepfunctions",
+        "cognito",
+        "kinesis",
+        "firehose",
+        "glue",
+        "athena",
+        "redshift",
+        "emr",
+        "batch",
+        "codebuild",
+        "codepipeline",
+        "codecommit",
+        "codedeploy",
+        "waf",
+        "wafv2",
+        "acm",
+        "amplify",
+        "appconfig",
+        "appsync",
+        "backup",
+        "budgets",
+        "chatbot",
+        "cloudformation",
+        "cloudtrail",
+        "config",
+        "connect",
+        "datapipeline",
+        "directoryservice",
+        "dms",
+        "docdb",
+        "elasticsearch",
+        "elasticmapreduce",
+        "fsx",
+        "gamelift",
+        "greengrass",
+        "guardduty",
+        "inspector",
+        "iot",
+        "kafka",
+        "lakeformation",
+        "lex",
+        "licensemanager",
+        "lightsail",
+        "macie",
+        "mediaconvert",
+        "medialive",
+        "mediapackage",
+        "mediastore",
+        "msk",
+        "neptune",
+        "networkfirewall",
+        "opsworks",
+        "organizations",
+        "personalize",
+        "pinpoint",
+        "polly",
+        "qldb",
+        "quicksight",
+        "ram",
+        "rekognition",
+        "resourcegroups",
+        "robomaker",
+        "sagemaker",
+        "servicecatalog",
+        "servicediscovery",
+        "ses",
+        "shield",
+        "signer",
+        "simspaceweaver",
+        "timestream",
+        "transfer",
+        "wafregional",
+        "workspaces",
+        "xray",
+    }
+
+    def check(self, context: LintContext) -> list[LintIssue]:
+        issues = []
+
+        for node in ast.walk(context.tree):
+            # Look for Call nodes where func is an Attribute
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Attribute):
+                    # Get the parts: for s3.Something, we get ['s3', 'Something']
+                    parts = self._get_attribute_parts(node.func)
+
+                    # Check if it's a service module call with arguments
+                    if len(parts) >= 2 and parts[0] in self.AWS_SERVICE_MODULES:
+                        # It's something like s3.Something(...) or s3.bucket.Something(...)
+                        # Only flag if there are arguments (empty () is handled by WAW011)
+                        if node.args or node.keywords:
+                            original = ast.get_source_segment(context.source, node)
+                            if original:
+                                service = parts[0]
+                                class_name = parts[-1]
+
+                                # Build the suggested wrapper pattern
+                                if len(parts) == 2:
+                                    # s3.Something -> might need s3.bucket.Something
+                                    resource_type = f"{service}.{class_name}"
+                                else:
+                                    # s3.bucket.Something -> correct nesting
+                                    resource_type = ".".join(parts)
+
+                                issues.append(
+                                    LintIssue(
+                                        rule_id=self.rule_id,
+                                        message=(
+                                            f"Use a wrapper class instead of inline constructor "
+                                            f"{service}.{class_name}(...)"
+                                        ),
+                                        line=node.lineno,
+                                        column=node.col_offset,
+                                        original=original,
+                                        suggestion=(
+                                            f"# Define a wrapper class:\n"
+                                            f"# class My{class_name}:\n"
+                                            f"#     resource: {resource_type}\n"
+                                            f"#     # ... properties ..."
+                                        ),
+                                        fix_imports=[],
+                                    )
+                                )
+
+        return issues
+
+    def _get_attribute_parts(self, node: ast.expr) -> list[str]:
+        """Extract parts from a nested Attribute node."""
+        parts: list[str] = []
+        current = node
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+        if isinstance(current, ast.Name):
+            parts.append(current.id)
+        parts.reverse()
+        return parts
+
+
+class InlineSecurityGroupRules(LintRule):
+    """Detect inline security group ingress/egress dicts that should use wrapper classes.
+
+    Security group rules should be expressed as wrapper classes with
+    `resource: ec2.security_group.Ingress` or `ec2.security_group.Egress`,
+    not as inline dict literals.
+
+    Detects:
+    - security_group_ingress = [{"IpProtocol": "tcp", ...}]
+    - security_group_egress = [{"IpProtocol": "-1", ...}]
+
+    Suggests:
+    - Define wrapper classes for each rule
+    """
+
+    rule_id = "WAW015"
+    description = "Use wrapper classes instead of inline security group rules"
+
+    # Field names for security group rules
+    SG_RULE_FIELDS = [
+        "security_group_ingress",
+        "security_group_egress",
+        "ingress",
+        "egress",
+    ]
+
+    def check(self, context: LintContext) -> list[LintIssue]:
+        issues = []
+
+        for node in ast.walk(context.tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        field_name = target.id
+                        if field_name in self.SG_RULE_FIELDS:
+                            # Check if it's a list of dicts
+                            if isinstance(node.value, ast.List):
+                                for elt in node.value.elts:
+                                    if isinstance(elt, ast.Dict):
+                                        if self._is_sg_rule(elt):
+                                            original = ast.get_source_segment(
+                                                context.source, elt
+                                            )
+                                            if original:
+                                                rule_type = (
+                                                    "Ingress"
+                                                    if "ingress" in field_name
+                                                    else "Egress"
+                                                )
+                                                issues.append(
+                                                    LintIssue(
+                                                        rule_id=self.rule_id,
+                                                        message=(
+                                                            f"Use wrapper class for security group {rule_type.lower()} rule"
+                                                        ),
+                                                        line=elt.lineno,
+                                                        column=elt.col_offset,
+                                                        original=original[:50] + "..."
+                                                        if len(original) > 50
+                                                        else original,
+                                                        suggestion=(
+                                                            f"# Define a wrapper class:\n"
+                                                            f"# class My{rule_type}Rule:\n"
+                                                            f"#     resource: ec2.security_group.{rule_type}\n"
+                                                            f"#     ip_protocol = ...\n"
+                                                            f"#     from_port = ...\n"
+                                                            f"#     to_port = ..."
+                                                        ),
+                                                        fix_imports=[],
+                                                    )
+                                                )
+
+        return issues
+
+    def _is_sg_rule(self, node: ast.Dict) -> bool:
+        """Check if a dict looks like a security group rule."""
+        keys = set()
+        for key in node.keys:
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                keys.add(key.value.lower().replace("_", ""))
+
+        # SG rules typically have ip_protocol/IpProtocol and from_port/to_port or cidr
+        has_protocol = "ipprotocol" in keys
+        has_port = "fromport" in keys or "toport" in keys
+        has_cidr = "cidrip" in keys or "cidr" in keys or "sourcesecuritygroupid" in keys
+
+        return has_protocol and (has_port or has_cidr)
+
+
+class RedundantRelativeImport(LintRule):
+    """Detect redundant relative imports when using `from . import *`.
+
+    When a file uses `from . import *` (which relies on setup_resources),
+    explicit imports like `from .network import MyVPC` are redundant
+    because all classes are already injected into the namespace.
+
+    Detects:
+    - from . import *
+    - from .module import SomeClass  # redundant
+
+    Suggests:
+    - Remove the explicit import
+    """
+
+    rule_id = "WAW018"
+    description = (
+        "Remove redundant relative import (already available via 'from . import *')"
+    )
+
+    def check(self, context: LintContext) -> list[LintIssue]:
+        issues = []
+
+        has_star_import = False
+        redundant_imports = []
+
+        for node in ast.walk(context.tree):
+            if isinstance(node, ast.ImportFrom):
+                if node.module is None and node.level == 1:
+                    # from . import *
+                    for alias in node.names:
+                        if alias.name == "*":
+                            has_star_import = True
+                            break
+                elif node.level == 1 and node.module is not None:
+                    # from .module import Something
+                    redundant_imports.append(node)
+
+        if has_star_import:
+            for node in redundant_imports:
+                names = ", ".join(alias.name for alias in node.names)
+                issues.append(
+                    LintIssue(
+                        rule_id=self.rule_id,
+                        message=f"Redundant import: {names} (already available via 'from . import *')",
+                        line=node.lineno,
+                        column=node.col_offset,
+                        original=f"from .{node.module} import {names}",
+                        suggestion="# Remove this line - classes are injected by setup_resources()",
+                        fix_imports=[],
+                    )
+                )
+
+        return issues
+
+
+class InlinePropertyType(LintRule):
+    """Detect inline dicts for property types that should use wrapper classes.
+
+    Complex property types should be expressed as wrapper classes, not inline dicts.
+    Uses suffix matching to detect property type fields.
+    """
+
+    rule_id = "WAW017"
+    description = "Use wrapper class instead of inline property type dict"
+
+    # Suffixes that indicate a property type field
+    PROPERTY_TYPE_SUFFIXES = (
+        "_configuration",
+        "_config",
+        "_settings",
+        "_options",
+        "_specification",
+        "_specifications",
+        "_data",
+        "_profile",
+        "_mappings",
+        "_interfaces",
+        "_parameters",
+        "_properties",
+        "_attributes",
+        "_metadata",
+        "_definition",
+        "_template",
+    )
+
+    # Fields to always flag regardless of suffix
+    ALWAYS_FLAG = {
+        "placement",
+        "monitoring",
+        "tags",
+    }
+
+    # Fields to never flag (simple dicts that are fine inline)
+    NEVER_FLAG = {
+        "properties",  # CloudFormation Properties block
+        "parameters",  # Top-level parameters
+        "outputs",  # Top-level outputs
+        "conditions",  # Top-level conditions
+    }
+
+    def check(self, context: LintContext) -> list[LintIssue]:
+        issues = []
+
+        for node in ast.walk(context.tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        field_name = target.id
+                        if self._should_flag(field_name):
+                            if isinstance(node.value, ast.Dict):
+                                # Skip simple dicts (1 key or less)
+                                if len(node.value.keys) <= 1:
+                                    continue
+                                original = ast.get_source_segment(
+                                    context.source, node.value
+                                )
+                                if original:
+                                    issues.append(
+                                        LintIssue(
+                                            rule_id=self.rule_id,
+                                            message=f"Use wrapper class for {field_name}",
+                                            line=node.lineno,
+                                            column=node.col_offset,
+                                            original=original[:50] + "..."
+                                            if len(original) > 50
+                                            else original,
+                                            suggestion="# Define a wrapper class with resource: <service>.<PropertyType>",
+                                            fix_imports=[],
+                                        )
+                                    )
+                            elif isinstance(node.value, ast.List):
+                                # Check for list of dicts
+                                for elt in node.value.elts:
+                                    if isinstance(elt, ast.Dict) and len(elt.keys) > 1:
+                                        original = ast.get_source_segment(
+                                            context.source, elt
+                                        )
+                                        if original:
+                                            issues.append(
+                                                LintIssue(
+                                                    rule_id=self.rule_id,
+                                                    message=f"Use wrapper class for {field_name} item",
+                                                    line=elt.lineno,
+                                                    column=elt.col_offset,
+                                                    original=original[:50] + "..."
+                                                    if len(original) > 50
+                                                    else original,
+                                                    suggestion="# Define a wrapper class with resource: <service>.<PropertyType>",
+                                                    fix_imports=[],
+                                                )
+                                            )
+
+        return issues
+
+    def _should_flag(self, field_name: str) -> bool:
+        """Check if a field should be flagged for inline dict usage."""
+        if field_name in self.NEVER_FLAG:
+            return False
+        if field_name in self.ALWAYS_FLAG:
+            return True
+        return field_name.endswith(self.PROPERTY_TYPE_SUFFIXES)
+
+
+class InlinePolicyStatement(LintRule):
+    """Detect inline IAM policy statements that should use wrapper classes.
+
+    Policy statements inside `statement = [...]` should be wrapper classes
+    with `resource: iam.PolicyStatement`, not inline dicts.
+
+    Detects:
+    - statement = [{"Effect": "Allow", "Action": [...], ...}]
+
+    Suggests:
+    - Define wrapper classes for each statement
+    """
+
+    rule_id = "WAW016"
+    description = "Use wrapper classes instead of inline policy statements"
+
+    def check(self, context: LintContext) -> list[LintIssue]:
+        issues = []
+
+        for node in ast.walk(context.tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and target.id == "statement":
+                        # Check if it's a list of dicts
+                        if isinstance(node.value, ast.List):
+                            for elt in node.value.elts:
+                                if isinstance(elt, ast.Dict):
+                                    if self._is_policy_statement(elt):
+                                        original = ast.get_source_segment(
+                                            context.source, elt
+                                        )
+                                        if original:
+                                            issues.append(
+                                                LintIssue(
+                                                    rule_id=self.rule_id,
+                                                    message="Use wrapper class for policy statement",
+                                                    line=elt.lineno,
+                                                    column=elt.col_offset,
+                                                    original=original[:50] + "..."
+                                                    if len(original) > 50
+                                                    else original,
+                                                    suggestion=(
+                                                        "# Define a wrapper class:\n"
+                                                        "# class MyStatement:\n"
+                                                        "#     resource: iam.PolicyStatement\n"
+                                                        '#     effect = "Allow"\n'
+                                                        "#     action = [...]\n"
+                                                        "#     resource_ = [...]  # note: resource_"
+                                                    ),
+                                                    fix_imports=[],
+                                                )
+                                            )
+
+        return issues
+
+    def _is_policy_statement(self, node: ast.Dict) -> bool:
+        """Check if a dict looks like an IAM policy statement."""
+        keys = set()
+        for key in node.keys:
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                keys.add(key.value.lower())
+
+        # Statements typically have Effect and Action
+        return "effect" in keys and ("action" in keys or "principal" in keys)
+
+
+class InlinePolicyDocument(LintRule):
+    """Detect inline IAM policy documents that should use wrapper classes.
+
+    IAM policy documents should be expressed as wrapper classes with
+    `resource: iam.PolicyDocument` or similar, not as inline dict literals.
+
+    Detects:
+    - assume_role_policy_document = {"Version": "2012-10-17", "Statement": [...]}
+    - policy_document = {"Version": ..., "Statement": [...]}
+    - Any dict assigned to a field ending in _policy, _policy_document, or _document
+      that has "Version" and "Statement" keys
+
+    Suggests:
+    - Define wrapper classes for PolicyDocument and PolicyStatement
+    """
+
+    rule_id = "WAW014"
+    description = "Use wrapper classes instead of inline policy documents"
+
+    # Field names that typically hold policy documents
+    POLICY_FIELD_PATTERNS = [
+        "policy_document",
+        "assume_role_policy_document",
+        "key_policy",
+        "bucket_policy",
+        "queue_policy",
+        "topic_policy",
+    ]
+
+    def check(self, context: LintContext) -> list[LintIssue]:
+        issues = []
+
+        for node in ast.walk(context.tree):
+            # Check assignments
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        field_name = target.id
+                        # Check if this looks like a policy field
+                        is_policy_field = (
+                            field_name in self.POLICY_FIELD_PATTERNS
+                            or field_name.endswith("_policy")
+                            or field_name.endswith("_policy_document")
+                        )
+
+                        if is_policy_field and isinstance(node.value, ast.Dict):
+                            if self._is_policy_document(node.value):
+                                original = ast.get_source_segment(
+                                    context.source, node.value
+                                )
+                                if original:
+                                    issues.append(
+                                        LintIssue(
+                                            rule_id=self.rule_id,
+                                            message=(
+                                                "Use wrapper classes for policy documents. "
+                                                "Define a class with 'resource: iam.PolicyDocument'"
+                                            ),
+                                            line=node.lineno,
+                                            column=node.col_offset,
+                                            original=original[:50] + "..."
+                                            if len(original) > 50
+                                            else original,
+                                            suggestion=(
+                                                "# Define wrapper classes:\n"
+                                                "# class MyPolicyStatement:\n"
+                                                "#     resource: iam.PolicyStatement\n"
+                                                '#     effect = "Allow"\n'
+                                                "#     action = [...]\n"
+                                                "#     resource = [...]\n"
+                                                "#\n"
+                                                "# class MyPolicy:\n"
+                                                "#     resource: iam.PolicyDocument\n"
+                                                "#     statement = [MyPolicyStatement]"
+                                            ),
+                                            fix_imports=[],
+                                        )
+                                    )
+
+        return issues
+
+    def _is_policy_document(self, node: ast.Dict) -> bool:
+        """Check if a dict looks like an IAM policy document.
+
+        Policy documents have "Version" and "Statement" keys.
+        """
+        keys = set()
+        for key in node.keys:
+            if isinstance(key, ast.Constant) and isinstance(key.value, str):
+                keys.add(key.value)
+
+        return "Version" in keys and "Statement" in keys
+
+
 # All available rules
 ALL_RULES: list[type[LintRule]] = [
     StringShouldBeParameterType,
@@ -604,6 +1902,18 @@ ALL_RULES: list[type[LintRule]] = [
     StringShouldBeEnum,
     DictShouldBeIntrinsic,
     UnnecessaryToDict,
+    RefShouldBeNoParens,
+    ExplicitResourceImport,
+    VerboseInitImports,
+    FileTooLarge,
+    PropertyTypeAsRef,
+    DuplicateResource,
+    InlineConstructor,
+    InlinePolicyDocument,
+    InlineSecurityGroupRules,
+    InlinePolicyStatement,
+    InlinePropertyType,
+    RedundantRelativeImport,
 ]
 
 

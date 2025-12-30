@@ -60,17 +60,17 @@ wetwire-aws/
 
 ```bash
 # Stage 1: Fetch source materials
-python -m wetwire_aws.codegen.fetch
-python -m wetwire_aws.codegen.fetch --force  # Bypass freshness check
+uv run python -m codegen.fetch
+uv run python -m codegen.fetch --force  # Bypass freshness check
 
 # Stage 2: Parse into intermediate format
-python -m wetwire_aws.codegen.parse
-python -m wetwire_aws.codegen.parse --validate  # Extra validation
+uv run python -m codegen.parse
+uv run python -m codegen.parse --validate  # Extra validation
 
 # Stage 3: Generate Python code
-python -m wetwire_aws.codegen.generate
-python -m wetwire_aws.codegen.generate --format  # Run black
-python -m wetwire_aws.codegen.generate --dry-run  # Preview only
+uv run python -m codegen.generate
+uv run python -m codegen.generate --format  # Run ruff format
+uv run python -m codegen.generate --dry-run  # Preview only
 
 # All stages
 ./scripts/regenerate.sh
@@ -375,7 +375,6 @@ dependencies = [
 codegen = [
     "requests>=2.28",
     "jinja2>=3.1",
-    "black>=23.12",
     "botocore>=1.34",  # For enum extraction
 ]
 ```

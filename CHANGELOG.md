@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2024-12-29
+
+### Added
+
+- `wetwire-aws init` command for scaffolding new packages
+- New lint rules for detecting inline patterns that should be wrapper classes:
+  - WAW013: Inline PropertyType constructors
+  - WAW014: Inline PolicyDocument dicts
+  - WAW015: Inline SecurityGroup rules
+  - WAW016: Inline PolicyStatement dicts
+  - WAW017: Inline dicts for property type fields (suffix-based detection)
+  - WAW018: Redundant relative imports with `from . import *`
+
+### Changed
+
+- Bump `dataclass-dsl` dependency to 0.1.3
+
+### Fixed
+
+- PropertyType wrapper serialization (no-parens style)
+- Linter enum checks for case-insensitive key matching
+
+## [0.1.1] - 2024-12-28
+
+### Fixed
+
+- PropertyType wrapper serialization and linter enum checks
+
 ## [0.1.0] - 2024-12-26
 
 ### Added
@@ -28,5 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Python 3.11+ support
 - Type checker compatibility (mypy, pyright)
 
-[unreleased]: https://github.com/lex00/wetwire/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/lex00/wetwire/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/lex00/wetwire/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/lex00/wetwire/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/lex00/wetwire/releases/tag/v0.1.0

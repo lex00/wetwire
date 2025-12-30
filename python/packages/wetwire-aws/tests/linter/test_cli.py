@@ -24,8 +24,13 @@ class TestLintCommand:
     def test_lint_missing_path(self, tmp_path):
         """Lint fails gracefully for missing path."""
         result = subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "lint",
-             str(tmp_path / "nonexistent")],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "lint",
+                str(tmp_path / "nonexistent"),
+            ],
             capture_output=True,
             text=True,
         )
@@ -47,7 +52,8 @@ class TestLintCommand:
     def test_lint_detects_issues(self, tmp_path):
         """Lint detects and reports issues."""
         test_file = tmp_path / "with_issues.py"
-        test_file.write_text('sse_algorithm = "AES256"\n')
+        # Use WAW001 (parameter types) - doesn't depend on enum generation
+        test_file.write_text('type = "String"\n')
 
         result = subprocess.run(
             [sys.executable, "-m", "wetwire_aws.cli", "lint", str(test_file)],
@@ -56,8 +62,8 @@ class TestLintCommand:
         )
         # Should have non-zero exit code when issues found
         assert result.returncode != 0
-        assert "WAW003" in result.stdout
-        assert "ServerSideEncryption" in result.stdout
+        assert "WAW001" in result.stdout
+        assert "STRING" in result.stdout
 
     def test_lint_directory(self, tmp_path):
         """Lint scans all Python files in directory."""
@@ -77,7 +83,8 @@ class TestLintCommand:
     def test_lint_with_fix(self, tmp_path):
         """Lint --fix modifies files in place."""
         test_file = tmp_path / "fixable.py"
-        test_file.write_text('sse_algorithm = "AES256"\n')
+        # Use WAW001 (parameter types) - doesn't depend on enum generation
+        test_file.write_text('type = "String"\n')
 
         result = subprocess.run(
             [sys.executable, "-m", "wetwire_aws.cli", "lint", str(test_file), "--fix"],
@@ -89,13 +96,14 @@ class TestLintCommand:
 
         # Verify the file was modified
         content = test_file.read_text()
-        assert "ServerSideEncryption.AES256" in content
-        assert '"AES256"' not in content
+        assert "STRING" in content
+        assert '"String"' not in content
 
     def test_lint_fix_adds_imports(self, tmp_path):
-        """Lint --fix adds required imports."""
-        test_file = tmp_path / "needs_import.py"
-        test_file.write_text('sse_algorithm = "AES256"\n')
+        """Lint --fix adds necessary imports."""
+        test_file = tmp_path / "needs_fix.py"
+        # Use WAW001 (parameter types) - doesn't depend on enum generation
+        test_file.write_text('type = "String"\n')
 
         result = subprocess.run(
             [sys.executable, "-m", "wetwire_aws.cli", "lint", str(test_file), "--fix"],
@@ -105,7 +113,9 @@ class TestLintCommand:
         assert result.returncode == 0
 
         content = test_file.read_text()
-        assert "from wetwire_aws.resources.s3 import ServerSideEncryption" in content
+        # Should use constant with proper import
+        assert "STRING" in content
+        assert "from wetwire_aws.intrinsics import STRING" in content
 
     def test_lint_verbose(self, tmp_path):
         """Lint --verbose shows extra output."""
@@ -113,8 +123,14 @@ class TestLintCommand:
         test_file.write_text('"""Clean code."""\n')
 
         result = subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "lint",
-             str(test_file), "--verbose"],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "lint",
+                str(test_file),
+                "--verbose",
+            ],
             capture_output=True,
             text=True,
         )

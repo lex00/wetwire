@@ -4,7 +4,6 @@ This guide explains how to create a new wetwire domain package (e.g., wetwire-k8
 
 ## Prerequisites
 
-- Read [ARCHITECTURE.md](./ARCHITECTURE.md) to understand the three-layer design
 - Familiarity with the target platform (Kubernetes, GCP, Azure, etc.)
 
 ---
@@ -61,7 +60,7 @@ The Provider is the core abstraction for domain-specific serialization.
 
 ```python
 # src/wetwire_{domain}/provider.py
-from wetwire import Provider
+from dataclass_dsl import Provider
 
 class {Domain}Provider(Provider):
     """Serialization provider for {Platform}."""
@@ -102,18 +101,21 @@ class {Domain}Provider(Provider):
 
 ---
 
-## Step 3: Extend the Context
+## Step 3: Define a Context (Optional)
 
-Add platform-specific context values.
+Add platform-specific context values for deployment configuration.
 
 ```python
 # src/wetwire_{domain}/context.py
 from dataclasses import dataclass
-from wetwire import Context
 
 @dataclass
-class {Domain}Context(Context):
+class {Domain}Context:
     """Context for {Platform} deployments."""
+
+    # Common fields
+    project: str = ""
+    environment: str = "dev"
 
     # Add platform-specific fields
     # Example for Kubernetes:
@@ -129,14 +131,17 @@ class {Domain}Context(Context):
 
 ## Step 4: Create the Domain Decorator
 
-Wrap the core `@wetwire` decorator with domain-specific registration.
+Wrap the core decorator factory with domain-specific registration.
 
 ```python
 # src/wetwire_{domain}/decorator.py
-from wetwire import wetwire, ResourceRegistry
+from dataclass_dsl import create_decorator, ResourceRegistry
 
 # Domain-specific registry
 _registry = ResourceRegistry()
+
+# Create the base decorator with registry
+_base_decorator = create_decorator(registry=_registry)
 
 def get_{domain}_registry() -> ResourceRegistry:
     """Get the {domain} resource registry."""
@@ -152,16 +157,16 @@ def wetwire_{domain}(cls):
             resource: Deployment
             name = "my-resource"
     """
-    # Apply core decorator
-    decorated = wetwire(cls)
+    # Apply base decorator (handles dataclass transform, metaclass, registration)
+    decorated = _base_decorator(cls)
 
-    # Extract resource type info
+    # Extract resource type info for domain-specific tracking
     annotations = getattr(cls, "__annotations__", {})
     resource_type = annotations.get("resource")
-
-    # Register with domain-specific type info
     type_string = getattr(resource_type, "_resource_type", "")
-    _registry.register(decorated, type_string)
+
+    # Add domain-specific metadata if needed
+    decorated._resource_type = type_string
 
     return decorated
 ```
@@ -174,7 +179,7 @@ Create a domain-specific template for output generation.
 
 ```python
 # src/wetwire_{domain}/template.py
-from wetwire import Template, topological_sort
+from dataclass_dsl import Template, topological_sort
 from wetwire_{domain}.decorator import get_{domain}_registry
 from wetwire_{domain}.provider import {Domain}Provider
 
@@ -219,15 +224,17 @@ class {Domain}Template(Template):
 
 ## Step 6: Build the CLI
 
-Use core CLI utilities for consistency.
+Use core CLI utilities from `dataclass_dsl` for consistency.
 
 ```python
 # src/wetwire_{domain}/cli.py
 import argparse
-from wetwire import (
+from dataclass_dsl import (
     add_common_args,
     create_list_command,
     create_validate_command,
+    create_build_command,
+    create_lint_command,
     discover_resources,
 )
 from wetwire_{domain}.decorator import get_{domain}_registry
@@ -239,27 +246,21 @@ def get_resource_type(cls: type) -> str:
     resource_type = annotations.get("resource")
     return getattr(resource_type, "_resource_type", "Unknown")
 
-def build_command(args: argparse.Namespace) -> None:
-    """Generate output from registered resources."""
-    registry = get_{domain}_registry()
-
-    if args.modules:
-        for module in args.modules:
-            discover_resources(module, registry, args.verbose)
-
-    template = {Domain}Template.from_registry(scope_package=args.scope)
-    print(template.to_json(indent=2))
-
 def main() -> None:
     registry = get_{domain}_registry()
 
     parser = argparse.ArgumentParser(prog="wetwire-{domain}")
     subparsers = parser.add_subparsers(dest="command")
 
-    # Build command (domain-specific)
+    # Build command (use core factory)
     build_parser = subparsers.add_parser("build")
-    add_common_args(build_parser)  # Reuse core args!
-    build_parser.set_defaults(func=build_command)
+    add_common_args(build_parser)
+    build_parser.add_argument("--format", "-f", choices=["json", "yaml"], default="json")
+    build_parser.add_argument("--indent", "-i", type=int, default=2)
+    build_parser.add_argument("--description", "-d", help="Template description")
+    build_parser.set_defaults(
+        func=create_build_command({Domain}Template, registry)
+    )
 
     # List command (use core factory)
     list_parser = subparsers.add_parser("list")
@@ -274,6 +275,15 @@ def main() -> None:
     validate_parser.set_defaults(
         func=create_validate_command(registry)
     )
+
+    # Lint command (use core factory if you have a linter)
+    # lint_parser = subparsers.add_parser("lint")
+    # lint_parser.add_argument("path")
+    # lint_parser.add_argument("--fix", action="store_true")
+    # lint_parser.add_argument("--verbose", "-v", action="store_true")
+    # lint_parser.set_defaults(
+    #     func=create_lint_command(lint_file, fix_file, stub_config)
+    # )
 
     args = parser.parse_args()
     if args.command:
@@ -334,9 +344,9 @@ Before releasing your domain package:
 
 - [ ] Provider implements all abstract methods
 - [ ] Context has platform-specific fields
-- [ ] Template uses core `topological_sort`
-- [ ] CLI uses core utilities (`add_common_args`, `create_*_command`)
-- [ ] Decorator wraps core `@wetwire`
+- [ ] Template uses `dataclass_dsl.topological_sort`
+- [ ] CLI uses `dataclass_dsl` utilities (`add_common_args`, `create_*_command`)
+- [ ] Decorator uses `dataclass_dsl.create_decorator`
 - [ ] Tests cover serialization and dependency ordering
 - [ ] Documentation explains platform-specific concepts
 - [ ] `py.typed` marker is present for type checking

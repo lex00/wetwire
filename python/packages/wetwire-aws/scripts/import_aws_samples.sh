@@ -48,6 +48,8 @@ OUTPUT_DIR="$PROJECT_ROOT/examples/aws-cloudformation-templates"
 SKIP_TEMPLATES=(
     # Uses custom CloudFormation macro (ExecutionRoleBuilder) with non-standard properties
     "example_2"
+    # Has complex Join-based UserData that generates malformed Python strings
+    "efs_with_automount_to_ec2"
 )
 
 # Templates to exclude from import entirely (Rain-specific, Kubernetes manifests, etc.)
@@ -171,6 +173,7 @@ CLEAN_OUTPUT=false
 SKIP_VALIDATION=false
 VERBOSE=false
 SINGLE_TEMPLATE=""
+LOCAL_SOURCE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -190,6 +193,10 @@ while [[ $# -gt 0 ]]; do
             SINGLE_TEMPLATE="$2"
             shift 2
             ;;
+        --local-source)
+            LOCAL_SOURCE="$2"
+            shift 2
+            ;;
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -201,12 +208,14 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-validation    Skip running each package to validate it works"
             echo "  --verbose, -v        Show detailed progress for each template"
             echo "  --template NAME      Test only a specific template file"
+            echo "  --local-source DIR   Use local directory instead of cloning from GitHub"
             echo "  --help, -h           Show this help message"
             echo ""
             echo "Examples:"
             echo "  $0                              # Full import with validation"
             echo "  $0 --clean                      # Clean output first"
             echo "  $0 --template EC2/EC2_1.yaml    # Test single template"
+            echo "  $0 --local-source /path/to/templates  # Use local templates"
             exit 0
             ;;
         *)
@@ -237,13 +246,26 @@ fi
 
 mkdir -p "$OUTPUT_DIR"
 
-# Step 2: Clone aws-cloudformation-templates to temp directory
-header "Cloning AWS CloudFormation Templates"
+# Step 2: Get templates (clone or use local source)
+if [ -n "$LOCAL_SOURCE" ]; then
+    header "Using Local Template Source"
+    if [ ! -d "$LOCAL_SOURCE" ]; then
+        error "Local source directory does not exist: $LOCAL_SOURCE"
+        exit 1
+    fi
+    CLONE_DIR="$LOCAL_SOURCE"
+    TEMP_DIR=""
+    info "Using local directory: $CLONE_DIR"
+else
+    header "Cloning AWS CloudFormation Templates"
+    TEMP_DIR=$(mktemp -d)
+    info "Cloning to temp directory: $TEMP_DIR"
+    git clone --depth 1 "$AWS_TEMPLATES_REPO" "$TEMP_DIR/aws-cloudformation-templates"
+    CLONE_DIR="$TEMP_DIR/aws-cloudformation-templates"
+    success "Cloned repository"
+fi
 
-TEMP_DIR=$(mktemp -d)
-info "Cloning to temp directory: $TEMP_DIR"
-
-# Cleanup temp directory on exit (but NOT the examples directory)
+# Cleanup temp directory on exit (but NOT the examples directory or local source)
 cleanup_temp() {
     if [ -n "${TEMP_DIR:-}" ] && [ -d "$TEMP_DIR" ]; then
         rm -rf "$TEMP_DIR"
@@ -256,10 +278,6 @@ cleanup_temp() {
     fi
 }
 trap cleanup_temp EXIT
-
-git clone --depth 1 "$AWS_TEMPLATES_REPO" "$TEMP_DIR/aws-cloudformation-templates"
-CLONE_DIR="$TEMP_DIR/aws-cloudformation-templates"
-success "Cloned repository"
 
 # Step 3: Apply template fixes
 header "Applying Template Fixes"
@@ -321,10 +339,9 @@ import_template() {
     local pkg_name=$(echo "$stem" | sed 's/[^a-zA-Z0-9_]/_/g' | tr '[:upper:]' '[:lower:]')
     local pkg_output="$OUTPUT_DIR/$pkg_name"
 
-    # Skip if already exists
+    # Remove existing to ensure fresh import
     if [ -d "$pkg_output" ]; then
-        echo "SKIP:$pkg_name"
-        return
+        rm -rf "$pkg_output"
     fi
 
     local error_output
@@ -353,16 +370,14 @@ printf '%s\n' "${TEMPLATES[@]}" | xargs -P "$JOBS" -I {} bash -c 'import_templat
 # Count import results
 IMPORT_OK=0
 IMPORT_FAIL=0
-IMPORT_SKIP=0
 while IFS=: read -r status pkg_name; do
     case "$status" in
         OK) IMPORT_OK=$((IMPORT_OK + 1)) ;;
         FAIL) IMPORT_FAIL=$((IMPORT_FAIL + 1)) ;;
-        SKIP) IMPORT_SKIP=$((IMPORT_SKIP + 1)) ;;
     esac
 done < "$IMPORT_RESULTS_FILE"
 
-success "Imported: $IMPORT_OK  Failed: $IMPORT_FAIL  Skipped: $IMPORT_SKIP"
+success "Imported: $IMPORT_OK  Failed: $IMPORT_FAIL"
 
 # Step 7: Lint packages to fix forward references and other issues
 header "Linting Packages"
@@ -376,7 +391,27 @@ else
     success "Linted all packages"
 fi
 
-# Step 8: Validate packages
+# Step 8: Validate no-parens pattern
+header "Validating No-Parens Pattern"
+
+# Check for any ref() or get_att() calls in generated code
+REF_MATCHES=$(grep -rE '\bref\s*\(' "$OUTPUT_DIR" --include="*.py" 2>/dev/null || true)
+GET_ATT_MATCHES=$(grep -rE '\bget_att\s*\(' "$OUTPUT_DIR" --include="*.py" 2>/dev/null || true)
+
+if [ -n "$REF_MATCHES" ] || [ -n "$GET_ATT_MATCHES" ]; then
+    error "Found ref() or get_att() calls in generated code - should use no-parens pattern"
+    if [ -n "$REF_MATCHES" ]; then
+        echo "$REF_MATCHES" | head -10
+    fi
+    if [ -n "$GET_ATT_MATCHES" ]; then
+        echo "$GET_ATT_MATCHES" | head -10
+    fi
+    exit 1
+else
+    success "No ref() or get_att() patterns found - using no-parens style"
+fi
+
+# Step 9: Validate packages
 VALIDATION_FAILED=()
 
 if [ "$SKIP_VALIDATION" = false ]; then
@@ -473,7 +508,7 @@ else
     warn "Skipping validation (--skip-validation flag)"
 fi
 
-# Step 9: Report
+# Step 10: Report
 header "Summary"
 
 FINAL_DIRS=$(find "$OUTPUT_DIR" -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')

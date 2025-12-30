@@ -29,6 +29,7 @@ PYTHON_KEYWORDS: dict[str, str] = {
     "else": "else_",
     "except": "except_",
     "False": "false_",
+    "field": "field_",  # Conflicts with dataclasses.field
     "finally": "finally_",
     "for": "for_",
     "from": "from_",
@@ -263,5 +264,5 @@ def python_type_for_property(prop: PropertyDef) -> str:
 
 
 def format_file(content: str) -> str:
-    """Format Python source code (placeholder - actual formatting done by black)."""
+    """Format Python source code (placeholder - actual formatting done by ruff)."""
     return content

@@ -25,8 +25,15 @@ class TestImportCommand:
     def test_import_missing_template(self, tmp_path):
         """Import fails gracefully for missing template."""
         result = subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "import",
-             str(tmp_path / "nonexistent.yaml"), "-o", str(tmp_path)],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "import",
+                str(tmp_path / "nonexistent.yaml"),
+                "-o",
+                str(tmp_path),
+            ],
             capture_output=True,
             text=True,
         )
@@ -36,10 +43,16 @@ class TestImportCommand:
     def test_import_simple_bucket(self, tmp_path):
         """Import creates package from simple bucket template."""
         result = subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "import",
-             str(TEMPLATES_DIR / "simple_bucket.yaml"),
-             "-o", str(tmp_path),
-             "-v"],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "import",
+                str(TEMPLATES_DIR / "simple_bucket.yaml"),
+                "-o",
+                str(tmp_path),
+                "-v",
+            ],
             capture_output=True,
             text=True,
         )
@@ -55,10 +68,17 @@ class TestImportCommand:
     def test_import_with_custom_name(self, tmp_path):
         """Import uses custom package name."""
         result = subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "import",
-             str(TEMPLATES_DIR / "simple_bucket.yaml"),
-             "-o", str(tmp_path),
-             "-n", "my_custom_stack"],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "import",
+                str(TEMPLATES_DIR / "simple_bucket.yaml"),
+                "-o",
+                str(tmp_path),
+                "-n",
+                "my_custom_stack",
+            ],
             capture_output=True,
             text=True,
         )
@@ -72,10 +92,16 @@ class TestImportCommand:
     def test_import_single_file(self, tmp_path):
         """Import --single-file creates single Python file."""
         result = subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "import",
-             str(TEMPLATES_DIR / "simple_bucket.yaml"),
-             "-o", str(tmp_path),
-             "--single-file"],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "import",
+                str(TEMPLATES_DIR / "simple_bucket.yaml"),
+                "-o",
+                str(tmp_path),
+                "--single-file",
+            ],
             capture_output=True,
             text=True,
         )
@@ -92,9 +118,15 @@ class TestImportCommand:
     def test_import_json_template(self, tmp_path):
         """Import handles JSON templates."""
         result = subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "import",
-             str(TEMPLATES_DIR / "simple_bucket.json"),
-             "-o", str(tmp_path)],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "import",
+                str(TEMPLATES_DIR / "simple_bucket.json"),
+                "-o",
+                str(tmp_path),
+            ],
             capture_output=True,
             text=True,
         )
@@ -108,9 +140,15 @@ class TestImportCommand:
         """Import does not overwrite existing files without --force."""
         # First import
         subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "import",
-             str(TEMPLATES_DIR / "simple_bucket.yaml"),
-             "-o", str(tmp_path)],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "import",
+                str(TEMPLATES_DIR / "simple_bucket.yaml"),
+                "-o",
+                str(tmp_path),
+            ],
             capture_output=True,
             text=True,
         )
@@ -122,10 +160,16 @@ class TestImportCommand:
 
         # Second import without --force
         result = subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "import",
-             str(TEMPLATES_DIR / "simple_bucket.yaml"),
-             "-o", str(tmp_path),
-             "-v"],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "import",
+                str(TEMPLATES_DIR / "simple_bucket.yaml"),
+                "-o",
+                str(tmp_path),
+                "-v",
+            ],
             capture_output=True,
             text=True,
         )
@@ -139,9 +183,15 @@ class TestImportCommand:
         """Import --force overwrites existing files."""
         # First import
         subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "import",
-             str(TEMPLATES_DIR / "simple_bucket.yaml"),
-             "-o", str(tmp_path)],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "import",
+                str(TEMPLATES_DIR / "simple_bucket.yaml"),
+                "-o",
+                str(tmp_path),
+            ],
             capture_output=True,
             text=True,
         )
@@ -152,10 +202,16 @@ class TestImportCommand:
 
         # Second import with --force
         result = subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "import",
-             str(TEMPLATES_DIR / "simple_bucket.yaml"),
-             "-o", str(tmp_path),
-             "--force"],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "import",
+                str(TEMPLATES_DIR / "simple_bucket.yaml"),
+                "-o",
+                str(tmp_path),
+                "--force",
+            ],
             capture_output=True,
             text=True,
         )
@@ -167,10 +223,16 @@ class TestImportCommand:
     def test_import_intrinsics_template(self, tmp_path):
         """Import handles templates with intrinsic functions."""
         result = subprocess.run(
-            [sys.executable, "-m", "wetwire_aws.cli", "import",
-             str(TEMPLATES_DIR / "intrinsics.yaml"),
-             "-o", str(tmp_path),
-             "--single-file"],
+            [
+                sys.executable,
+                "-m",
+                "wetwire_aws.cli",
+                "import",
+                str(TEMPLATES_DIR / "intrinsics.yaml"),
+                "-o",
+                str(tmp_path),
+                "--single-file",
+            ],
             capture_output=True,
             text=True,
         )

@@ -93,15 +93,14 @@ Before proposing a feature:
 
 - Follow PEP 8
 - Use type hints for all public APIs
-- Maximum line length: 88 characters (Black default)
-- Use `ruff` for linting
-- Use `black` for formatting
+- Maximum line length: 88 characters
+- Use `ruff` for linting and formatting
 - Use `mypy` for type checking
 
 ```bash
-# Run formatters and linters
-ruff check .
-black .
+# Run linting and formatting
+ruff check --fix .
+ruff format .
 mypy .
 ```
 

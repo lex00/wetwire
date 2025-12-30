@@ -59,10 +59,28 @@ class CodegenContext:
 
     current_module: str | None = None
     current_resource_id: str | None = None
+    current_resource_file: str | None = None  # File where current resource is generated
     forward_references: set[str] = field(default_factory=set)
+
+    # When True, all resource refs use forward reference (string) syntax.
+    # Used when generating PropertyType wrappers that appear before resource classes.
+    in_property_type_wrapper: bool = False
+
+    # Maps resource ID to the file it will be generated in (e.g., "compute", "network", "main")
+    # Used to determine if cross-file references need forward ref syntax
+    resource_to_file: dict[str, str] = field(default_factory=dict)
 
     name_pattern_map: dict[str, str] = field(default_factory=dict)
     arn_pattern_map: dict[str, tuple[str, str]] = field(default_factory=dict)
+
+    # PropertyType flattening: generated wrapper class definitions (in order)
+    property_type_class_defs: list[str] = field(default_factory=list)
+
+    # Policy flattening: generated PolicyDocument/PolicyStatement classes
+    # Maps class name -> class definition string
+    policy_classes: dict[str, str] = field(default_factory=dict)
+    # Counter for generating unique statement class names
+    _policy_counter: int = field(default=0)
 
     def add_import(self, module: str, name: str) -> None:
         """Register an import to include in generated code.
@@ -80,6 +98,21 @@ class CodegenContext:
             name: The intrinsic function name (e.g., "Sub", "Join").
         """
         self.intrinsic_imports.add(name)
+
+    def next_policy_counter(self) -> int:
+        """Get the next unique counter for policy class naming."""
+        counter = self._policy_counter
+        self._policy_counter += 1
+        return counter
+
+    def add_policy_class(self, class_name: str, class_def: str) -> None:
+        """Register a generated policy class.
+
+        Args:
+            class_name: The class name (e.g., "MyRoleAllowStatement0").
+            class_def: The complete class definition string.
+        """
+        self.policy_classes[class_name] = class_def
 
 
 @dataclass

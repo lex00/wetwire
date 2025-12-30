@@ -9,6 +9,9 @@ The `wetwire-aws` command provides tools for generating and validating CloudForm
 | `wetwire-aws build` | Generate CloudFormation template from registered resources |
 | `wetwire-aws validate` | Validate resources and references |
 | `wetwire-aws list` | List registered resources |
+| `wetwire-aws lint` | Lint code for issues and auto-fix |
+| `wetwire-aws import` | Import CloudFormation templates to Python |
+| `wetwire-aws init` | Initialize a new project |
 
 ```bash
 wetwire-aws --version  # Show version
@@ -164,6 +167,128 @@ Registered resources (3):
   ProcessorFunction: AWS::Lambda::Function
   ProcessorRole: AWS::IAM::Role
 ```
+
+---
+
+## lint
+
+Lint wetwire-aws code for issues and optionally auto-fix them.
+
+```bash
+# Lint a single file
+wetwire-aws lint myapp/storage.py
+
+# Lint a directory recursively
+wetwire-aws lint myapp/
+
+# Auto-fix issues
+wetwire-aws lint myapp/ --fix
+
+# Verbose output
+wetwire-aws lint myapp/ --verbose
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `PATH` | File or directory to lint |
+| `--fix` | Auto-fix detected issues |
+| `--verbose, -v` | Verbose output |
+
+### Lint Rules
+
+| Rule ID | Description | Auto-Fix |
+|---------|-------------|:--------:|
+| WAW001 | Use parameter type constants instead of string literals | ✅ |
+| WAW002 | Use pseudo-parameter constants instead of `Ref("AWS::Region")` | ✅ |
+| WAW003 | Use enum constants instead of string literals | ✅ |
+| WAW004 | Use intrinsic function classes instead of raw dicts | ✅ |
+| WAW005 | Remove unnecessary `.to_dict()` calls | ✅ |
+| WAW006 | Use no-parens references instead of `ref()`/`get_att()` | ✅ |
+| WAW007 | Use flat imports with module-qualified names | ✅ |
+| WAW008 | Remove verbose imports handled by `setup_resources()` | ✅ |
+| WAW010 | Split large files (>15 resources) into smaller files | ❌ |
+| WAW011 | Use no-parens style for PropertyType wrappers (remove `()`) | ✅ |
+| WAW012 | Detect duplicate resource class names | ❌ |
+| WAW013 | Use wrapper classes instead of inline constructors | ❌ |
+| WAW014 | Use wrapper classes instead of inline policy documents | ❌ |
+| WAW015 | Use wrapper classes instead of inline security group rules | ❌ |
+| WAW016 | Use wrapper classes instead of inline policy statements | ❌ |
+| WAW017 | Use wrapper classes instead of inline property type dicts | ❌ |
+| WAW018 | Remove redundant relative imports with `from . import *` | ❌ |
+
+### Example: Auto-fixing Code
+
+**Before:**
+```python
+type = "String"
+region = Ref("AWS::Region")
+vpc_id = ref(MyVPC)
+role_arn = get_att(MyRole, "Arn")
+```
+
+**After `wetwire-aws lint --fix`:**
+```python
+type = STRING
+region = AWS_REGION
+vpc_id = MyVPC
+role_arn = MyRole.Arn
+```
+
+### File Splitting Suggestions (WAW010)
+
+When a file exceeds 15 resources, the linter suggests splitting by category. Resource categorization uses dynamic inference:
+
+**Service-Based Categories:**
+
+| Category | Services |
+|----------|----------|
+| storage | S3, EFS, FSx, Backup |
+| compute | Lambda, EC2 (Instance, Volume, etc.), ECS, EKS |
+| network | VPC, ElasticLoadBalancing, Route53, CloudFront |
+| security | IAM, KMS, SecretsManager, WAF |
+| database | RDS, DynamoDB, ElastiCache, Neptune |
+| messaging | SNS, SQS, EventBridge |
+| main | Everything else |
+
+**EC2 Dynamic Categorization:**
+
+EC2 resources are split between compute and network using keyword-based inference:
+
+- **Network types**: Resources containing VPC, Subnet, Route, Gateway, Security, Network, Interface, Transit, Peering, EIP, VPN, Acl, DHCP, Endpoint, FlowLog, etc.
+- **Compute types**: Resources containing Instance, Fleet, Host, Volume, KeyPair, Capacity, Snapshot, Enclave, LaunchTemplate, IPAM, Placement, etc.
+
+This dynamic approach ensures new AWS resource types are categorized correctly without updating a static list.
+
+---
+
+## import
+
+Import CloudFormation templates into wetwire-aws Python code.
+
+```bash
+# Import a template
+wetwire-aws import template.yaml -o myapp/
+
+# Import with custom package name
+wetwire-aws import template.yaml -o myapp/ --name my_infra
+```
+
+See `wetwire-aws import --help` for all options.
+
+---
+
+## init
+
+Initialize a new wetwire-aws project.
+
+```bash
+# Create a new project
+wetwire-aws init -o myapp/
+```
+
+Creates a minimal project structure with `__init__.py`, `params.py`, and example resources.
 
 ---
 

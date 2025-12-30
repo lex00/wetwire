@@ -8,6 +8,55 @@ CloudFormation JSON equivalents during template generation.
 from dataclasses import dataclass
 from typing import Any
 
+from dataclass_dsl import is_attr_ref, is_class_ref
+from dataclass_dsl._loader import _ClassPlaceholder
+
+
+def _resolve_value(value: Any) -> Any:
+    """
+    Resolve a value to its CloudFormation serializable form.
+
+    Handles:
+    - IntrinsicFunction: calls to_dict()
+    - AttrRef (no-parens pattern): converts to GetAtt
+    - class ref (no-parens pattern): converts to Ref
+    - _ClassPlaceholder: converts to Ref using placeholder name
+    - Lists/dicts: recursively resolves
+    - Other values: returned as-is
+
+    Args:
+        value: The value to resolve
+
+    Returns:
+        CloudFormation-serializable value
+    """
+    # Handle unresolved placeholders (should be resolved by loader, but handle gracefully)
+    if isinstance(value, _ClassPlaceholder):
+        return {"Ref": value._name}
+    # Handle AttrRef from no-parens pattern (e.g., MainDB.Endpoint.Address)
+    if is_attr_ref(value):
+        return {"Fn::GetAtt": [value.target.__name__, value.attr]}
+    # Handle class reference from no-parens pattern (e.g., MyBucket)
+    if is_class_ref(value):
+        return {"Ref": value.__name__}
+    # Handle classes with refs marker
+    if isinstance(value, type) and hasattr(value, "_refs_marker"):
+        return {"Ref": value.__name__}
+    # Handle IntrinsicFunction instances
+    if isinstance(value, IntrinsicFunction):
+        return value.to_dict()
+    # Handle objects with to_dict method
+    if hasattr(value, "to_dict") and callable(getattr(value, "to_dict")):
+        return value.to_dict()
+    # Handle lists recursively
+    if isinstance(value, list):
+        return [_resolve_value(v) for v in value]
+    # Handle dicts recursively
+    if isinstance(value, dict):
+        return {k: _resolve_value(v) for k, v in value.items()}
+    # Return other values as-is
+    return value
+
 
 class IntrinsicFunction:
     """Base class for all CloudFormation intrinsic functions.
@@ -99,10 +148,7 @@ class Sub(IntrinsicFunction):
 
     def to_dict(self) -> dict[str, Any]:
         if self.variables:
-            resolved_vars = {
-                k: v.to_dict() if isinstance(v, IntrinsicFunction) else v
-                for k, v in self.variables.items()
-            }
+            resolved_vars = {k: _resolve_value(v) for k, v in self.variables.items()}
             return {"Fn::Sub": [self.template, resolved_vars]}
         return {"Fn::Sub": self.template}
 
@@ -125,9 +171,7 @@ class Join(IntrinsicFunction):
     values: list[Any]
 
     def to_dict(self) -> dict[str, Any]:
-        resolved = [
-            v.to_dict() if isinstance(v, IntrinsicFunction) else v for v in self.values
-        ]
+        resolved = [_resolve_value(v) for v in self.values]
         return {"Fn::Join": [self.delimiter, resolved]}
 
 
@@ -149,11 +193,7 @@ class Select(IntrinsicFunction):
     values: Any
 
     def to_dict(self) -> dict[str, Any]:
-        resolved = (
-            self.values.to_dict()
-            if isinstance(self.values, IntrinsicFunction)
-            else self.values
-        )
+        resolved = _resolve_value(self.values)
         return {"Fn::Select": [str(self.index), resolved]}
 
 
@@ -177,16 +217,8 @@ class If(IntrinsicFunction):
     value_if_false: Any
 
     def to_dict(self) -> dict[str, Any]:
-        true_val = (
-            self.value_if_true.to_dict()
-            if isinstance(self.value_if_true, IntrinsicFunction)
-            else self.value_if_true
-        )
-        false_val = (
-            self.value_if_false.to_dict()
-            if isinstance(self.value_if_false, IntrinsicFunction)
-            else self.value_if_false
-        )
+        true_val = _resolve_value(self.value_if_true)
+        false_val = _resolve_value(self.value_if_false)
         return {"Fn::If": [self.condition_name, true_val, false_val]}
 
 
@@ -208,16 +240,8 @@ class Equals(IntrinsicFunction):
     value2: Any
 
     def to_dict(self) -> dict[str, Any]:
-        v1 = (
-            self.value1.to_dict()
-            if isinstance(self.value1, IntrinsicFunction)
-            else self.value1
-        )
-        v2 = (
-            self.value2.to_dict()
-            if isinstance(self.value2, IntrinsicFunction)
-            else self.value2
-        )
+        v1 = _resolve_value(self.value1)
+        v2 = _resolve_value(self.value2)
         return {"Fn::Equals": [v1, v2]}
 
 
@@ -237,10 +261,7 @@ class And(IntrinsicFunction):
     conditions: list[Any]
 
     def to_dict(self) -> dict[str, Any]:
-        resolved = [
-            c.to_dict() if isinstance(c, IntrinsicFunction) else c
-            for c in self.conditions
-        ]
+        resolved = [_resolve_value(c) for c in self.conditions]
         return {"Fn::And": resolved}
 
 
@@ -260,10 +281,7 @@ class Or(IntrinsicFunction):
     conditions: list[Any]
 
     def to_dict(self) -> dict[str, Any]:
-        resolved = [
-            c.to_dict() if isinstance(c, IntrinsicFunction) else c
-            for c in self.conditions
-        ]
+        resolved = [_resolve_value(c) for c in self.conditions]
         return {"Fn::Or": resolved}
 
 
@@ -283,11 +301,7 @@ class Not(IntrinsicFunction):
     condition: Any
 
     def to_dict(self) -> dict[str, Any]:
-        resolved = (
-            self.condition.to_dict()
-            if isinstance(self.condition, IntrinsicFunction)
-            else self.condition
-        )
+        resolved = _resolve_value(self.condition)
         return {"Fn::Not": [resolved]}
 
 
@@ -307,11 +321,7 @@ class Base64(IntrinsicFunction):
     value: Any
 
     def to_dict(self) -> dict[str, Any]:
-        resolved = (
-            self.value.to_dict()
-            if isinstance(self.value, IntrinsicFunction)
-            else self.value
-        )
+        resolved = _resolve_value(self.value)
         return {"Fn::Base64": resolved}
 
 
@@ -355,11 +365,7 @@ class ImportValue(IntrinsicFunction):
     export_name: Any
 
     def to_dict(self) -> dict[str, Any]:
-        resolved = (
-            self.export_name.to_dict()
-            if isinstance(self.export_name, IntrinsicFunction)
-            else self.export_name
-        )
+        resolved = _resolve_value(self.export_name)
         return {"Fn::ImportValue": resolved}
 
 
@@ -407,16 +413,8 @@ class FindInMap(IntrinsicFunction):
     second_level_key: Any
 
     def to_dict(self) -> dict[str, Any]:
-        top = (
-            self.top_level_key.to_dict()
-            if isinstance(self.top_level_key, IntrinsicFunction)
-            else self.top_level_key
-        )
-        second = (
-            self.second_level_key.to_dict()
-            if isinstance(self.second_level_key, IntrinsicFunction)
-            else self.second_level_key
-        )
+        top = _resolve_value(self.top_level_key)
+        second = _resolve_value(self.second_level_key)
         return {"Fn::FindInMap": [self.map_name, top, second]}
 
 
@@ -438,11 +436,7 @@ class Split(IntrinsicFunction):
     source: Any
 
     def to_dict(self) -> dict[str, Any]:
-        resolved = (
-            self.source.to_dict()
-            if isinstance(self.source, IntrinsicFunction)
-            else self.source
-        )
+        resolved = _resolve_value(self.source)
         return {"Fn::Split": [self.delimiter, resolved]}
 
 
@@ -464,10 +458,7 @@ class Transform(IntrinsicFunction):
     parameters: dict[str, Any]
 
     def to_dict(self) -> dict[str, Any]:
-        resolved_params = {
-            k: v.to_dict() if isinstance(v, IntrinsicFunction) else v
-            for k, v in self.parameters.items()
-        }
+        resolved_params = {k: _resolve_value(v) for k, v in self.parameters.items()}
         return {"Fn::Transform": {"Name": self.name, "Parameters": resolved_params}}
 
 
@@ -491,9 +482,5 @@ class Cidr(IntrinsicFunction):
     cidr_bits: int
 
     def to_dict(self) -> dict[str, Any]:
-        resolved = (
-            self.ip_block.to_dict()
-            if isinstance(self.ip_block, IntrinsicFunction)
-            else self.ip_block
-        )
+        resolved = _resolve_value(self.ip_block)
         return {"Fn::Cidr": [resolved, self.count, self.cidr_bits]}

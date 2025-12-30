@@ -9,7 +9,67 @@ Context is the base class for environment-specific configuration.
 from dataclasses import dataclass, field
 from typing import Annotated, Any, ClassVar
 
-from dataclass_dsl import ContextRef
+from dataclass_dsl import ContextRef, Resource, is_attr_ref, is_class_ref
+from dataclass_dsl import PropertyType as PropertyTypeBase
+from dataclass_dsl._loader import _ClassPlaceholder
+
+
+def _is_property_type_wrapper(cls: type) -> bool:
+    """Check if a class is a PropertyType wrapper (not a Resource wrapper).
+
+    PropertyType wrappers have a `resource` annotation pointing to a PropertyType
+    subclass. Resource wrappers point to CloudFormationResource subclasses.
+
+    Args:
+        cls: The class to check.
+
+    Returns:
+        True if the class wraps a PropertyType, False otherwise.
+    """
+    annotations = getattr(cls, "__annotations__", {})
+    resource_type = annotations.get("resource")
+    if resource_type is None:
+        return False
+    # Check if resource_type is a PropertyType (not a CloudFormationResource)
+    # PropertyType doesn't have _resource_type, CloudFormationResource does
+    return not hasattr(resource_type, "_resource_type")
+
+
+def _instantiate_property_type_wrapper(wrapper_cls: type) -> Any:
+    """Create a PropertyType instance from a wrapper class.
+
+    Wrapper classes have a `resource:` annotation pointing to a PropertyType
+    subclass. This function extracts the property values from the wrapper
+    and creates an actual PropertyType instance.
+
+    Args:
+        wrapper_cls: A class with `resource: SomePropertyType` annotation.
+
+    Returns:
+        An instance of the PropertyType with values from the wrapper.
+    """
+    # Get the PropertyType class from the wrapper's annotation
+    annotations = getattr(wrapper_cls, "__annotations__", {})
+    property_type_cls = annotations.get("resource")
+    if property_type_cls is None:
+        # Shouldn't happen if _is_property_type_wrapper was True
+        return None
+
+    # Create wrapper instance to get its property values
+    wrapper_instance = wrapper_cls()
+
+    # Collect properties from wrapper (excluding 'resource' and private attrs)
+    props: dict[str, Any] = {}
+    for k, v in wrapper_instance.__dict__.items():
+        if k.startswith("_") or k == "resource" or v is None:
+            continue
+        # Recursively serialize nested values (handles nested wrappers, lists, etc.)
+        props[k] = _serialize_value(v)
+
+    # Create and return the PropertyType instance
+    # Use to_dict() on the PropertyType instance
+    property_instance = property_type_cls(**props)
+    return property_instance
 
 
 def _serialize_value(value: Any) -> Any:
@@ -22,8 +82,37 @@ def _serialize_value(value: Any) -> Any:
     Returns:
         The serialized value suitable for CloudFormation JSON output.
     """
-    if hasattr(value, "to_dict"):
-        return value.to_dict()
+    # Handle unresolved placeholders (should be resolved by loader, but handle gracefully)
+    if isinstance(value, _ClassPlaceholder):
+        from wetwire_aws.intrinsics import Ref
+
+        return Ref(value._name).to_dict()
+    # Handle no-parens pattern: AttrRef markers (e.g., MyRole.Arn)
+    if is_attr_ref(value):
+        from wetwire_aws.intrinsics import GetAtt
+
+        return GetAtt(value.target.__name__, value.attr).to_dict()
+    # Handle no-parens pattern: class references (e.g., MyBucket)
+    # Also handle plain class types with resource annotation (undecorated wrappers)
+    if is_class_ref(value) or (
+        isinstance(value, type)
+        and hasattr(value, "__annotations__")
+        and "resource" in getattr(value, "__annotations__", {})
+    ):
+        # Check if this is a PropertyType wrapper - if so, instantiate and serialize
+        if _is_property_type_wrapper(value):
+            property_instance = _instantiate_property_type_wrapper(value)
+            if property_instance is not None and hasattr(property_instance, "to_dict"):
+                return property_instance.to_dict()
+        # Otherwise it's a Resource wrapper - serialize as Ref
+        from wetwire_aws.intrinsics import Ref
+
+        return Ref(value.__name__).to_dict()
+    # Check for to_dict method - use callable() to avoid AttrRef false positives
+    # (AttrRef's __getattr__ returns AttrRef for any attribute access)
+    to_dict_method = getattr(value, "to_dict", None)
+    if to_dict_method is not None and callable(to_dict_method):
+        return to_dict_method()
     if isinstance(value, list):
         return [_serialize_value(item) for item in value]
     if isinstance(value, dict):
@@ -48,13 +137,17 @@ def _to_cf_name(snake_name: str) -> str:
 
 
 @dataclass
-class PropertyType:
+class PropertyType(PropertyTypeBase):
     """
     Base class for CloudFormation property types (nested structures).
 
     Property types represent complex nested properties within resources,
     such as S3 Bucket's VersioningConfiguration or EC2 Instance's BlockDeviceMapping.
     """
+
+    # Mapping from Python property names to CloudFormation names for special cases
+    # (e.g., sse_algorithm -> SSEAlgorithm where simple PascalCase won't work)
+    _property_mappings: ClassVar[dict[str, str]] = {}
 
     def to_dict(self) -> dict[str, Any]:
         """Convert property to CloudFormation-compatible dict.
@@ -76,8 +169,12 @@ class PropertyType:
             if isinstance(prop_value, (list, dict)) and len(prop_value) == 0:
                 continue
 
-            # Convert to CloudFormation property name (snake_case to PascalCase)
-            cf_name = _to_cf_name(prop_name)
+            # Check for explicit property mapping first
+            if prop_name in self._property_mappings:
+                cf_name = self._property_mappings[prop_name]
+            else:
+                # Convert to CloudFormation property name (snake_case to PascalCase)
+                cf_name = _to_cf_name(prop_name)
             result[cf_name] = _serialize_value(prop_value)
 
         return result
@@ -100,7 +197,107 @@ class Tag(PropertyType):
 
 
 @dataclass
-class CloudFormationResource:
+class PolicyStatement:
+    """
+    IAM Policy Statement for use with the wrapper dataclass pattern.
+
+    This class allows you to define IAM policy statements as separate
+    dataclasses that can be referenced by PolicyDocument and Role resources.
+
+    Note: Uses 'resource_arn' instead of 'resource' to avoid conflicts
+    with the wrapper pattern's 'resource:' type annotation field.
+
+    Example:
+        @wetwire_aws
+        class AllowS3ReadStatement:
+            resource: PolicyStatement
+            action = ["s3:GetObject", "s3:ListBucket"]
+            resource_arn = [MyBucket.Arn, Sub("${MyBucket.Arn}/*")]
+
+        @wetwire_aws
+        class MyPolicy:
+            resource: PolicyDocument
+            statement = [AllowS3ReadStatement]
+    """
+
+    sid: str | None = None
+    effect: str = "Allow"
+    principal: Any = None
+    action: Any = None
+    resource_arn: Any = None
+    condition: dict[str, Any] | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize statement to IAM policy format."""
+        stmt: dict[str, Any] = {"Effect": self.effect}
+
+        if self.sid:
+            stmt["Sid"] = self.sid
+        if self.principal is not None:
+            stmt["Principal"] = _serialize_value(self.principal)
+        if self.action is not None:
+            stmt["Action"] = _serialize_value(self.action)
+        if self.resource_arn is not None:
+            stmt["Resource"] = _serialize_value(self.resource_arn)
+        if self.condition is not None:
+            stmt["Condition"] = _serialize_value(self.condition)
+
+        return stmt
+
+
+@dataclass
+class DenyStatement(PolicyStatement):
+    """
+    IAM Deny Policy Statement.
+
+    Subclass of PolicyStatement with effect pre-set to "Deny".
+
+    Example:
+        @wetwire_aws
+        class DenyDeleteStatement:
+            resource: DenyStatement
+            action = ["s3:DeleteObject", "s3:DeleteBucket"]
+            resource_arn = "*"
+    """
+
+    effect: str = "Deny"
+
+
+@dataclass
+class PolicyDocument:
+    """
+    IAM Policy Document for use with the wrapper dataclass pattern.
+
+    This class allows you to define IAM policy documents as separate
+    dataclasses that can be referenced by Role resources.
+
+    Example:
+        @wetwire_aws
+        class AssumeRolePolicy:
+            resource: PolicyDocument
+            statement = [AllowAssumeRoleStatement]
+
+        @wetwire_aws
+        class MyRole:
+            resource: iam.Role
+            assume_role_policy_document = AssumeRolePolicy
+    """
+
+    version: str = "2012-10-17"
+    statement: list[Any] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize policy document to IAM format."""
+        return {
+            "Version": self.version,
+            "Statement": [
+                s.to_dict() if hasattr(s, "to_dict") else s for s in self.statement
+            ],
+        }
+
+
+@dataclass
+class CloudFormationResource(Resource):
     """
     Base class for all CloudFormation resource types.
 
@@ -113,6 +310,8 @@ class CloudFormationResource:
 
     _resource_type: ClassVar[str] = ""
     _property_mappings: ClassVar[dict[str, str]] = {}
+    # Alias for consistency with base Resource class
+    resource_type: ClassVar[str] = ""
 
     # Optional resource metadata (kw_only to allow subclasses to have required fields)
     depends_on: list[type] | None = field(default=None, repr=False, kw_only=True)
@@ -169,7 +368,9 @@ class CloudFormationResource:
 
         # Add optional metadata fields
         if self.depends_on:
-            result["DependsOn"] = [cls.__name__ for cls in self.depends_on]
+            result["DependsOn"] = [
+                dep if isinstance(dep, str) else dep.__name__ for dep in self.depends_on
+            ]
         if self.condition:
             result["Condition"] = self.condition
         if self.metadata:

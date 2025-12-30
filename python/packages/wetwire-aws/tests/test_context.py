@@ -58,7 +58,9 @@ class TestAWSContext:
         assert ctx.resolve_pseudo_parameter("AWS::Region") == "us-west-2"
         assert ctx.resolve_pseudo_parameter("AWS::AccountId") == "123456789012"
         assert ctx.resolve_pseudo_parameter("AWS::StackName") == "my-stack"
-        assert ctx.resolve_pseudo_parameter("AWS::StackId") == "arn:aws:cloudformation:..."
+        assert (
+            ctx.resolve_pseudo_parameter("AWS::StackId") == "arn:aws:cloudformation:..."
+        )
         assert ctx.resolve_pseudo_parameter("AWS::Partition") == "aws"
         assert ctx.resolve_pseudo_parameter("AWS::URLSuffix") == "amazonaws.com"
 

@@ -1,11 +1,8 @@
 # Agent Workflow: Design and Test Unification
 
-**Version:** 0.2
+**Version:** 0.3
 **Status:** Draft
-**Last Updated:** 2024-12-26
-
-> **This is the language-agnostic specification.** For implementation details, see:
-> - Python: [python/docs/PYTHON_AGENT_WORKFLOW.md](../../python/docs/PYTHON_AGENT_WORKFLOW.md)
+**Last Updated:** 2024-12-29
 
 ## Overview
 
@@ -336,5 +333,4 @@ Each language implementation MUST provide:
 
 ## Related Documents
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — Overall system architecture
-- [Personas](../personas/) — Detailed persona definitions
+- [Personas](personas/) — Detailed persona definitions

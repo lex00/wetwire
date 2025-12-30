@@ -2,6 +2,11 @@
 
 This module converts IR values (literals, lists, dicts, intrinsics) into
 Python source code strings.
+
+Policy documents are "flattened" into separate wrapper classes:
+- Each Statement becomes a PolicyStatement wrapper class
+- The PolicyDocument becomes a wrapper class referencing statements
+- The original property references the PolicyDocument class by name
 """
 
 from __future__ import annotations
@@ -117,7 +122,12 @@ def value_to_python(
 
 
 def annotated_to_class_ref(annotated: AnnotatedValue) -> str:
-    """Convert an AnnotatedValue to a class-based ref for inline use."""
+    """Convert an AnnotatedValue to a class-based ref for inline use.
+
+    Uses no-parens pattern (bare class names passed to ref/get_att):
+    - Ref[Target] -> ref(Target)
+    - GetAtt[Target] with "Attr" -> get_att(Target, "Attr")
+    """
     if match := re.match(r"Ref\[(\w+)\]", annotated.annotation):
         target = match.group(1)
         return f"ref({target})"
@@ -127,9 +137,10 @@ def annotated_to_class_ref(annotated: AnnotatedValue) -> str:
             attr = attr_match.group(1)
             return f'get_att({target}, "{attr}")'
         if "(" in annotated.value:
+            # Handle constants like ARN
             const = annotated.value.split("(")[1].rstrip(")")
             return f"get_att({target}, {const})"
-        return f"get_att({target})"
+        return f"ref({target})"
     return annotated.value
 
 
@@ -163,20 +174,20 @@ def intrinsic_to_python(
             ctx.add_intrinsic_import("Ref")
             return f'Ref("{target}")'
         if target in ctx.template.parameters:
-            return f"ref({_format_ref_target(target)})"
+            # Parameters use bare class name - no parens pattern
+            return _format_ref_target(target)
         if target in ctx.template.resources:
-            if target in ctx.forward_references:
-                return f'ref("{_format_ref_target(target)}")'
-            return f"ref({_format_ref_target(target)})"
+            # Resources use bare class name - setup_resources() handles forward refs
+            return _format_ref_target(target)
         ctx.add_intrinsic_import("Ref")
         return f'Ref("{target}")'
 
     if intrinsic.type == IntrinsicType.GET_ATT:
         logical_id, attr = intrinsic.args
         if logical_id in ctx.template.resources:
-            if logical_id in ctx.forward_references:
-                return f'get_att("{_format_ref_target(logical_id)}", "{attr}")'
-            return f'get_att({_format_ref_target(logical_id)}, "{attr}")'
+            # Use no-parens pattern: ClassName.Attr
+            # setup_resources() handles forward refs via placeholders
+            return f"{_format_ref_target(logical_id)}.{attr}"
         ctx.add_intrinsic_import("GetAtt")
         return f'GetAtt("{logical_id}", "{attr}")'
 
@@ -197,21 +208,19 @@ def intrinsic_to_python(
                 if not all_params:
                     formatted_id = _format_ref_target(resource_id)
                     if suffix == "":
-                        return AnnotatedValue(
-                            annotation=f"GetAtt[{formatted_id}]",
-                            value='get_att("Arn")',
-                        )
+                        # Use no-parens pattern: ClassName.Arn
+                        return f"{formatted_id}.Arn"
                     else:
+                        # Join with .Arn suffix
                         ctx.add_intrinsic_import("Join")
-                        return f"Join('', [get_att(\"{formatted_id}\", \"Arn\"), '{suffix}'])"
+                        return f"Join('', [{formatted_id}.Arn, '{suffix}'])"
 
         # Check for name pattern match
         if not variables and template_str in ctx.name_pattern_map:
             resource_id = ctx.name_pattern_map[template_str]
             if resource_id != ctx.current_resource_id:
-                if resource_id in ctx.forward_references:
-                    return f'ref("{_format_ref_target(resource_id)}")'
-                return f"ref({_format_ref_target(resource_id)})"
+                # Use bare class name - setup_resources() handles forward refs
+                return _format_ref_target(resource_id)
 
         ctx.add_intrinsic_import("Sub")
         if variables:

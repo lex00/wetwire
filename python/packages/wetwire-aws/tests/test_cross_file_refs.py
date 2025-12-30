@@ -48,7 +48,9 @@ class TestCrossFileReferences:
         # Verify the no-parens cross-file reference is detected
         # With no-parens pattern, the value is an AttrRef at the class level
         role_default = AppFunction.__dataclass_fields__["role"].default
-        assert is_attr_ref(role_default), "role should be an AttrRef (no-parens pattern)"
+        assert is_attr_ref(role_default), (
+            "role should be an AttrRef (no-parens pattern)"
+        )
         assert role_default.target is AppRole, "AttrRef should reference AppRole"
         assert role_default.attr == "Arn", "AttrRef should reference 'Arn' attribute"
 
@@ -73,8 +75,9 @@ class TestCrossFileReferences:
         # Verify the cross-file reference is serialized correctly
         # The no-parens pattern (role = AppRole.Arn) should serialize to GetAtt
         func_props = output["Resources"]["AppFunction"]["Properties"]
-        assert func_props["Role"] == {"Fn::GetAtt": ["AppRole", "Arn"]}, \
+        assert func_props["Role"] == {"Fn::GetAtt": ["AppRole", "Arn"]}, (
             "Cross-file no-parens reference (AppRole.Arn) should serialize to GetAtt"
+        )
 
     def test_cross_file_dependency_order(self):
         """Test that cross-file dependencies are ordered correctly."""
@@ -95,5 +98,6 @@ class TestCrossFileReferences:
         # AppRole should come before AppFunction (dependency order)
         role_idx = resource_names.index("AppRole")
         func_idx = resource_names.index("AppFunction")
-        assert role_idx < func_idx, \
+        assert role_idx < func_idx, (
             "AppRole should appear before AppFunction in template (dependency order)"
+        )

@@ -1,0 +1,26 @@
+{
+  "total": 15,
+  "max": 15,
+  "dimensions": {
+    "completeness": {
+      "score": 3,
+      "max": 3
+    },
+    "lint_quality": {
+      "score": 3,
+      "max": 3
+    },
+    "code_quality": {
+      "score": 3,
+      "max": 3
+    },
+    "output_validity": {
+      "score": 3,
+      "max": 3
+    },
+    "question_efficiency": {
+      "score": 3,
+      "max": 3
+    }
+  }
+}

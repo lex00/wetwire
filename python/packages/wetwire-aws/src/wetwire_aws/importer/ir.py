@@ -5,15 +5,18 @@ template after parsing but before code generation. The IR provides a
 normalized, Python-friendly representation that decouples parsing from
 code generation.
 
+The IR classes extend base classes from dataclass-dsl with CloudFormation-
+specific fields and functionality.
+
 The IR classes form a hierarchy:
     - IRTemplate: Top-level container for the entire template
     - IRResource: A CloudFormation resource with properties
     - IRParameter: A template parameter
     - IROutput: A template output
-    - IRMapping: A template mapping table
-    - IRCondition: A template condition expression
+    - IRMapping: A template mapping table (CloudFormation-specific)
+    - IRCondition: A template condition expression (CloudFormation-specific)
     - IRProperty: A property key-value pair within a resource
-    - IRIntrinsic: A parsed intrinsic function (Ref, GetAtt, Sub, etc.)
+    - IRIntrinsic: A parsed intrinsic function (CloudFormation-specific)
 
 Example:
     >>> from wetwire_aws.importer.parser import parse_template
@@ -24,9 +27,28 @@ Example:
 
 from __future__ import annotations
 
+__all__ = [
+    "IntrinsicType",
+    "IRCondition",
+    "IRIntrinsic",
+    "IRMapping",
+    "IROutput",
+    "IRParameter",
+    "IRProperty",
+    "IRResource",
+    "IRTemplate",
+]
+
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+# Import base classes from dataclass-dsl
+from dataclass_dsl import (
+    IROutput,
+    IRParameter,
+    IRProperty,
+)
 
 
 class IntrinsicType(Enum):
@@ -97,70 +119,9 @@ class IRIntrinsic:
     args: Any
 
 
-@dataclass
-class IRProperty:
-    """A single property key-value pair within a CloudFormation resource.
-
-    Properties are normalized from CloudFormation's PascalCase to Python's
-    snake_case naming convention. The value can be a literal, an intrinsic
-    function, or a nested structure containing either.
-
-    Attributes:
-        cf_name: Original CloudFormation property name (PascalCase).
-        python_name: Converted property name (snake_case).
-        value: Property value - may be a literal (str, int, bool), an
-            IRIntrinsic, a list, a dict, or nested structures thereof.
-
-    Example:
-        >>> prop = IRProperty("BucketName", "bucket_name", "my-bucket")
-        >>> prop.python_name
-        'bucket_name'
-    """
-
-    cf_name: str
-    python_name: str
-    value: Any
-
-
-@dataclass
-class IRParameter:
-    """A parsed CloudFormation template parameter.
-
-    Represents a parameter from the Parameters section of a CloudFormation
-    template, including all validation constraints.
-
-    Attributes:
-        logical_id: The parameter's logical name in the template.
-        type: CloudFormation parameter type (String, Number, List<Number>,
-            AWS::EC2::KeyPair::KeyName, etc.).
-        description: Human-readable description of the parameter.
-        default: Default value if none provided at deploy time.
-        allowed_values: List of permitted values (for constrained parameters).
-        allowed_pattern: Regex pattern that String values must match.
-        min_length: Minimum length for String parameters.
-        max_length: Maximum length for String parameters.
-        min_value: Minimum value for Number parameters.
-        max_value: Maximum value for Number parameters.
-        constraint_description: Message shown when validation fails.
-        no_echo: If True, mask the parameter value in console/logs.
-
-    See Also:
-        AWS Parameters documentation:
-        https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html
-    """
-
-    logical_id: str
-    type: str
-    description: str | None = None
-    default: Any | None = None
-    allowed_values: list[Any] | None = None
-    allowed_pattern: str | None = None
-    min_length: int | None = None
-    max_length: int | None = None
-    min_value: int | None = None
-    max_value: int | None = None
-    constraint_description: str | None = None
-    no_echo: bool = False
+# Re-export base IRProperty, IRParameter, IROutput from dataclass-dsl
+# These are imported above and available directly
+# IRProperty uses domain_name for the original property name (e.g., "BucketName")
 
 
 @dataclass
@@ -170,6 +131,9 @@ class IRResource:
     Represents a resource from the Resources section of a CloudFormation
     template. Contains the resource type, all properties, and resource-level
     attributes like DependsOn and Condition.
+
+    Extends the base dataclass-dsl IRResource with CloudFormation-specific
+    fields like deletion_policy and update_replace_policy.
 
     Attributes:
         logical_id: The resource's logical name in the template.
@@ -217,33 +181,6 @@ class IRResource:
         """
         parts = self.resource_type.split("::")
         return parts[2] if len(parts) >= 3 else ""
-
-
-@dataclass
-class IROutput:
-    """A parsed CloudFormation output.
-
-    Represents an output from the Outputs section of a CloudFormation template.
-    Outputs expose stack values that can be viewed in the console, returned
-    via API calls, or exported for cross-stack references.
-
-    Attributes:
-        logical_id: The output's logical name in the template.
-        value: The output value - may be a literal or IRIntrinsic.
-        description: Human-readable description of the output.
-        export_name: Name for cross-stack exports (can be an intrinsic).
-        condition: Name of condition that controls whether output is created.
-
-    See Also:
-        AWS Outputs documentation:
-        https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/outputs-section-structure.html
-    """
-
-    logical_id: str
-    value: Any
-    description: str | None = None
-    export_name: Any | None = None
-    condition: str | None = None
 
 
 @dataclass

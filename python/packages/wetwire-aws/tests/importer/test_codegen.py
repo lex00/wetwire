@@ -26,7 +26,7 @@ class TestGenerateSimpleBucket:
         assert "from wetwire_aws" in code
 
     def test_has_resource_class(self, code):
-        assert "@wetwire_aws" in code
+        # Invisible decorator pattern: no @wetwire_aws needed
         assert "class MyBucket:" in code
         # Bucket exists in multiple modules, so qualified name may be used
         assert "resource:" in code
@@ -35,7 +35,8 @@ class TestGenerateSimpleBucket:
     def test_has_output_class(self, code):
         assert "class BucketNameOutput:" in code
         assert "resource: Output" in code
-        assert "ref(MyBucket)" in code
+        # Uses no-parens pattern: bare class name instead of ref()
+        assert "value = MyBucket" in code
 
     def test_uses_template_from_registry(self, code):
         # Template class is no longer generated - resources auto-register
@@ -70,11 +71,12 @@ class TestGenerateBucketWithRef:
         assert "default = 'my-default-bucket'" in code
 
     def test_has_ref_to_parameter(self, code):
-        assert "ref(BucketNameParam)" in code
+        # No-parens pattern: bare class name for parameter refs
+        assert "bucket_name = BucketNameParam" in code
 
     def test_has_getatt(self, code):
-        # Output values now use class refs
-        assert 'get_att(MyBucket, "Arn")' in code
+        # No-parens pattern: ClassName.Attr for GetAtt
+        assert "value = MyBucket.Arn" in code
 
     def test_generated_code_is_valid_python(self, code):
         compile(code, "<test>", "exec")
@@ -145,7 +147,7 @@ class TestBlockModeWithTags:
 
     def test_has_wrapper_classes(self, code):
         # Block mode uses wrapper classes for PropertyTypes
-        assert "@wetwire_aws" in code
+        # Invisible decorator pattern: no @wetwire_aws needed
         assert "class ProdBucket:" in code
 
     def test_all_resources_present(self, code):
@@ -167,7 +169,9 @@ class TestBlockModeWithPolicies:
 
     def test_has_wrapper_classes_for_policy(self, code):
         # Should have wrapper classes for policy structures
-        assert "@wetwire_aws" in code
+        # Invisible decorator pattern: no @wetwire_aws needed
+        assert "class MyBucketPolicyPolicyDocument:" in code
+        assert "class MyBucketPolicyAllowStatement0:" in code
 
     def test_generated_code_is_valid_python(self, code):
         compile(code, "<test>", "exec")
@@ -192,11 +196,15 @@ class TestGeneratePackage:
     def test_has_resource_files(self, files):
         """Should have resource files (either main.py or categorized files like storage.py)."""
         # Check for at least one resource file (besides __init__.py, __main__.py, params.py, outputs.py)
-        resource_files = [f for f in files.keys() if f.endswith('.py') and
-                         not f.endswith('__init__.py') and
-                         not f.endswith('__main__.py') and
-                         not f.endswith('params.py') and
-                         not f.endswith('outputs.py')]
+        resource_files = [
+            f
+            for f in files.keys()
+            if f.endswith(".py")
+            and not f.endswith("__init__.py")
+            and not f.endswith("__main__.py")
+            and not f.endswith("params.py")
+            and not f.endswith("outputs.py")
+        ]
         assert len(resource_files) > 0, "Should have at least one resource file"
 
     def test_has_dunder_main(self, files):
@@ -223,11 +231,15 @@ class TestGeneratePackage:
     def test_resource_files_have_resources(self, files):
         """Resource files should contain resource definitions."""
         # Find resource files (not __init__, __main__, params, outputs)
-        resource_files = [f for f in files.keys() if f.endswith('.py') and
-                         not f.endswith('__init__.py') and
-                         not f.endswith('__main__.py') and
-                         not f.endswith('params.py') and
-                         not f.endswith('outputs.py')]
+        resource_files = [
+            f
+            for f in files.keys()
+            if f.endswith(".py")
+            and not f.endswith("__init__.py")
+            and not f.endswith("__main__.py")
+            and not f.endswith("params.py")
+            and not f.endswith("outputs.py")
+        ]
 
         # Check that at least one resource file has the MyBucket class
         found_bucket = False
