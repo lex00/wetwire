@@ -11,10 +11,12 @@ import gzip
 import hashlib
 import json
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 
 @dataclass
@@ -85,6 +87,7 @@ def fetch_http(
         name: Name for this source
         filename: Optional filename (defaults to last part of URL)
         version_extractor: Optional function to extract version from JSON content
+            (fallback if Last-Modified header not available)
 
     Returns:
         SourceInfo with details about the fetched file
@@ -98,6 +101,10 @@ def fetch_http(
     with urllib.request.urlopen(url) as response:
         content = response.read()
 
+        # Extract version from Last-Modified header (preferred)
+        # Format: "Thu, 11 Dec 2025 22:11:08 GMT" -> "2025.12.11"
+        last_modified = response.headers.get("Last-Modified")
+
     # Handle gzip-compressed content
     if content[:2] == b'\x1f\x8b':  # gzip magic number
         content = gzip.decompress(content)
@@ -105,12 +112,21 @@ def fetch_http(
     # Calculate hash
     sha256 = hashlib.sha256(content).hexdigest()
 
-    # Extract version if extractor provided
+    # Extract version from Last-Modified header (preferred) or fallback to extractor
     version = None
-    if version_extractor and filename.endswith(".json"):
+    if last_modified:
+        try:
+            dt = parsedate_to_datetime(last_modified)
+            version = dt.strftime("%Y.%m.%d")
+            print(f"  Version from Last-Modified header: {version}")
+        except (ValueError, TypeError):
+            pass
+
+    if version is None and version_extractor and filename.endswith(".json"):
         try:
             data = json.loads(content)
             version = version_extractor(data)
+            print(f"  Version from JSON content: {version}")
         except (json.JSONDecodeError, KeyError):
             pass
 
