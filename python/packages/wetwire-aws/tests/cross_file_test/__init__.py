@@ -2,7 +2,7 @@
 Cross-file reference test package.
 
 This simulates a user project structure where:
-- Multiple files define resources with @wetwire_aws
+- Multiple files define wrapper classes (no decorator needed)
 - Files use `from . import *` to import resources
 - Resources in one file reference resources from another file
 
