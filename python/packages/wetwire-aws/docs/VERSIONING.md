@@ -83,9 +83,11 @@ When releasing a new version:
 4. Commit and tag:
    ```bash
    git commit -am "Bump version to 0.2.0"
-   git tag v0.2.0
+   git tag wetwire-aws-v0.2.0
    git push && git push --tags
    ```
+
+   Note: The tag format `wetwire-aws-vX.Y.Z` triggers the release workflow.
 
 ---
 
