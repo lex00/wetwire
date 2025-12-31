@@ -186,32 +186,32 @@ goformation (`github.com/awslabs/goformation`) is AWS Labs' Go library for Cloud
 | **Linting** | ❌ None | ✅ Built-in | Catch anti-patterns before build |
 | **Template import** | ✅ Parsing only | ✅ Code generation | Import → wetwire code, not just structs |
 
-#### Paradigm Comparison
+#### Paradigm Comparison: No Parens vs Imperative
 
-**goformation (Imperative):**
+**goformation (Imperative - WITH Parens):**
 ```go
 template := cloudformation.NewTemplate()
 
-// Resources created imperatively, added to map
-bucket := &s3.Bucket{
+// Resources INSTANTIATED imperatively, added to map
+bucket := &s3.Bucket{                              // ← Parens: instantiation
     BucketName: cloudformation.String("my-bucket"),
 }
-template.Resources["MyBucket"] = bucket
+template.Resources["MyBucket"] = bucket            // ← String key, manual wiring
 
-// Cross-references are strings - no type safety
-function := &lambda.Function{
+// Cross-references are STRINGS - no type safety
+function := &lambda.Function{                      // ← Parens: instantiation
     Environment: &lambda.Function_Environment{
         Variables: map[string]string{
-            "BUCKET": cloudformation.Ref("MyBucket"),  // String, not typed
+            "BUCKET": cloudformation.Ref("MyBucket"),  // ← String! Typos not caught
         },
     },
 }
-template.Resources["MyFunction"] = function
+template.Resources["MyFunction"] = function        // ← Manual wiring
 ```
 
-**wetwire (Declarative):**
+**wetwire (Declarative - NO Parens on References):**
 ```go
-// Wrapper struct declares ALL wiring
+// Wrapper struct declares ALL wiring - NO instantiation of referenced types
 type MyBucket struct {
     wetwire.Base
     Resource   s3.Bucket
@@ -220,19 +220,31 @@ type MyBucket struct {
 
 type MyFunction struct {
     wetwire.Base
-    Resource    lambda.Function
-    Environment FunctionEnvironment
-    Bucket      Ref[MyBucket]  // Type-safe reference
+    Resource lambda.Function
+    Bucket   Ref[*MyBucket]  // ← NO parens! Type parameter, not instantiation
+    //       ↑ This is the "no parens" pattern in Go
+    //       Ref[*MyBucket] means "reference TO MyBucket type"
+    //       not "create a MyBucket instance"
 }
 
-// init() auto-registers
+// init() auto-registers - dependencies extracted from Ref[T] fields
 func init() {
     wetwire.Register(&MyBucket{})
     wetwire.Register(&MyFunction{})
+    // Registry sees Ref[*MyBucket] in MyFunction, adds to dependency graph
 }
 
-// Template built from registry
-template := cfn.FromRegistry()  // Dependencies analyzed automatically
+// Template built from registry - topologically sorted
+template := cfn.FromRegistry()  // MyBucket comes before MyFunction automatically
+```
+
+**The Key Difference:**
+```go
+// goformation: Ref("MyBucket") - string argument, loses type info
+// wetwire:     Ref[*MyBucket]  - type parameter, compiler-checked
+
+// goformation: lambda.Function{...} - instantiate, then add to map
+// wetwire:     Bucket Ref[*MyBucket] - declare relationship, no instantiation
 ```
 
 #### Why goformation's Approach Falls Short
@@ -284,21 +296,45 @@ template := cfn.FromRegistry()  // Dependencies analyzed automatically
 
 *Source: dataclass-dsl - must be implemented first*
 
-### 1.1 Type System
+### 1.1 Type System (No Parens Foundation)
+
+The type system enables the **"no parens" pattern** - referencing types without instantiation.
 
 | Feature | Python Source | Go Pattern | Go Library | Priority |
 |---------|---------------|------------|------------|----------|
-| `Ref[T]` type marker | `_types.py` | Generic interface | Go 1.18+ generics | P0 |
-| `Attr[T, name]` marker | `_types.py` | Struct with target + attr | Native struct | P0 |
-| `RefList`, `RefDict` | `_types.py` | Generic slice/map types | Go 1.18+ generics | P1 |
-| `ContextRef` | `_types.py` | Interface for context lookup | Native interface | P2 |
-| `RefInfo` extraction | `_types.py:get_refs()` | Reflection or codegen | `reflect` / jennifer | P0 |
-| `AttrRef` runtime marker | `_attr_ref.py` | Struct type | Native struct | P0 |
+| `Ref[T]` type marker | `_types.py` | `Ref[*T]` generic struct | Go 1.18+ generics | P0 |
+| `Attr[T, name]` marker | `_types.py` | `Attr[*T]` + attribute field | Native struct | P0 |
+| `RefList`, `RefDict` | `_types.py` | `[]Ref[*T]`, `map[K]Ref[*T]` | Go 1.18+ generics | P1 |
+| `ContextRef` | `_types.py` | `ContextRef` string wrapper | Native struct | P2 |
+| `RefInfo` extraction | `_types.py:get_refs()` | Reflect on `Ref[T]` fields | `reflect` | P0 |
+| `AttrRef` runtime marker | `_attr_ref.py` | Embed in `Attr[T]` | Native struct | P0 |
+
+**Go Implementation for No Parens:**
+```go
+// Ref[T] enables: VpcID Ref[*MyVPC] (like Python vpc_id = ref(MyVPC))
+type Ref[T any] struct {
+    logicalName string  // Populated at registration via reflection
+}
+
+func (r Ref[T]) MarshalJSON() ([]byte, error) {
+    return json.Marshal(map[string]string{"Ref": r.logicalName})
+}
+
+// Attr[T] enables: Role Attr[*MyRole] `attr:"Arn"` (like Python role: Attr[MyRole, "Arn"])
+type Attr[T any] struct {
+    logicalName string
+    attribute   string  // From struct tag or explicit
+}
+
+func (a Attr[T]) MarshalJSON() ([]byte, error) {
+    return json.Marshal(map[string][]string{"Fn::GetAtt": {a.logicalName, a.attribute}})
+}
+```
 
 **Go Consideration:** No runtime type annotations. Use:
 - Struct tags for metadata (`reflect.StructTag`)
-- Code generation with jennifer for type introspection
-- Interfaces for polymorphism
+- Generic type parameters for type-safe refs (`Ref[*T]`)
+- Code generation for forward reference resolution
 
 ### 1.2 Registry
 
@@ -719,6 +755,254 @@ Use `go generate` directive pattern for build-time generation.
 
 ---
 
+## THE "NO PARENS" PATTERN
+
+The "no parens" pattern is wetwire's signature feature: **referencing types without instantiating them**. This is the core of declarative wiring and the primary challenge for Go translation.
+
+### Python "No Parens" Variations
+
+```python
+# ============================================================
+# PATTERN 1: ref() with class argument (class not instantiated)
+# ============================================================
+class MySubnet:
+    resource: ec2.Subnet
+    vpc_id = ref(MyVPC)  # MyVPC is the CLASS, not MyVPC() instance
+                          # ref() extracts __name__ → "MyVPC"
+
+# ============================================================
+# PATTERN 2: Class as direct value (no function call at all)
+# ============================================================
+class PolicyDocument:
+    resource: iam.PolicyDocument
+    statement = [AssumeRoleStatement]  # Class in list, no parens
+
+class MyRole:
+    resource: iam.Role
+    assume_role_policy_document = PolicyDocument  # Class as value
+
+# ============================================================
+# PATTERN 3: Attribute access on class (GetAtt pattern)
+# ============================================================
+class ProcessorFunction:
+    resource: lambda_.Function
+    role = ProcessorRole.Arn  # .Arn on CLASS returns GetAtt intrinsic
+
+# ============================================================
+# PATTERN 4: Type annotations with class as parameter
+# ============================================================
+class ProcessorFunction:
+    resource: lambda_.Function
+    role: Attr[ProcessorRole, "Arn"] = None   # ProcessorRole is type param
+    bucket: Ref[DataBucket] = None             # DataBucket is type param
+```
+
+### Why "No Parens" Matters
+
+| Benefit | Explanation |
+|---------|-------------|
+| **Declarative** | Relationships ARE the code, not method calls |
+| **Analyzable** | Dependencies extracted statically before runtime |
+| **Refactorable** | Rename class → all references update (IDE support) |
+| **Type-safe** | Invalid class reference → type error |
+| **Concise** | `vpc_id = ref(MyVPC)` vs `vpc_id = ref(MyVPC())` |
+
+### Go Translation Challenge
+
+**Python**: Types are first-class values. You can pass a class as an argument.
+**Go**: Types are NOT values. You cannot pass a type to a function.
+
+```go
+// ❌ IMPOSSIBLE in Go - types aren't values
+func ref(t type) Ref { ... }
+vpc_id := ref(MyVPC)  // Cannot pass type as argument
+
+// ❌ ALSO IMPOSSIBLE - can't use type as field value
+type MySubnet struct {
+    VpcID MyVPC  // This EMBEDS MyVPC, doesn't reference it
+}
+```
+
+### Go Translation Options
+
+#### Option A: Generic Type Parameters (Recommended for Type Safety)
+
+```go
+// Ref[T] generic type - T is the target type
+type Ref[T any] struct {
+    resolved bool
+    value    map[string]string  // {"Ref": "LogicalName"}
+}
+
+// Usage - closest to Python pattern
+type MySubnet struct {
+    wetwire.Base
+    Resource ec2.Subnet
+    VpcID    Ref[*MyVPC]  // Generic type parameter
+}
+
+// Serialization via MarshalJSON
+func (r Ref[T]) MarshalJSON() ([]byte, error) {
+    // Use reflect to get T's name, or pre-populate at registration
+    return json.Marshal(map[string]string{"Ref": r.logicalName})
+}
+```
+
+**Pros**: Type-safe, IDE autocomplete, refactoring works
+**Cons**: Requires types to exist (no forward refs), verbose `[*T]` syntax
+
+#### Option B: Struct Tags (String-based, Allows Forward Refs)
+
+```go
+type MySubnet struct {
+    wetwire.Base
+    Resource ec2.Subnet
+    VpcID    Ref `wetwire:"ref=MyVPC"`  // String-based reference
+}
+
+// At registration time, parse tags and resolve
+func init() {
+    wetwire.Register(&MySubnet{})  // Parses tags, validates refs exist
+}
+```
+
+**Pros**: Forward references work, simple syntax
+**Cons**: No type safety, string typos not caught at compile time
+
+#### Option C: Hybrid (Tags + Generics)
+
+```go
+type MySubnet struct {
+    wetwire.Base
+    Resource ec2.Subnet
+    // Generic for type safety, tag for metadata
+    VpcID    Ref[*MyVPC] `cf:"VpcId"`
+}
+```
+
+**Pros**: Best of both - type safety AND metadata
+**Cons**: More complex, still requires type to exist
+
+#### Option D: Code Generation (Most Go-Idiomatic)
+
+Generate a `_wiring.go` file from analysis:
+
+```go
+// mypackage/_wiring.go (GENERATED)
+package mypackage
+
+import "wetwire"
+
+func init() {
+    wetwire.RegisterWiring(map[string][]wetwire.WireDef{
+        "MySubnet": {
+            {Field: "VpcID", Target: "MyVPC", Type: wetwire.RefType},
+        },
+        "MyFunction": {
+            {Field: "Role", Target: "MyRole", Attr: "Arn", Type: wetwire.AttrType},
+        },
+    })
+}
+```
+
+**Pros**: Forward refs work, fast (no reflection), Go-idiomatic
+**Cons**: Requires build step, generated file in repo
+
+### Recommended Approach: Option A + D (Generics + Codegen)
+
+```go
+// User writes (checked by compiler):
+type MySubnet struct {
+    wetwire.Base
+    Resource ec2.Subnet
+    VpcID    Ref[*MyVPC] `cf:"VpcId"`
+}
+
+// `go generate` produces _wiring.go with:
+// - Pre-computed logical names
+// - Dependency graph
+// - Validation that all Ref[T] targets are registered
+```
+
+### Pattern Translation Table
+
+| Python Pattern | Go Translation | Notes |
+|----------------|----------------|-------|
+| `ref(MyVPC)` | `Ref[*MyVPC]{}` or tag | Generic type or struct tag |
+| `get_att(MyRole, "Arn")` | `Attr[*MyRole, "Arn"]{}` | Two type params (needs workaround) |
+| `ProcessorRole.Arn` | `GetAtt[*ProcessorRole]("Arn")` | Function returning Attr |
+| `statement = [MyStatement]` | `Statement []Ref[*MyStatement]` | Slice of generic refs |
+| `policy = MyPolicy` | `Policy Ref[*MyPolicy]` | Direct ref as field |
+| `bucket: Ref[DataBucket] = None` | `Bucket Ref[*DataBucket]` | Zero value is "unset" |
+
+### GetAtt Challenge
+
+Python `Attr[T, "name"]` has two parameters. Go generics don't support string type parameters:
+
+```go
+// ❌ IMPOSSIBLE - Go doesn't have string type parameters
+type Attr[T any, Name string] struct {}
+
+// ✅ WORKAROUND 1: Attribute as struct field
+type Attr[T any] struct {
+    Attribute string
+}
+role := Attr[*MyRole]{Attribute: "Arn"}
+
+// ✅ WORKAROUND 2: Typed attribute constants
+type ArnAttr[T any] struct{}  // Pre-defined for common attrs
+role := ArnAttr[*MyRole]{}
+
+// ✅ WORKAROUND 3: Method-based
+type MyRole struct { ... }
+func (r *MyRole) Arn() Attr { return Attr{LogicalName: "MyRole", Attribute: "Arn"} }
+// Usage: role := (&MyRole{}).Arn()  // But this instantiates!
+
+// ✅ WORKAROUND 4: Package-level functions
+func MyRoleArn() Attr { return Attr{LogicalName: "MyRole", Attribute: "Arn"} }
+```
+
+### Forward Reference Problem
+
+Python resolves references at runtime, allowing:
+```python
+class MyFunction:
+    bucket: Ref[MyBucket] = None  # MyBucket defined BELOW
+
+class MyBucket:
+    resource: s3.Bucket
+```
+
+Go requires types to exist at compile time:
+```go
+type MyFunction struct {
+    Bucket Ref[*MyBucket]  // ❌ ERROR: MyBucket undefined
+}
+
+type MyBucket struct {
+    Resource s3.Bucket
+}
+```
+
+**Solutions:**
+1. **Reorder files**: Define dependencies first
+2. **Separate packages**: Put shared types in base package
+3. **String-based refs**: Use tags with string names
+4. **Two-pass codegen**: First pass defines types, second adds refs
+
+### Implementation Priority
+
+| Feature | Priority | Approach |
+|---------|----------|----------|
+| `Ref[T]` type | P0 | Generic struct with MarshalJSON |
+| `Attr[T]` with attribute | P0 | Generic struct + attribute field |
+| Dependency extraction | P0 | Reflect on Ref[T] fields at registration |
+| Forward references | P1 | String tags or two-pass codegen |
+| Class-as-value pattern | P1 | Use `Ref[T]` consistently |
+| `.Arn` accessor pattern | P2 | Code generation for common attrs |
+
+---
+
 ## GO-SPECIFIC IMPLEMENTATION NOTES
 
 ### 1. No Runtime Decorators
@@ -733,13 +1017,20 @@ Python introspects type hints at runtime. Go uses:
 - Reflection (sparingly)
 - Code generation for type info
 
-### 3. Reference Pattern
+### 3. Reference Pattern (No Parens Translation)
 ```go
-// Python: parent = MyVPC (no-parens)
-// Go: struct field with tag
+// Python: vpc_id = ref(MyVPC)
+// Go: Generic Ref type with type parameter
 type MySubnet struct {
     Resource ec2.Subnet
-    VpcID    Ref `wetwire:"ref=MyVPC"`
+    VpcID    Ref[*MyVPC] `cf:"VpcId"`
+}
+
+// Python: role = ProcessorRole.Arn
+// Go: Attr with explicit attribute
+type MyFunction struct {
+    Resource lambda.Function
+    Role     Attr[*ProcessorRole] `cf:"Role" attr:"Arn"`
 }
 ```
 
@@ -747,16 +1038,39 @@ type MySubnet struct {
 ```go
 // Auto-registration via init()
 func init() {
-    registry.Register(&MyBucket{})
+    wetwire.Register(&MyBucket{})
+    // Registration extracts Ref[T] fields, builds dependency graph
 }
 ```
 
 ### 5. Serialization
 ```go
-// Use json/yaml struct tags
+// Use json/yaml struct tags + custom MarshalJSON for refs
 type MyBucket struct {
     Resource   s3.Bucket
-    BucketName string `json:"BucketName"`
+    BucketName string `cf:"BucketName"`
+}
+
+// Ref serializes to {"Ref": "LogicalName"}
+func (r Ref[T]) MarshalJSON() ([]byte, error) {
+    return json.Marshal(map[string]string{"Ref": r.logicalName})
+}
+```
+
+### 6. Dependency Analysis
+```go
+// At registration, extract all Ref[T] and Attr[T] fields
+func Register(resource any) {
+    t := reflect.TypeOf(resource).Elem()
+    for i := 0; i < t.NumField(); i++ {
+        field := t.Field(i)
+        // Check if field type is Ref[T] or Attr[T]
+        if isRefType(field.Type) {
+            // Extract T from Ref[T], add to dependency graph
+            targetType := field.Type.TypeArgs()[0]
+            addDependency(t, targetType)
+        }
+    }
 }
 ```
 
@@ -849,41 +1163,182 @@ go test -v ./...
 
 ## SAMPLE GO PATTERNS
 
-### Wrapper Pattern (wetwire-aws)
+### No Parens Pattern (Core Innovation)
+
+The following shows how Python's "no parens" pattern translates to Go:
+
 ```go
-// User-defined wrapper struct
-type MyBucket struct {
+// ============================================================
+// Python equivalent:
+//   class DataBucket:
+//       resource: s3.Bucket
+//       bucket_name = "data"
+// ============================================================
+type DataBucket struct {
     wetwire.Base
-    Resource    s3.Bucket `wetwire:"resource"`
-    BucketName  string    `cf:"BucketName"`
-    Versioning  *MyVersioning `cf:"VersioningConfiguration" wetwire:"ref"`
+    Resource   s3.Bucket
+    BucketName string `cf:"BucketName"`
 }
 
-// Registration via init()
+// ============================================================
+// Python equivalent:
+//   class ProcessorRole:
+//       resource: iam.Role
+//       assume_role_policy_document = LambdaAssumeRolePolicy
+// ============================================================
+type ProcessorRole struct {
+    wetwire.Base
+    Resource                 iam.Role
+    AssumeRolePolicyDocument Ref[*LambdaAssumeRolePolicy] `cf:"AssumeRolePolicyDocument"`
+}
+
+// ============================================================
+// Python equivalent:
+//   class ProcessorFunction:
+//       resource: lambda_.Function
+//       role: Attr[ProcessorRole, "Arn"] = None
+//       bucket: Ref[DataBucket] = None
+// ============================================================
+type ProcessorFunction struct {
+    wetwire.Base
+    Resource lambda.Function
+    Role     Attr[*ProcessorRole] `cf:"Role" attr:"Arn"`
+    Bucket   Ref[*DataBucket]     `cf:"Environment.Variables.BUCKET"`
+}
+
+// Registration via init() - extracts Ref[T]/Attr[T] for dependency graph
 func init() {
-    wetwire.Register(&MyBucket{})
+    wetwire.Register(&DataBucket{})
+    wetwire.Register(&ProcessorRole{})
+    wetwire.Register(&ProcessorFunction{})
 }
 ```
 
-### Reference Pattern
+### Ref[T] and Attr[T] Implementation
+
 ```go
-// Generic Ref type
+// Ref[T] - type-safe reference to another resource
 type Ref[T any] struct {
-    target *T
+    logicalName string  // Populated by Register() via reflection
 }
 
-// Intrinsic output
+// Zero value check (like Python's None)
+func (r Ref[T]) IsSet() bool {
+    return r.logicalName != ""
+}
+
+// MarshalJSON produces {"Ref": "LogicalName"}
 func (r Ref[T]) MarshalJSON() ([]byte, error) {
-    name := wetwire.LogicalName(r.target)
-    return json.Marshal(map[string]string{"Ref": name})
+    if r.logicalName == "" {
+        // Extract from type parameter at marshal time if not set
+        var t T
+        r.logicalName = reflect.TypeOf(t).Elem().Name()
+    }
+    return json.Marshal(map[string]string{"Ref": r.logicalName})
+}
+
+// Attr[T] - type-safe GetAtt reference
+type Attr[T any] struct {
+    logicalName string
+    attribute   string  // From `attr:"..."` tag
+}
+
+// MarshalJSON produces {"Fn::GetAtt": ["LogicalName", "Attribute"]}
+func (a Attr[T]) MarshalJSON() ([]byte, error) {
+    return json.Marshal(map[string][]string{
+        "Fn::GetAtt": {a.logicalName, a.attribute},
+    })
+}
+```
+
+### Registry with Dependency Extraction
+
+```go
+type Registry struct {
+    mu        sync.RWMutex
+    resources map[string]any
+    deps      map[string][]string  // resource -> dependencies
+}
+
+// Register extracts Ref[T] and Attr[T] fields for dependency graph
+func (r *Registry) Register(resource any) {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+
+    t := reflect.TypeOf(resource).Elem()
+    name := t.Name()
+    r.resources[name] = resource
+    r.deps[name] = []string{}
+
+    // Extract dependencies from Ref[T] and Attr[T] fields
+    for i := 0; i < t.NumField(); i++ {
+        field := t.Field(i)
+        fieldType := field.Type
+
+        // Check if field is Ref[T] or Attr[T]
+        if fieldType.Name() == "Ref" || fieldType.Name() == "Attr" {
+            // Extract T from the generic type
+            if fieldType.NumTypeArg() > 0 {
+                targetType := fieldType.TypeArg(0).Elem()  // *T -> T
+                r.deps[name] = append(r.deps[name], targetType.Name())
+            }
+        }
+    }
+}
+
+// TopologicalOrder returns resources in dependency order
+func (r *Registry) TopologicalOrder() ([]string, error) {
+    // Kahn's algorithm using r.deps
+    // ...
 }
 ```
 
 ### Template Building
+
 ```go
 template := cfn.NewTemplate()
 template.FromRegistry(registry, cfn.WithScope("mypackage"))
+
+// Resources are serialized in dependency order
 json, err := template.ToJSON()
+if err != nil {
+    log.Fatal(err)
+}
+
+// Output includes properly resolved Ref/GetAtt intrinsics:
+// {
+//   "Resources": {
+//     "DataBucket": { "Type": "AWS::S3::Bucket", ... },
+//     "ProcessorRole": { "Type": "AWS::IAM::Role", ... },
+//     "ProcessorFunction": {
+//       "Type": "AWS::Lambda::Function",
+//       "Properties": {
+//         "Role": {"Fn::GetAtt": ["ProcessorRole", "Arn"]},
+//         ...
+//       }
+//     }
+//   }
+// }
+```
+
+### Alternative: Class-as-Value Pattern
+
+For Python's `statement = [MyStatement]` pattern (class in list):
+
+```go
+// Option 1: Slice of Ref (explicit)
+type PolicyDocument struct {
+    wetwire.Base
+    Resource  iam.PolicyDocument
+    Statement []Ref[*AssumeRoleStatement] `cf:"Statement"`
+}
+
+// Option 2: Interface + type assertion (more flexible)
+type PolicyDocument struct {
+    wetwire.Base
+    Resource  iam.PolicyDocument
+    Statement []wetwire.Resource `cf:"Statement"`  // Accepts any registered resource
+}
 ```
 
 ---
@@ -936,20 +1391,34 @@ json, err := template.ToJSON()
 
 ### What Makes wetwire Unique
 
-**1. Declarative Wrapper Pattern (vs Imperative)**
+**1. No Parens Pattern (Type References, Not Instantiation)**
+
+The core innovation is referencing types without instantiating them:
+
 ```go
-// CDK/Pulumi/goformation: Imperative
-bucket := s3.NewBucket(stack, "MyBucket", &s3.BucketProps{...})
+// CDK/Pulumi/goformation: INSTANTIATE resources with parens
+bucket := s3.NewBucket(stack, "MyBucket", &s3.BucketProps{...})     // ← parens
 function := lambda.NewFunction(stack, "MyFunction", &lambda.FunctionProps{
-    Environment: map[string]string{"BUCKET": bucket.BucketName()},
+    Environment: map[string]string{"BUCKET": bucket.BucketName()},  // ← method call
 })
 
-// wetwire: Declarative - relationships defined in struct
+// wetwire: REFERENCE types without parens - relationships ARE the code
 type MyFunction struct {
     Resource lambda.Function
-    Bucket   Ref[MyBucket]  // Relationship IS the code
+    Bucket   Ref[*MyBucket]  // ← NO parens! Type parameter only
+    //       ↑ This says "I reference MyBucket" not "create a MyBucket"
+    //       The relationship is declared in the type, not via method calls
 }
 ```
+
+**Why this matters:**
+| Imperative (CDK/Pulumi) | Declarative (wetwire) |
+|-------------------------|----------------------|
+| `bucket.BucketName()` | `Ref[*MyBucket]` |
+| Method call at runtime | Type checked at compile time |
+| Relationship via code flow | Relationship via type system |
+| Dependencies implicit | Dependencies extractable |
+| Refactoring breaks refs | Refactoring updates refs |
 
 **2. Synthesis-Only (vs Full IaC)**
 - CDK/Pulumi bundle deployment with synthesis
