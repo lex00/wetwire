@@ -384,10 +384,14 @@ def _auto_decorate_resources(package_globals: dict[str, Any]) -> None:
     Classes that are already decorated (have _refs_marker) are skipped.
 
     Updates both package_globals and the original defining modules.
+    Also updates AttrRef targets in all classes to point to decorated versions.
     """
     import sys
 
     from wetwire_aws.decorator import wetwire_aws
+
+    # Track old -> new class mapping for AttrRef updates
+    class_mapping: dict[type, type] = {}
 
     for name, obj in list(package_globals.items()):
         if not isinstance(obj, type):
@@ -404,6 +408,7 @@ def _auto_decorate_resources(package_globals: dict[str, Any]) -> None:
 
         # Apply decorator
         decorated = wetwire_aws(obj)
+        class_mapping[obj] = decorated
         package_globals[name] = decorated
 
         # Also update the original module where the class was defined
@@ -412,6 +417,40 @@ def _auto_decorate_resources(package_globals: dict[str, Any]) -> None:
             orig_module = sys.modules[orig_module_name]
             if hasattr(orig_module, name):
                 setattr(orig_module, name, decorated)
+
+    # Update AttrRef targets in all classes to point to decorated versions
+    if class_mapping:
+        _update_attr_refs(package_globals, class_mapping)
+
+
+def _update_attr_refs(
+    package_globals: dict[str, Any], class_mapping: dict[type, type]
+) -> None:
+    """Update AttrRef targets in all classes to point to decorated versions.
+
+    After auto-decoration creates new class objects, AttrRefs in other classes
+    still point to the old (pre-decorated) classes. This function walks all
+    classes and updates those references.
+    """
+    from dataclasses import fields
+
+    from dataclass_dsl import AttrRef
+
+    for obj in package_globals.values():
+        if not isinstance(obj, type):
+            continue
+
+        # Check if it's a dataclass with fields
+        if not hasattr(obj, "__dataclass_fields__"):
+            continue
+
+        for fld in fields(obj):
+            default = fld.default
+            if isinstance(default, AttrRef):
+                old_target = default.target
+                if old_target in class_mapping:
+                    # Update the AttrRef's target to the decorated class
+                    default.target = class_mapping[old_target]
 
 
 def setup_resources(

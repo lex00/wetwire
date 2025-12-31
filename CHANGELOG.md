@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2024-12-31
+
+### Added
+
+- Auto-decoration support for cross-file references via `_update_attr_refs()`
+- Invisible decorator pattern: classes with `resource:` annotation are auto-decorated
+
+### Changed
+
+- `cross_file_test` package now uses decorator-free pattern as canonical example
+- Documentation examples updated to show decorator-free wrapper pattern
+
 ## [0.1.2] - 2024-12-29
 
 ### Added
@@ -56,7 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Python 3.11+ support
 - Type checker compatibility (mypy, pyright)
 
-[unreleased]: https://github.com/lex00/wetwire/compare/v0.1.2...HEAD
+[unreleased]: https://github.com/lex00/wetwire/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/lex00/wetwire/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/lex00/wetwire/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/lex00/wetwire/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/lex00/wetwire/releases/tag/v0.1.0

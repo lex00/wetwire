@@ -1,18 +1,14 @@
 """Lambda function that references role from another file."""
 
-from __future__ import annotations
-
-from wetwire_aws import wetwire_aws
-from wetwire_aws.resources.lambda_ import Function
+from . import *  # noqa: F401, F403
 
 __all__ = ["AppFunction"]
 
 
-@wetwire_aws
 class AppFunction:
     """Lambda function that uses the AppRole."""
 
-    resource: Function
+    resource: lambda_.Function
     function_name = "app-function"
     runtime = "python3.12"
     handler = "index.handler"
