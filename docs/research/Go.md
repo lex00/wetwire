@@ -3,28 +3,29 @@
 **Status**: Research complete
 **Purpose**: Document Go ecosystem mappings, patterns, and architectural decisions for implementing wetwire in Go.
 **Scope**: Go-specific design decisions; see `ImplementationChecklist.md` for feature matrix.
-**Recommendation**: **Viable** - Flat struct values with embedded attrs and pointer references.
+**Recommendation**: **Viable** - Embed resource type, set promoted fields, pointer references.
 
 ---
 
 ## Executive Summary
 
-Implementing wetwire in Go requires translating Python's dynamic "no parens" pattern to Go's static type system. The key insight: **Everything is flat, everything is a struct**. Resources are package-level struct values with embedded attrs, and references are just pointers.
+Implementing wetwire in Go requires translating Python's dynamic "no parens" pattern to Go's static type system. The key insight: **Embed the resource type, set promoted fields**.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  Python                              Go                                  │
 │                                                                          │
-│  class MyRole:                 →     var MyRole = iam.Role{...}         │
-│      resource: iam.Role                                                  │
+│  class MyRole:                 →     var MyRole = struct{ iam.Role }{   │
+│      resource: iam.Role                  RoleName: "my-role",           │
+│      role_name = "my-role"           }                                   │
 │                                                                          │
-│  role = MyRole.Arn             →     Role: &MyRole  (+ attr tag)        │
-│  bucket = MyBucket             →     Bucket: &MyBucket                  │
-│  MyRole.Arn (for external use) →     MyRole.Arn (field access)          │
+│  role = MyRole.Arn             →     Role: &MyRole.Role `attr:"Arn"`    │
+│  bucket = MyBucket             →     Bucket: &MyBucket.Bucket           │
+│  MyRole.Arn                    →     MyRole.Arn                          │
 │                                                                          │
-│  Wrapper classes               →     Flat struct values                 │
+│  Wrapper class + fields        →     Embed + set promoted fields        │
 │  ref()/get_att() helpers       →     Pointers + struct tags             │
-│  Class attrs (.Arn)            →     Embedded attr fields               │
+│  Class attrs (.Arn)            →     Promoted attr fields               │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -221,38 +222,34 @@ function := &lambda.Function{                      // ← Parens: instantiation
 template.Resources["MyFunction"] = function        // ← Manual wiring
 ```
 
-**wetwire (Declarative - Embedded Types + Pointer References):**
+**wetwire (Declarative - Embed + Set Promoted Fields):**
 ```go
-// Wrapper embeds resource type, declares properties
-type myBucket struct {
-    s3.Bucket           // Embedded - indicates resource type, promotes .Arn
-    BucketName string
+var MyBucket = struct {
+    s3.Bucket
+}{
+    BucketName: "my-bucket",
 }
 
-type myFunction struct {
+var MyFunction = struct {
     lambda.Function
-    Bucket *s3.Bucket   // Pointer = reference (no parens on MyBucket!)
+}{
+    Bucket: &MyBucket.Bucket,  // Pointer = reference
 }
-
-// Exported values - what users interact with
-var MyBucket = myBucket{BucketName: "my-bucket"}
-var MyFunction = myFunction{Bucket: &MyBucket.Bucket}
 
 func init() {
     wetwire.Register(&MyBucket, &MyFunction)
 }
 
-// Attrs accessible via promotion:
 MyBucket.Arn  // ✓ Promoted from embedded s3.Bucket
 ```
 
 **The Key Difference:**
 ```go
-// goformation: Ref("MyBucket") - string argument, loses type info
-// wetwire:     &MyBucket.Bucket - pointer, type-safe, refactorable
+// goformation: Ref("MyBucket") - string, error-prone
+// wetwire:     &MyBucket.Bucket - pointer, type-safe
 
-// goformation: lambda.Function{...} - instantiate, add to map
-// wetwire:     var MyFunction = myFunction{...} - declare once, reference by pointer
+// goformation: template.Resources["name"] = &resource
+// wetwire:     var MyBucket = struct{s3.Bucket}{...}
 ```
 
 #### Why goformation's Approach Falls Short
@@ -317,29 +314,28 @@ class MyFunction:
     bucket = MyBucket      # Ref via naked class
 ```
 
-### Go User Syntax: Embedded Resource Types
+### Go User Syntax: Embed + Set Promoted Fields
 
 ```go
-// Wrapper struct with embedded resource type (like Python's resource: iam.Role)
-type myRole struct {
+// Resource types already define all fields (generated):
+// type Role struct {
+//     Arn      AttrRef  // promoted
+//     RoleName string   // promoted
+//     ...
+// }
+
+// User just embeds and sets values - no field redeclaration:
+var MyRole = struct {
     iam.Role
-    RoleName string  // PascalCase matches CF property name
-}
-
-type myFunction struct {
-    lambda.Function
-    FunctionName string
-    Role         *iam.Role `attr:"Arn"`  // Pointer + attr tag for GetAtt
-}
-
-// Exported values - these are what users interact with
-var MyRole = myRole{
+}{
     RoleName: "my-role",
 }
 
-var MyFunction = myFunction{
+var MyFunction = struct {
+    lambda.Function
+}{
     FunctionName: "processor",
-    Role:         &MyRole.Role,
+    Role:         &MyRole.Role,  // Pointer to embedded resource
 }
 
 func init() {
@@ -347,20 +343,20 @@ func init() {
 }
 
 // Attrs accessible via promotion:
-MyRole.Arn  // ✓ Promoted from embedded iam.Role
+MyRole.Arn  // ✓ Promoted from iam.Role
 ```
 
 **Key principles:**
-- Wrapper structs **embed** the resource type (like Python's `resource:` annotation)
-- Embedding **promotes attrs** (`.Arn`, `.RoleId`) to wrapper level
-- Unexported type, exported value enables `MyRole.Arn` syntax
-- PascalCase field names match CF property names (no tags needed)
-- Tags only for: nested paths, GetAtt (`attr:"Arn"`), or name overrides
-- References are **pointers** to embedded resource types
+- **Embed** the resource type (like Python's `resource:` annotation)
+- **Set promoted fields** - no redeclaration needed
+- **Single declaration** per resource
+- **Attrs promoted** (`.Arn`, `.RoleId`) automatically
+- **Pointers** for references (`&MyRole.Role`)
+- **Tags** only for GetAtt (`attr:"Arn"`)
 
 ### How It Works
 
-**Generated resource types have attr fields:**
+**Generated resource types have all fields:**
 
 ```go
 // iam/role.go (generated)
@@ -369,18 +365,19 @@ type Role struct {
     Arn    AttrRef
     RoleId AttrRef
 
-    // Properties (no tags needed - PascalCase matches CF)
+    // Properties - user sets these via promotion
     RoleName                 string
     AssumeRolePolicyDocument *PolicyDocument
 }
 ```
 
-**Wrapper embeds resource, promotes attrs:**
+**User embeds, sets promoted fields:**
 
 ```go
-type myRole struct {
-    iam.Role  // Embedding promotes Arn, RoleId to wrapper
-    RoleName string
+var MyRole = struct {
+    iam.Role  // All fields promoted
+}{
+    RoleName: "my-role",  // Setting promoted field
 }
 ```
 
@@ -393,12 +390,11 @@ func init() {
 }
 ```
 
-**Serialization detects pointers to registered resources:**
+**Serialization detects pointers:**
 
 ```go
-// Framework sees Role: &MyRole.Role (pointer to iam.Role)
-// Checks for `attr:"Arn"` tag → GetAtt
-// Otherwise → Ref
+// Framework sees Role: &MyRole.Role
+// Checks for `attr:"Arn"` tag → GetAtt, otherwise → Ref
 ```
 
 ### Pattern Translation Table
@@ -437,17 +433,21 @@ type Function struct {
 
 ### 1. No Runtime Decorators
 Python uses `@wetwire_aws` decorator. Go uses:
-- Struct embedding for resource type indication
+- Anonymous struct with embedded resource type
 - `init()` functions for registration
 - Reflection to detect embedded types and pointers
 
-### 2. Embedding = Resource Type
+### 2. Embed + Set Pattern
 ```go
-// Python: resource: iam.Role
-// Go: Embedded type
-type myRole struct {
-    iam.Role  // This IS the resource type indicator
-    RoleName string
+// Python: class MyRole:
+//             resource: iam.Role
+//             role_name = "my-role"
+
+// Go: Embed resource type, set promoted fields
+var MyRole = struct {
+    iam.Role
+}{
+    RoleName: "my-role",
 }
 ```
 
@@ -455,29 +455,26 @@ type myRole struct {
 ```go
 // Python: role = MyRole
 // Go: Pointer to embedded resource
-type myFunction struct {
+var MyFunction = struct {
     lambda.Function
-    Role *iam.Role  // Pointer = Ref
+}{
+    Role: &MyRole.Role,  // Pointer = Ref
 }
 
 // Python: role = MyRole.Arn
-// Go: Pointer + attr tag
-type myFunction struct {
-    lambda.Function
-    Role *iam.Role `attr:"Arn"`  // Pointer + tag = GetAtt
-}
+// Go: Field has attr tag in generated type
+// type Function struct {
+//     Role *iam.Role `attr:"Arn"`
+// }
 ```
 
 ### 4. Attr Promotion
 ```go
-// Embedded type promotes its fields
-type myRole struct {
-    iam.Role  // Has Arn, RoleId fields
-    RoleName string
-}
-
-var MyRole = myRole{...}
-MyRole.Arn  // ✓ Promoted from iam.Role
+// Generated type has Arn, RoleId, RoleName, etc.
+// Embedding promotes all fields
+var MyRole = struct{ iam.Role }{...}
+MyRole.Arn       // ✓ Promoted
+MyRole.RoleName  // ✓ Promoted
 ```
 
 ### 5. Registration
@@ -523,53 +520,32 @@ import (
     "wetwire/aws/s3"
 )
 
-// ============================================================
-// Python equivalent:
-//   class DataBucket:
-//       resource: s3.Bucket
-//       bucket_name = "data"
-// ============================================================
-type dataBucket struct {
+// Python: class DataBucket:
+//             resource: s3.Bucket
+//             bucket_name = "data"
+var DataBucket = struct {
     s3.Bucket
-    BucketName string
-}
-
-var DataBucket = dataBucket{
+}{
     BucketName: "data",
 }
 
-// ============================================================
-// Python equivalent:
-//   class ProcessorRole:
-//       resource: iam.Role
-//       assume_role_policy_document = LambdaAssumeRolePolicy
-// ============================================================
-type processorRole struct {
+// Python: class ProcessorRole:
+//             resource: iam.Role
+//             role_name = "processor-role"
+var ProcessorRole = struct {
     iam.Role
-    RoleName                 string
-    AssumeRolePolicyDocument *iam.PolicyDocument
-}
-
-var ProcessorRole = processorRole{
-    RoleName:                 "processor-role",
+}{
+    RoleName: "processor-role",
     AssumeRolePolicyDocument: &LambdaAssumeRolePolicy.PolicyDocument,
 }
 
-// ============================================================
-// Python equivalent:
-//   class ProcessorFunction:
-//       resource: lambda_.Function
-//       role = ProcessorRole.Arn
-//       bucket = DataBucket
-// ============================================================
-type processorFunction struct {
+// Python: class ProcessorFunction:
+//             resource: lambda_.Function
+//             role = ProcessorRole.Arn
+//             bucket = DataBucket
+var ProcessorFunction = struct {
     lambda.Function
-    FunctionName string
-    Role         *iam.Role `attr:"Arn"`
-    Bucket       *s3.Bucket
-}
-
-var ProcessorFunction = processorFunction{
+}{
     FunctionName: "processor",
     Role:         &ProcessorRole.Role,
     Bucket:       &DataBucket.Bucket,
@@ -580,8 +556,8 @@ func init() {
 }
 
 // Usage:
-// ProcessorRole.Arn  → AttrRef for external use
-// &ProcessorRole.Role → pointer for references
+// ProcessorRole.Arn      → AttrRef (promoted)
+// &ProcessorRole.Role    → pointer for references
 ```
 
 ### Registry Implementation
@@ -594,9 +570,6 @@ type Registry struct {
 }
 
 func (r *Registry) Register(resources ...any) {
-    r.mu.Lock()
-    defer r.mu.Unlock()
-
     for _, res := range resources {
         r.registerOne(res)
     }
@@ -605,11 +578,7 @@ func (r *Registry) Register(resources ...any) {
 func (r *Registry) registerOne(resource any) {
     v := reflect.ValueOf(resource).Elem()
     t := v.Type()
-
-    // Find the logical name from variable name (via caller analysis or explicit)
     name := getLogicalName(resource)
-    r.resources[name] = resource
-    r.deps[name] = []string{}
 
     // Find embedded resource type and populate its attrs
     for i := 0; i < t.NumField(); i++ {
@@ -619,24 +588,18 @@ func (r *Registry) registerOne(resource any) {
         }
     }
 
-    // Extract dependencies from pointer fields
-    for i := 0; i < t.NumField(); i++ {
-        field := t.Field(i)
-        if field.Type.Kind() == reflect.Ptr && isResourceType(field.Type.Elem()) {
-            targetName := resolveTargetName(v.Field(i))
-            r.deps[name] = append(r.deps[name], targetName)
-        }
-    }
+    // Extract dependencies from pointer fields in embedded type
+    // ...
 }
 ```
 
-### Template Building
+### Template Output
 
 ```go
 template := wetwire.NewTemplate()
 template.FromRegistry(registry)
+json, _ := template.ToJSON()
 
-json, err := template.ToJSON()
 // {
 //   "Resources": {
 //     "DataBucket": { "Type": "AWS::S3::Bucket", ... },
@@ -656,12 +619,9 @@ json, err := template.ToJSON()
 
 ```go
 // Python: statement = [AllowS3Access, AllowLogsWrite]
-type policyDocument struct {
+var MyPolicy = struct {
     iam.PolicyDocument
-    Statement []*iam.Statement
-}
-
-var MyPolicy = policyDocument{
+}{
     Statement: []*iam.Statement{
         &AllowS3Access.Statement,
         &AllowLogsWrite.Statement,
@@ -719,7 +679,7 @@ var MyPolicy = policyDocument{
 
 ### What Makes wetwire Unique
 
-**1. No Parens Pattern (Embedded Types + Pointer References)**
+**1. No Parens Pattern (Embed + Set + Pointer References)**
 
 The core innovation is referencing resources without instantiation:
 
@@ -730,29 +690,23 @@ function := lambda.NewFunction(stack, "MyFunction", &lambda.FunctionProps{
     Environment: map[string]string{"BUCKET": bucket.BucketName()},
 })
 
-// wetwire: Embed type, reference by pointer
-type myBucket struct {
-    s3.Bucket
-    BucketName string
+// wetwire: Embed type, set promoted fields
+var MyBucket = struct{ s3.Bucket }{
+    BucketName: "my-bucket",
 }
-var MyBucket = myBucket{BucketName: "my-bucket"}
-
-type myFunction struct {
-    lambda.Function
-    Bucket *s3.Bucket  // Pointer = reference
+var MyFunction = struct{ lambda.Function }{
+    Bucket: &MyBucket.Bucket,
 }
-var MyFunction = myFunction{Bucket: &MyBucket.Bucket}
 
 // Attrs via promotion:
-MyBucket.Arn  // ✓ No method call, just field access
+MyBucket.Arn  // ✓ Field access, no method call
 ```
 
 **Why this matters:**
 | Imperative (CDK/Pulumi) | Declarative (wetwire) |
 |-------------------------|----------------------|
 | `bucket.BucketName()` | `MyBucket.Arn` |
-| Method call at runtime | Field access |
-| `s3.NewBucket(...)` | `var MyBucket = myBucket{...}` |
+| `s3.NewBucket(...)` | `struct{ s3.Bucket }{...}` |
 | Relationship via code flow | Relationship via pointers |
 | Dependencies implicit | Dependencies extractable |
 
