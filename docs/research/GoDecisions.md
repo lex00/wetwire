@@ -439,6 +439,114 @@ var ProcessorFunction = lambda.Function{
 
 ---
 
+## User Project Structure
+
+### `wetwire-aws init myproject`
+
+Creates a new infrastructure project:
+
+```
+myproject/
+├── go.mod                    # module myproject
+├── main.go                   # Entry point (optional)
+└── infra/
+    ├── storage.go            # User resource definitions
+    ├── compute.go
+    └── network.go
+```
+
+### Import Requirements (Go vs Python)
+
+**Python** provides a clean single-import experience:
+```python
+from . import *  # All AWS types available
+
+class MyBucket:
+    resource: s3.Bucket
+    bucket_name = "my-bucket"
+```
+
+**Go** requires explicit imports per file (language limitation):
+```go
+package infra
+
+import (
+    "github.com/lex00/wetwire-aws/s3"
+    "github.com/lex00/wetwire-aws/iam"
+)
+
+var MyBucket = s3.Bucket{
+    BucketName: "my-bucket",
+}
+```
+
+**Why Go is different:**
+- Go's type system requires types to come from imported packages
+- No runtime namespace manipulation like Python's `globals()`
+- No wildcard imports that bring in module namespaces
+
+**Mitigation:**
+1. `wetwire-aws init` pre-populates common service imports (s3, iam, ec2, lambda, etc.)
+2. Modern Go IDEs (gopls, GoLand) auto-add imports when you type a type name
+3. The import block is at the top of the file, resource definitions remain clean
+
+### Generated Starter File
+
+`wetwire-aws init` generates `infra/resources.go`:
+
+```go
+package infra
+
+import (
+    // Common AWS services - add/remove as needed
+    "github.com/lex00/wetwire-aws/s3"
+    "github.com/lex00/wetwire-aws/iam"
+    "github.com/lex00/wetwire-aws/ec2"
+    "github.com/lex00/wetwire-aws/lambda"
+    "github.com/lex00/wetwire-aws/dynamodb"
+    "github.com/lex00/wetwire-aws/sqs"
+    "github.com/lex00/wetwire-aws/sns"
+    "github.com/lex00/wetwire-aws/apigateway"
+)
+
+// Define your infrastructure resources below
+
+var _ = s3.Bucket{}     // Placeholder to prevent unused import errors
+var _ = iam.Role{}      // Remove these as you add real resources
+var _ = ec2.Instance{}
+var _ = lambda.Function{}
+```
+
+### `wetwire-aws import template.yaml`
+
+Imports existing CloudFormation template to Go:
+
+```go
+// Generated from template.yaml
+package infra
+
+import (
+    "github.com/lex00/wetwire-aws/s3"
+    "github.com/lex00/wetwire-aws/iam"
+)
+
+var MyBucket = s3.Bucket{
+    BucketName: "imported-bucket",
+    // ... all properties from template
+}
+
+var MyRole = iam.Role{
+    RoleName: "imported-role",
+    AssumeRolePolicyDocument: iam.PolicyDocument{
+        // ... policy from template
+    },
+}
+```
+
+**Decision:** Imports are explicit but managed. Accept this as idiomatic Go rather than fighting the language.
+
+---
+
 ## Open Questions
 
 1. **Logical name storage:** How does CLI set the logical name on discovered resources?
