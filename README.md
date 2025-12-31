@@ -16,20 +16,17 @@ Infrastructure code that is:
 ```python
 from . import *
 
-@wetwire_aws
 class MyVPC:
     resource: ec2.VPC
     cidr_block = "10.0.0.0/16"
     enable_dns_hostnames = True
 
-@wetwire_aws
 class WebSubnet:
     resource: ec2.Subnet
     vpc_id = MyVPC                 # Reference — no parens, no strings
     cidr_block = "10.0.1.0/24"
     availability_zone = "us-east-1a"
 
-@wetwire_aws
 class WebServer:
     resource: ec2.Instance
     subnet_id = WebSubnet          # Another reference
@@ -37,7 +34,7 @@ class WebServer:
     image_id = "ami-12345678"
 ```
 
-**Key insight**: References are class names, not function calls. The decorator detects them automatically.
+**Key insight**: References are class names, not function calls. Everything is a wrapper class.
 
 ## Packages
 
@@ -62,24 +59,26 @@ pip install wetwire-aws
 ```python
 from . import *
 
-@wetwire_aws
+class DataBucketVersioning:
+    resource: s3.bucket.VersioningConfiguration
+    status = s3.BucketVersioningStatus.ENABLED
+
 class DataBucket:
     resource: s3.Bucket
     bucket_name = "my-data-bucket"
-    versioning_configuration = s3.bucket.VersioningConfiguration(
-        status="Enabled"
-    )
+    versioning_configuration = DataBucketVersioning
 
-@wetwire_aws
+class ProcessorCode:
+    resource: lambda_.function.Code
+    s3_bucket = DataBucket
+    s3_key = "code.zip"
+
 class ProcessorFunction:
     resource: lambda_.Function
     function_name = "data-processor"
     runtime = lambda_.Runtime.PYTHON3_12
     handler = "index.handler"
-    code = lambda_.function.Code(
-        s3_bucket = DataBucket,            # No parens needed
-        s3_key = "code.zip"
-    )
+    code = ProcessorCode
 
 # Generate CloudFormation template
 template = CloudFormationTemplate.from_registry()

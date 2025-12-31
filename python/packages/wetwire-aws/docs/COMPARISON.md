@@ -44,7 +44,6 @@ If you're happy with your current tooling, you probably don't need this library.
 
 ```python
 # wetwire-aws: Infrastructure as DATA
-@wetwire_aws
 class MyBucket:
     resource: s3.Bucket
     bucket_name = "data"
@@ -159,7 +158,6 @@ wetwire-aws uses dataclass-dsl for static dependency analysis:
 ```python
 from dataclass_dsl import get_dependencies
 
-@wetwire_aws
 class ProcessorFunction:
     resource: lambda_.Function
     role = ProcessorRole.Arn  # Introspectable via no-parens style
@@ -225,17 +223,22 @@ A Python dataclass with 5 typed fields is a better prompt than a 50-line YAML ex
 ```python
 from . import *
 
-@wetwire_aws
+class MyBucketEncryptionDefault:
+    resource: s3.bucket.ServerSideEncryptionByDefault
+    sse_algorithm = s3.ServerSideEncryption.AES256
+
+class MyBucketEncryptionRule:
+    resource: s3.bucket.ServerSideEncryptionRule
+    server_side_encryption_by_default = MyBucketEncryptionDefault
+
+class MyBucketEncryption:
+    resource: s3.bucket.BucketEncryption
+    server_side_encryption_configuration = [MyBucketEncryptionRule]
+
 class MyBucket:
     resource: s3.Bucket
     bucket_name = "my-app-data"
-    bucket_encryption = {
-        "ServerSideEncryptionConfiguration": [{
-            "ServerSideEncryptionByDefault": {
-                "SSEAlgorithm": s3.ServerSideEncryption.AES256
-            }
-        }]
-    }
+    bucket_encryption = MyBucketEncryption
 ```
 
 **AWS CDK:**
@@ -255,22 +258,24 @@ CDK is more concise here—the L2 construct handles encryption configuration.
 ```python
 from . import *
 
-@wetwire_aws
+class LambdaAssumeRoleStatement:
+    resource: iam.PolicyStatement
+    effect = "Allow"
+    principal = {"Service": "lambda.amazonaws.com"}
+    action = "sts:AssumeRole"
+
+class LambdaAssumeRolePolicy:
+    resource: iam.PolicyDocument
+    version = "2012-10-17"
+    statement = [LambdaAssumeRoleStatement]
+
 class MyRole:
     resource: iam.Role
-    assume_role_policy_document = {
-        "Version": "2012-10-17",
-        "Statement": [{
-            "Effect": "Allow",
-            "Principal": {"Service": "lambda.amazonaws.com"},
-            "Action": "sts:AssumeRole"
-        }]
-    }
+    assume_role_policy_document = LambdaAssumeRolePolicy
     managed_policy_arns = [
         "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
     ]
 
-@wetwire_aws
 class MyFunction:
     resource: lambda_.Function
     function_name = "my-handler"

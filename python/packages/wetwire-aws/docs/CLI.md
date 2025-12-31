@@ -59,7 +59,7 @@ wetwire-aws build --module myapp --scope myapp.production
 
 ### How It Works
 
-1. Imports the specified module(s), which triggers `@wetwire_aws` decorators
+1. Imports the specified module(s), which triggers resource registration
 2. Resources auto-register with the global registry
 3. Collects all registered resources (optionally filtered by scope)
 4. Orders resources topologically by dependencies (using dataclass-dsl)
@@ -373,7 +373,6 @@ from wetwire_aws import (
 
 Usage:
 ```python
-@wetwire_aws
 class MyBucket:
     resource: Bucket
     bucket_name = Sub("${AWS::StackName}-data")
@@ -389,7 +388,6 @@ Use type annotations for introspectable references:
 from typing import Annotated
 from dataclass_dsl import Attr
 
-@wetwire_aws
 class ProcessorFunction:
     resource: Function
     # Type annotation for introspection

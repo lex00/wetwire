@@ -16,18 +16,17 @@ wetwire-aws uses the `ResourceRegistry` from wetwire (core) for resource registr
 
 ### How It Works
 
-When you decorate a class with `@wetwire_aws`, it automatically registers with the AWS registry:
+When you define a wrapper class, it automatically registers with the AWS registry:
 
 ```python
-@wetwire_aws
 class MyBucket:
     resource: Bucket
     bucket_name = "data"
     # Automatically registered with resource type "AWS::S3::Bucket"
 ```
 
-The decorator:
-1. Applies `@wetwire` from the core package for dataclass transformation
+The framework:
+1. Applies dataclass transformation
 2. Extracts the resource type from the `resource` annotation
 3. Registers the class with the AWS-specific registry
 
@@ -127,7 +126,6 @@ wetwire-aws uses dataclass-dsl for dependency introspection and reference resolu
 from typing import Annotated
 from dataclass_dsl import Ref, Attr, ContextRef, RefList
 
-@wetwire_aws
 class MyFunction:
     resource: Function
     # These annotations enable introspection

@@ -95,16 +95,14 @@ Cloud-specific implementations with pre-generated resources.
 ```python
 from . import *
 
-@wetwire_aws
+class MyVersioning:
+    resource: s3.bucket.VersioningConfiguration
+    status = s3.BucketVersioningStatus.ENABLED
+
 class MyBucket:
     resource: s3.Bucket
     bucket_name = "data"
     versioning_configuration = MyVersioning  # Reference to another wrapper
-
-@wetwire_aws
-class MyVersioning:
-    resource: s3.bucket.VersioningConfiguration
-    status = s3.BucketVersioningStatus.ENABLED
 ```
 
 **Key Components:**
@@ -125,7 +123,6 @@ Every resource is a user-defined class wrapping a domain type:
 ```python
 from . import *
 
-@wetwire_aws
 class MyDatabase:
     resource: rds.DBInstance   # Module-qualified underlying type
     db_instance_class = "db.t3.micro"

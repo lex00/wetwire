@@ -33,17 +33,15 @@ Every CloudFormation resource is wrapped in a user-defined dataclass with a `res
 ```python
 from . import *
 
-@wetwire_aws
 class MyVPC:
     resource: ec2.VPC
-    cidr_block: str = "10.0.0.0/16"
-    enable_dns_hostnames: bool = True
+    cidr_block = "10.0.0.0/16"
+    enable_dns_hostnames = True
 
-@wetwire_aws
 class MySubnet:
     resource: ec2.Subnet
-    cidr_block: str = "10.0.1.0/24"
-    vpc_id = ref(MyVPC)  # Cross-resource reference via ref() helper
+    cidr_block = "10.0.1.0/24"
+    vpc_id = MyVPC  # Cross-resource reference
 ```
 
 **Key point**: ALL wiring happens inside dataclass field declarations, not at instantiation.
@@ -69,22 +67,20 @@ All AWS resource classes are **generated at build time** from CloudFormation spe
 
 Two reference patterns are available:
 
-**1. Function calls (`ref()`, `get_att()`)** - Simple, direct references:
+**1. No-parens style** - Simple, direct references:
 ```python
 from . import *
 
-@wetwire_aws
 class BucketPolicy:
     resource: s3.BucketPolicy
-    bucket = ref(MyBucket)  # Direct class reference
-    policy_document = get_att(MyRole, ARN)
+    bucket = MyBucket  # Direct class reference
+    policy_document = MyRole.Arn  # Attribute reference
 ```
 
 **2. Type annotations (`Ref[T]`, `Attr[T, name]`)** - Enables dataclass-dsl introspection:
 ```python
 from . import *
 
-@wetwire_aws
 class ProcessorFunction:
     resource: lambda_.Function
     bucket: Ref[DataBucket] = None       # Reference to resource
@@ -92,7 +88,7 @@ class ProcessorFunction:
 ```
 
 **When to use each:**
-- Use `ref()`/`get_att()` for simple cases and inline values
+- Use no-parens style (`MyBucket`, `MyRole.Arn`) for simple cases
 - Use `Ref[T]`/`Attr[T, name]` when you need dependency introspection, topological sorting, or cross-file references with `setup_resources()`
 
 ### Multi-File Organization with setup_resources()
@@ -119,7 +115,6 @@ from . import *
 
 __all__ = ["ProcessorFunction"]
 
-@wetwire_aws
 class ProcessorFunction:
     resource: lambda_.Function
     # ProcessorRole is injected by setup_resources() - defined in another file
@@ -135,7 +130,6 @@ When a wrapper class has the same name as the AWS resource class (e.g., `class B
 ```python
 from . import *
 
-@wetwire_aws
 class Bucket:
     resource: s3.Bucket  # NOT resource: Bucket (would be self-referential)
     bucket_name = "my-bucket"
@@ -284,10 +278,9 @@ uv build
 from . import *
 
 # ✅ CORRECT - Block syntax with wrapper
-@wetwire_aws
 class MyBucket:
     resource: s3.Bucket
-    bucket_name: str = "my-bucket"
+    bucket_name = "my-bucket"
 
 my_bucket = MyBucket()
 
@@ -447,13 +440,12 @@ class ResourceClass(CloudFormationResource):
 ### Example Test Pattern
 
 ```python
-from wetwire_aws.resources import s3
+from . import *
 
 # Define wrapper dataclasses at module level
-@wetwire_aws
 class TestBucket:
     resource: s3.Bucket
-    bucket_name: str = "test-bucket"
+    bucket_name = "test-bucket"
 
 def test_serialization():
     bucket = TestBucket()
@@ -509,13 +501,11 @@ security_group_ingress = [
 ]
 
 # ✅ CORRECT - separate wrapper class
-@wetwire_aws
 class MySecurityGroupIngress:
     resource: ec2.security_group.Ingress
     ip_protocol = ec2.IpProtocol.TCP
     from_port = 443
 
-@wetwire_aws
 class MySecurityGroup:
     resource: ec2.SecurityGroup
     security_group_ingress = [MySecurityGroupIngress]
@@ -532,18 +522,15 @@ assume_role_policy_document = {
 }
 
 # ✅ CORRECT - wrapper classes
-@wetwire_aws
 class MyAssumeRoleStatement:
     resource: iam.PolicyStatement
     principal = {"Service": "lambda.amazonaws.com"}
     action = "sts:AssumeRole"
 
-@wetwire_aws
 class MyAssumeRolePolicy:
     resource: iam.PolicyDocument
     statement = [MyAssumeRoleStatement]
 
-@wetwire_aws
 class MyRole:
     resource: iam.Role
     assume_role_policy_document = MyAssumeRolePolicy

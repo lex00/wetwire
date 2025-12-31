@@ -32,7 +32,6 @@ setup_resources(__file__, __name__, globals())
 ```python
 from . import *
 
-@wetwire_aws
 class DataBucket:
     resource: s3.Bucket
     bucket_name = "my-data-bucket"
@@ -43,7 +42,7 @@ class DataBucket:
 wetwire-aws build --module myapp > template.json
 ```
 
-That's it. Resources auto-register when the `@wetwire_aws` decorator is applied.
+That's it. Resources auto-register when the module is loaded.
 
 ---
 
@@ -55,32 +54,27 @@ Reference other resources using the no-parens style:
 ```python
 from . import *
 
-@wetwire_aws
 class DataBucket:
     resource: s3.Bucket
     bucket_name = "data"
 
 # Policy statement as wrapper class (flattened)
-@wetwire_aws
 class LambdaAssumeRoleStatement:
     resource: iam.PolicyStatement
     effect = "Allow"
     principal = {"Service": "lambda.amazonaws.com"}
     action = "sts:AssumeRole"
 
-@wetwire_aws
 class LambdaAssumeRolePolicy:
     resource: iam.PolicyDocument
     version = "2012-10-17"
     statement = [LambdaAssumeRoleStatement]
 
-@wetwire_aws
 class ProcessorRole:
     resource: iam.Role
     role_name = "processor"
     assume_role_policy_document = LambdaAssumeRolePolicy
 
-@wetwire_aws
 class ProcessorFunction:
     resource: lambda_.Function
     function_name = "processor"
@@ -98,12 +92,10 @@ For introspectable references, use type annotations:
 ```python
 from . import *  # Includes Annotated, Attr, Ref from dataclass-dsl
 
-@wetwire_aws
 class ProcessorRole:
     resource: iam.Role
     role_name = "processor"
 
-@wetwire_aws
 class ProcessorFunction:
     resource: lambda_.Function
     function_name = "processor"
@@ -171,7 +163,6 @@ from . import *
 
 __all__ = ["DataBucket"]
 
-@wetwire_aws
 class DataBucket:
     resource: s3.Bucket
     bucket_name = "data"
@@ -183,7 +174,6 @@ from . import *  # Includes Annotated, Ref, all exported symbols
 
 __all__ = ["ProcessorFunction"]
 
-@wetwire_aws
 class ProcessorFunction:
     resource: lambda_.Function
     function_name = "processor"
@@ -208,19 +198,25 @@ Use generated enum classes for type safety:
 ```python
 from . import *
 
-@wetwire_aws
 class MyFunction:
     resource: lambda_.Function
     runtime = lambda_.Runtime.PYTHON3_12    # Not "python3.12"
     architectures = [lambda_.Architecture.ARM64]
 
-@wetwire_aws
+class MyTableKeySchema:
+    resource: dynamodb.table.KeySchema
+    attribute_name = "pk"
+    key_type = dynamodb.KeyType.HASH
+
+class MyTableAttributeDefinition:
+    resource: dynamodb.table.AttributeDefinition
+    attribute_name = "pk"
+    attribute_type = dynamodb.ScalarAttributeType.S
+
 class MyTable:
     resource: dynamodb.Table
-    key_schema = [{"AttributeName": "pk", "KeyType": dynamodb.KeyType.HASH}]
-    attribute_definitions = [
-        {"AttributeName": "pk", "AttributeType": dynamodb.ScalarAttributeType.S}
-    ]
+    key_schema = [MyTableKeySchema]
+    attribute_definitions = [MyTableAttributeDefinition]
 ```
 
 ---

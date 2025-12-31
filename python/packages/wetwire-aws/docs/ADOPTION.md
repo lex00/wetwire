@@ -55,7 +55,6 @@ When you hit an edge case the library doesn't handle cleanly.
 For properties not yet typed, pass raw dictionaries:
 
 ```python
-@wetwire_aws
 class MyResource:
     resource: SomeResource
     # Typed properties
@@ -91,7 +90,6 @@ This gives you type safety for your properties while using a resource type the l
 For complex intrinsic function combinations:
 
 ```python
-@wetwire_aws
 class MyResource:
     resource: Function
     environment = {
@@ -155,7 +153,6 @@ Start with a resource file:
 ```python
 from . import *
 
-@wetwire_aws
 class DataBucket:
     resource: s3.Bucket
     bucket_name = "my-data"
@@ -172,13 +169,11 @@ Find something low-risk:
 
 ```python
 # Before
-@wetwire_aws
 class MyBucket:
     resource: s3.Bucket
     bucket_name = "data"
 
 # After
-@wetwire_aws
 class MyBucket:
     resource: s3.Bucket
     bucket_name = "data"
@@ -195,7 +190,6 @@ Create a new file in the package:
 # monitoring.py
 from . import *
 
-@wetwire_aws
 class AlertTopic:
     resource: sns.Topic
     topic_name = "alerts"
@@ -206,11 +200,11 @@ Resources auto-register when using `CloudFormationTemplate.from_registry()`.
 ### Day 5: Review the Patterns
 
 By now you've seen:
-- `@wetwire_aws` decorator
 - `resource: <type>` to specify the CloudFormation type
-- `ref()` and `get_att()` for references
+- No-parens references (`MyBucket`, `MyRole.Arn`)
 - `Annotated[T, Ref()]` and `Annotated[str, Attr(T, "name")]` type annotations for introspection
 - Class attributes for properties
+- Everything is a wrapper class (no inline constructors)
 
 That's 90% of what you need.
 

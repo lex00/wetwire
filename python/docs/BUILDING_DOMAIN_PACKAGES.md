@@ -152,7 +152,6 @@ def wetwire_{domain}(cls):
     Decorator for {Platform} resources.
 
     Usage:
-        @wetwire_{domain}
         class MyResource:
             resource: Deployment
             name = "my-resource"

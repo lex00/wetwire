@@ -19,12 +19,10 @@ setup_resources(__file__, __name__, globals())
 # infra.py
 from . import *
 
-@wetwire_aws
 class MyBucket:
     resource: s3.Bucket
     bucket_name = "my-data"
 
-@wetwire_aws
 class MyFunction:
     resource: lambda_.Function
     function_name = "processor"
