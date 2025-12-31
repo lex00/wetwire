@@ -89,7 +89,7 @@ from wetwire_aws.template import Condition as TemplateCondition
 # Condition is already imported above from intrinsics
 ConditionIntrinsic = Condition  # Alias for backward compatibility
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 __all__ = [
     # Decorator
