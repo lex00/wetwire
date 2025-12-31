@@ -388,8 +388,6 @@ def _auto_decorate_resources(package_globals: dict[str, Any]) -> None:
     """
     import sys
 
-    from dataclass_dsl import AttrRef
-
     from wetwire_aws.decorator import wetwire_aws
 
     # Track old -> new class mapping for AttrRef updates
@@ -435,6 +433,7 @@ def _update_attr_refs(
     classes and updates those references.
     """
     from dataclasses import fields
+
     from dataclass_dsl import AttrRef
 
     for obj in package_globals.values():
