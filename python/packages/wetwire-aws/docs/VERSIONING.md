@@ -26,9 +26,11 @@ The main version for PyPI releases. Follows [Semantic Versioning](https://semver
 
 Tracks which AWS CloudFormation spec was used to generate resource classes.
 
-**Source:** AWS publishes this as `ResourceSpecificationVersion` in the spec JSON.
+**Source:** Extracted from the `Last-Modified` HTTP header when fetching the spec.
 
-**Location:** Stored in `specs/metadata.json` after fetch.
+**Format:** `YYYY.MM.DD` (e.g., `2025.12.11`)
+
+**Location:** Stored in `specs/manifest.json` after fetch.
 
 ### Generator Version
 
@@ -50,7 +52,7 @@ All generated resource files include version metadata in their headers:
 """
 AWS S3 CloudFormation resources.
 
-Auto-generated from CloudFormation spec version X.X.X
+Auto-generated from CloudFormation spec version 2025.12.11
 Generator version: 1.0.0
 Generated: 2025-12-26 10:30:00
 
@@ -95,9 +97,9 @@ When releasing a new version:
 
 When AWS releases a new CloudFormation spec:
 
-1. Run the fetch stage:
+1. Run the fetch stage (captures `Last-Modified` header as version):
    ```bash
-   python -m wetwire_aws.codegen.fetch
+   python -m codegen.fetch --force
    ```
 
 2. Run the full regeneration:
@@ -110,9 +112,9 @@ When AWS releases a new CloudFormation spec:
    uv run pytest tests/
    ```
 
-4. Commit with spec version in message:
+4. Commit with spec date in message:
    ```bash
-   git commit -am "Update to CloudFormation spec X.X.X"
+   git commit -am "Update to CloudFormation spec YYYY.MM.DD"
    ```
 
 5. Bump the package version (usually minor bump)
