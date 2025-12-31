@@ -39,7 +39,6 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        wetwire-aws (this project)                        │
 │                                                                          │
-│   @wetwire_aws                                                           │
 │   class MyBucket:                       Template.from_registry()         │
 │       resource: s3.Bucket                      ↓                         │
 │       bucket_name = "my-bucket"         print(template.to_json())        │
@@ -188,18 +187,15 @@ CloudFormation uses `Ref` and `Fn::GetAtt` intrinsic functions:
 
 **This maps to wetwire-aws:**
 
-```
-@wetwire_aws
+```python
 class MyBucket:
     resource: s3.Bucket
     bucket_name = "my-bucket"
 
-@wetwire_aws
 class MyRole:
     resource: iam.Role
     assume_role_policy_document = ...
 
-@wetwire_aws
 class MyFunction:
     resource: lambda_.Function
     role = get_att(MyRole, ARN)           # → {"Fn::GetAtt": ["MyRole", "Arn"]}
@@ -248,12 +244,10 @@ CloudFormation automatically determines dependency order from `Ref` and `GetAtt`
 
 ### How It Works
 
-```
-@wetwire_aws
+```python
 class MyBucket:
     resource: s3.Bucket
 
-@wetwire_aws
 class MyFunction:
     resource: lambda_.Function
     environment = {"BUCKET": ref(MyBucket)}  # Implicit dependency
@@ -281,8 +275,7 @@ CloudFormation sees the `Ref` and creates MyBucket before MyFunction.
 
 For dependencies without intrinsic function references:
 
-```
-@wetwire_aws
+```python
 class MyFunction:
     resource: lambda_.Function
     depends_on = [MyBucket]  # Explicit DependsOn
