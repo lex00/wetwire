@@ -7,6 +7,7 @@ Organized by dependency order with deduplication opportunities identified.
 
 **Related docs:**
 - [Go.md](Go.md) - Go ecosystem mappings, patterns, and architectural decisions
+- [GoDecisions.md](GoDecisions.md) - Human decisions required for parallel agent execution
 - [AWS.md](AWS.md) - AWS domain feasibility study
 - [AGENT.md](AGENT.md) - Agent architecture research
 
@@ -16,38 +17,107 @@ Organized by dependency order with deduplication opportunities identified.
 
 ```
 Go Implementation Target:
-├── wetwire-core/          # Shared library (from dataclass-dsl)
-├── wetwire-aws/           # AWS domain package
-└── wetwire-agent/         # Testing/design orchestration
+
+wetwire-aws/                    # Library + CLI (importable)
+├── internal/                   # Shared utilities
+│   ├── discover/               # AST discovery
+│   ├── serialize/              # JSON/YAML output
+│   └── template/               # CF template building
+├── iam/, s3/, lambda/, ...     # Generated resource types
+└── cmd/wetwire-aws/            # CLI with JSON output
+
+wetwire-agent/                  # CLI only (NOT a library)
+├── internal/                   # All internal packages
+│   ├── orchestrator/           # Developer/Runner coordination
+│   ├── personas/               # Beginner, expert, terse, etc.
+│   ├── scoring/                # Rubric (0-15 scale)
+│   └── results/                # RESULTS.md generation
+└── cmd/wetwire-agent/          # CLI tool
 ```
+
+**Key architectural decisions:**
+
+1. **No separate core library** - Unlike Python's `dataclass-dsl`, Go doesn't need one.
+   Python's value is runtime metaprogramming; Go uses build-time AST parsing with stdlib.
+
+2. **Agent is CLI-only** - Not importable as a Go library. It's an end-user tool that
+   shells out to domain CLIs via `os/exec`.
+
+3. **Domain coupling via CLI** - Agent calls `wetwire-aws build --output=json` and parses
+   structured output. No Go import coupling between packages.
+
+4. **Domain-agnostic agent** - Same agent works with any domain (AWS, GCP, Azure) by
+   calling different CLIs. Domain CLIs implement a common JSON output contract.
 
 ---
 
-## LAYER 1: Core Library (wetwire-core)
+## Go User Pattern Summary
 
-*Source: dataclass-dsl - must be implemented first*
+The Go implementation uses direct type declarations - no wrappers, no registration:
+
+```go
+// User declares resources directly
+var MyRole = iam.Role{
+    RoleName: "my-role",
+}
+
+var MyFunction = lambda.Function{
+    FunctionName: "processor",
+    Role:         MyRole.Arn,  // GetAtt (field access)
+    Bucket:       MyBucket,    // Ref (direct reference)
+}
+
+// CLI discovers and builds: wetwire build ./...
+```
+
+| Python | Go | CloudFormation |
+|--------|-----|----------------|
+| `MyRole` | `MyRole` | `{"Ref": "MyRole"}` |
+| `MyRole.Arn` | `MyRole.Arn` | `{"Fn::GetAtt": ["MyRole", "Arn"]}` |
+| `@wetwire_aws` decorator | N/A - direct type | N/A |
+| `resource: iam.Role` | `iam.Role{...}` | N/A |
+
+**Key differences from Python:**
+- No wrapper class needed - `var X = Type{...}` suffices
+- No decorator - type is explicit
+- No `init()`/`Register()` - CLI discovers via `go/ast`
+- No IDE stubs - Go's static types provide full IDE support
+
+See [Go.md](Go.md) for detailed patterns and rationale.
+
+---
+
+## LAYER 1: Internal Utilities (wetwire-aws/internal)
+
+*Shared utilities within wetwire-aws - not a separate package*
 
 ### 1.1 Type System
 
 | Feature | Python Source | Go Pattern | Priority |
 |---------|---------------|------------|----------|
-| `Ref[T]` type marker | `_types.py` | `Ref[*T]` generic struct | P0 |
-| `Attr[T, name]` marker | `_types.py` | `Attr[*T]` + attribute field | P0 |
-| `RefList`, `RefDict` | `_types.py` | `[]Ref[*T]`, `map[K]Ref[*T]` | P1 |
+| `Ref[T]` type marker | `_types.py` | Direct reference: `MyBucket` | P0 |
+| `Attr[T, name]` marker | `_types.py` | Field access: `MyRole.Arn` | P0 |
+| `RefList`, `RefDict` | `_types.py` | `[]T`, `map[K]T` (direct types) | P1 |
 | `ContextRef` | `_types.py` | `ContextRef` string wrapper | P2 |
-| `RefInfo` extraction | `_types.py:get_refs()` | Reflect on `Ref[T]` fields | P0 |
-| `AttrRef` runtime marker | `_attr_ref.py` | Embed in `Attr[T]` | P0 |
+| `RefInfo` extraction | `_types.py:get_refs()` | CLI parses AST for references | P0 |
+| `AttrRef` runtime marker | `_attr_ref.py` | `AttrRef` struct field on generated types | P0 |
 
-### 1.2 Registry
+**Note:** Go uses direct type declaration (`var X = Type{...}`) instead of generic wrappers.
+References are direct (`MyBucket`) and attrs are field access (`MyRole.Arn`).
+
+### 1.2 Registry & Discovery
 
 | Feature | Python Source | Go Pattern | Priority |
 |---------|---------------|------------|----------|
-| `ResourceRegistry` | `_registry.py` | Mutex-protected map | P0 |
-| `register()` | `_registry.py` | Method on registry | P0 |
+| `ResourceRegistry` | `_registry.py` | Built by CLI at build time | P0 |
+| `register()` | `_registry.py` | N/A - CLI discovers resources | P0 |
 | `get_all(scope)` | `_registry.py` | Filter by package path | P0 |
 | `get_by_type()` | `_registry.py` | Type-keyed lookup | P1 |
 | `get_by_name()` | `_registry.py` | Name-keyed lookup | P0 |
-| Auto-register | `init()` | Package init functions | P0 |
+| Auto-register | `init()` | CLI discovery via `go/ast` | P0 |
+
+**Note:** No `init()` or `Register()` calls needed. CLI parses source files using
+`go/ast` to find `var X = Type{...}` patterns (like Python's `wetwire-aws build`).
 
 ### 1.3 Resource Base
 
@@ -130,9 +200,9 @@ Go Implementation Target:
 
 ---
 
-## LAYER 2: AWS Domain Package (wetwire-aws)
+## LAYER 2: AWS Resource Types & CLI (wetwire-aws)
 
-*Depends on: wetwire-core*
+*Main package - includes internal utilities from Layer 1*
 
 ### 2.1 Base Classes
 
@@ -184,12 +254,16 @@ Go Implementation Target:
 
 | Feature | Python Source | Go Pattern | Priority |
 |---------|---------------|------------|----------|
-| `ref()` helper | `intrinsics/refs.py` | Function | P0 |
-| `get_att()` helper | `intrinsics/refs.py` | Function | P0 |
-| `DeferredRef` | `intrinsics/refs.py` | Struct | P1 |
-| `DeferredGetAtt` | `intrinsics/refs.py` | Struct | P1 |
-| `ARN` constant | `intrinsics/refs.py` | Const | P0 |
-| `Attributes` enum | `intrinsics/refs.py` | Constants | P0 |
+| `ref()` helper | `intrinsics/refs.py` | N/A - use `MyBucket` directly | P0 |
+| `get_att()` helper | `intrinsics/refs.py` | N/A - use `MyRole.Arn` directly | P0 |
+| `DeferredRef` | `intrinsics/refs.py` | N/A - CLI resolves at build time | P1 |
+| `DeferredGetAtt` | `intrinsics/refs.py` | N/A - CLI resolves at build time | P1 |
+| `ARN` constant | `intrinsics/refs.py` | N/A - use `.Arn` field | P0 |
+| `Attributes` enum | `intrinsics/refs.py` | Fields on generated types | P0 |
+
+**Note:** Go doesn't need `ref()`/`get_att()` helper functions. Direct references
+(`MyBucket`) and field access (`MyRole.Arn`) replace them. CLI detects reference
+types during AST parsing.
 
 ### 2.5 Pseudo-Parameters
 
@@ -274,12 +348,15 @@ Go Implementation Target:
 
 | Command | Python Source | Go Pattern | Priority |
 |---------|---------------|------------|----------|
-| `build` | `cli.py` | cobra command | P0 |
+| `build` | `cli.py` | cobra command + AST discovery | P0 |
 | `validate` | `cli.py` | cobra command | P1 |
 | `list` | `cli.py` | cobra command | P1 |
 | `lint` | `cli.py` | cobra command | P1 |
 | `import` | `cli.py` | cobra command | P2 |
 | `init` | `cli.py` | cobra command | P1 |
+
+**Note:** `build` command parses Go source using `go/ast` to discover resources
+(`var X = Type{...}`), extract dependencies, and generate CloudFormation template.
 
 ### 2.12 Code Generation (Build-Time)
 
@@ -290,13 +367,26 @@ Go Implementation Target:
 | Enum extractor | `codegen/extract_enums.py` | AWS SDK models | P0 |
 | Code generator | `codegen/generate.py` | text/template or jennifer | P0 |
 | Schema types | `codegen/schema.py` | Structs | P0 |
-| Code formatting | N/A | gofmt output | P0 |
+| Attr fields | N/A | Generate `Arn`, `RoleId`, etc. as `AttrRef` fields | P0 |
+
+**Generated type example:**
+```go
+type Role struct {
+    // Attrs (for GetAtt)
+    Arn    AttrRef
+    RoleId AttrRef
+
+    // Properties (user sets these)
+    RoleName                 string
+    AssumeRolePolicyDocument *PolicyDocument
+}
+```
 
 ---
 
-## LAYER 3: Agent Package (wetwire-agent)
+## LAYER 3: Agent CLI (wetwire-agent)
 
-*Depends on: wetwire-aws*
+*CLI-only tool - does NOT import domain packages. Interacts via `os/exec` to domain CLIs.*
 
 ### 3.1 Core Types
 
@@ -369,13 +459,18 @@ Go Implementation Target:
 | `run_turn()` | `agents.py` | Method | P0 |
 | `run_turn_streaming()` | `agents.py` | SSE streaming | P1 |
 
-**Runner Tools:**
-- `init_package` - Create new package (os.MkdirAll, os.WriteFile)
-- `write_file` - Write file to package (os.WriteFile)
-- `read_file` - Read file from package (os.ReadFile)
-- `run_lint` - Run linter (os/exec)
-- `run_build` - Build template (os/exec)
+**Runner Tools (all use stdlib, no domain imports):**
+- `init_package` - Create new package (`os.MkdirAll`, `os.WriteFile`)
+- `write_file` - Write file to package (`os.WriteFile`)
+- `read_file` - Read file from package (`os.ReadFile`)
+- `run_lint` - `exec.Command("wetwire-aws", "lint", "--output=json")`
+- `run_build` - `exec.Command("wetwire-aws", "build", "--output=json")`
 - `ask_developer` - Ask clarification (Anthropic API)
+
+**Domain CLI contract (JSON output):**
+```json
+{"success": true, "resources": [...], "errors": [...]}
+```
 
 ### 3.7 Conversation Handlers
 
@@ -424,50 +519,56 @@ Go Implementation Target:
 
 ## DEDUPLICATION OPPORTUNITIES
 
-### Shared Between dataclass-dsl and wetwire-aws
+### Shared Utilities (wetwire-aws/internal)
 
-| Feature | Current Location | Target Location |
-|---------|------------------|-----------------|
-| `to_snake_case()` | Both | wetwire-core |
-| `to_pascal_case()` | Both | wetwire-core |
-| `LintIssue` struct | Both | wetwire-core |
-| Registry pattern | Both | wetwire-core |
-| Template base | Both | wetwire-core |
+| Feature | Go Location |
+|---------|-------------|
+| `toSnakeCase()` | `internal/naming` |
+| `toPascalCase()` | `internal/naming` |
+| `LintIssue` struct | `internal/lint` |
+| AST discovery | `internal/discover` |
+| Template base | `internal/template` |
+| Serialization | `internal/serialize` |
 
-### Shared Between wetwire-aws and wetwire-agent
+### Contract Between wetwire-aws and wetwire-agent
 
-| Feature | Current Location | Target Location |
-|---------|------------------|-----------------|
-| `LintResult` type | Both (different) | Unify in wetwire-aws |
-| CLI utilities | Both | wetwire-core |
-| Scoring dimensions | agent only | Keep in agent |
+Agent does NOT import domain packages. They communicate via CLI JSON output.
+
+| Contract | Description |
+|----------|-------------|
+| `--output=json` flag | All domain CLI commands support JSON output |
+| Lint result JSON | `{"issues": [...], "fixable": [...]}` |
+| Build result JSON | `{"success": bool, "template": {...}, "errors": [...]}` |
+| Exit codes | 0=success, 1=error, 2=lint issues |
 
 ---
 
 ## IMPLEMENTATION ORDER
 
-### Phase 1: Core Foundation
-1. Type system (Ref, Attr, RefInfo)
-2. Registry
-3. Resource/PropertyType interfaces
-4. Serialization (FieldMapper, ValueSerializer)
-5. Dependency ordering
+### Phase 1: wetwire-aws (can be built independently)
+1. Internal utilities (`internal/`)
+   - AttrRef type
+   - AST discovery (`go/ast` parsing)
+   - Serialization helpers
+   - Dependency ordering
+2. Intrinsic function structs (Ref, GetAtt, Sub, etc.)
+3. Base types (CloudFormationResource, Template)
+4. Code generator (from CF spec → types with AttrRef fields)
+5. CLI (`cmd/wetwire-aws/`)
+   - `build --output=json` command with AST discovery
+   - `lint --output=json`, `validate`, `import` commands
 
-### Phase 2: AWS Domain
-1. Intrinsic functions
-2. CloudFormationResource base
-3. CloudFormationProvider
-4. CloudFormationTemplate
-5. Code generator (from CF spec)
-6. CLI commands
+### Phase 2: wetwire-agent (can be built independently)
+*No Go import dependency on wetwire-aws - just needs CLI installed*
 
-### Phase 3: Agent
-1. Personas and scoring
-2. Results writer
-3. Scenario runner
-4. Orchestrator
+1. Personas and scoring (`internal/personas`, `internal/scoring`)
+2. Results writer (`internal/results`)
+3. Domain runner (shells out to domain CLIs, parses JSON)
+4. Orchestrator (`internal/orchestrator`)
 5. AI agents (Anthropic Go SDK)
-6. CLI commands
+6. CLI (`cmd/wetwire-agent/`)
+
+**Note:** Phases can be developed in parallel since they only share CLI contracts, not Go imports.
 
 ---
 
