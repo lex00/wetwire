@@ -106,7 +106,7 @@ class MyBucket:
 ```
 
 **Key Components:**
-- Domain decorator (`@wetwire_aws`)
+- Auto-decoration via `setup_resources()` (invisible to end users)
 - Domain template (`CloudFormationTemplate`)
 - Registry — Resource registration and discovery
 - Generated resources (from cloud provider schemas)
