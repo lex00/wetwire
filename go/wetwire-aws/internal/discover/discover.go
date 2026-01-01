@@ -204,6 +204,12 @@ func discoverFile(fset *token.FileSet, filename string, file *ast.File, result *
 				continue
 			}
 
+			// Skip property types (e.g., Bucket_ServerSideEncryptionRule)
+			// These contain "_" and are nested types, not CloudFormation resources
+			if strings.Contains(typeName, "_") {
+				continue
+			}
+
 			// Extract dependencies from field values
 			deps := extractDependencies(compLit, imports)
 
