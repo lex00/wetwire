@@ -40,7 +40,7 @@ Examples:
 	cmd.Flags().StringVarP(&persona, "persona", "p", "beginner", "Persona to use (beginner, intermediate, expert, terse, verbose, all)")
 	cmd.Flags().StringVarP(&outputDir, "output", "o", ".", "Output directory for results")
 	cmd.Flags().StringVar(&prompt, "prompt", "", "Initial prompt for the developer")
-	cmd.MarkFlagRequired("prompt")
+	_ = cmd.MarkFlagRequired("prompt") // Flag defined above, safe to ignore
 
 	return cmd
 }

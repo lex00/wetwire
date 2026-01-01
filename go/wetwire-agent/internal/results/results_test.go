@@ -84,6 +84,7 @@ func TestSession_Duration(t *testing.T) {
 	session := NewSession("test", "test")
 
 	// Before completion, duration is since start
+	time.Sleep(1 * time.Millisecond) // Ensure some time has passed
 	duration := session.Duration()
 	assert.Greater(t, duration.Nanoseconds(), int64(0))
 

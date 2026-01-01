@@ -234,7 +234,9 @@ func runScenarioWithPersona(scenario *Scenario, personaName string, saveResults 
 		// Also write score summary
 		scorePath := filepath.Join(outputDir, "score.json")
 		scoreData, _ := json.MarshalIndent(score, "", "  ")
-		os.WriteFile(scorePath, scoreData, 0644)
+		if err := os.WriteFile(scorePath, scoreData, 0644); err != nil {
+			return fmt.Errorf("writing score: %w", err)
+		}
 	}
 
 	// Print summary
