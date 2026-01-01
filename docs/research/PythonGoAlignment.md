@@ -86,3 +86,112 @@ This is a breaking change for Python users. Options:
 1. **Major version bump**: Release as wetwire-aws 2.0
 2. **Deprecation period**: Keep old names as aliases for one release
 3. **Import aliases**: Provide compatibility shim module
+
+---
+
+## IAM Policy Document Typing
+
+### PolicyDocument and PolicyStatement
+
+Both implementations provide typed structs:
+
+| Feature | Python | Go |
+|---------|--------|-----|
+| `PolicyDocument` | dataclass | struct |
+| `PolicyStatement` | dataclass | struct |
+| `DenyStatement` | dataclass (Effect="Deny") | struct (Effect="Deny") |
+
+### Principal Field
+
+**Python**: Uses raw dicts
+```python
+principal = {'Service': ['lambda.amazonaws.com']}
+principal = {'AWS': '*'}
+```
+
+**Go**: Uses typed helpers (Go-specific improvement)
+```go
+Principal: ServicePrincipal{"lambda.amazonaws.com"}
+Principal: AWSPrincipal{"*"}
+Principal: FederatedPrincipal{"cognito-identity.amazonaws.com"}
+```
+
+**Rationale**: Principal has only 3 possible keys (Service, AWS, Federated). Typed helpers provide:
+- Type safety (can't misspell "Service")
+- Auto-handling of single value vs array via MarshalJSON
+- Cleaner syntax
+
+### Condition Field
+
+**Python**: String constants for operators, raw dicts for structure
+```python
+from wetwire_aws.constants import BOOL, STRING_EQUALS
+
+condition = {
+    BOOL: {'aws:SecureTransport': False},
+}
+```
+
+**Go**: String constants for operators, `Json` type alias for structure
+```go
+Condition: Json{
+    Bool: Json{"aws:SecureTransport": false},
+}
+```
+
+**Rationale**: Condition has 20+ operators. Constants prevent typos; typed helpers would be excessive.
+
+### Why Principal is Typed but Condition Uses Constants
+
+| Aspect | Principal | Condition |
+|--------|-----------|-----------|
+| Number of keys | 3 | 20+ |
+| Typed helpers? | Yes (Go) | No (both) |
+| Constants? | N/A | Yes (both) |
+
+The inconsistency is acceptable:
+1. Principal's 3 keys justify dedicated types
+2. Condition's 20+ operators are better served by constants
+3. Intrinsic functions (Ref, Sub, GetAtt) are already typed
+
+### Json Type Alias (Go-only)
+
+```go
+type Json = map[string]any
+```
+
+Shorthand for inline JSON, particularly in Condition blocks. Python doesn't need this since dict literals are already concise.
+
+---
+
+## List Helper (Go-only)
+
+Go requires explicit slice type annotations in composite literals:
+```go
+Actions: []elasticloadbalancingv2.ListenerRule_Action{ActionForward},
+```
+
+The `List` generic helper avoids this verbosity:
+```go
+Actions: List(ActionForward),
+Origins: List(Origin1, Origin2),
+```
+
+**Implementation:**
+```go
+func List[T any](items ...T) []T {
+    return items
+}
+```
+
+Python doesn't need this since list literals are already concise: `[item1, item2]`.
+
+---
+
+## Typing Principles
+
+1. **Type everything we can** with names close to the CF spec
+2. **Use constants** when there are many options (20+)
+3. **Use typed helpers** when there are few options (3-5) and they're frequently used
+4. **Use Json alias** (Go) for arbitrary nested structures
+5. **Use List helper** (Go) to avoid verbose slice type annotations

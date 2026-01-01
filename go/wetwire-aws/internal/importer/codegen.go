@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/lex00/wetwire-aws/resources"
 )
 
 // pseudoParameterConstants maps pseudo-parameter strings that appear as literal values
@@ -20,6 +22,50 @@ var pseudoParameterConstants = map[string]string{
 	"AWS::Partition":        "AWS_PARTITION",
 	"AWS::URLSuffix":        "AWS_URL_SUFFIX",
 	"AWS::NotificationARNs": "AWS_NOTIFICATION_ARNS",
+}
+
+// policyDocFields lists fields that contain IAM policy documents.
+// These are flattened into typed PolicyDocument/PolicyStatement structs.
+var policyDocFields = map[string]bool{
+	"AssumeRolePolicyDocument": true,
+	"PolicyDocument":           true,
+	"KeyPolicy":                true,
+}
+
+// isPolicyDocumentField checks if a property name is an IAM policy document.
+func isPolicyDocumentField(propName string) bool {
+	return policyDocFields[propName]
+}
+
+// conditionOperators maps IAM condition operator strings to Go constant names.
+// These are exported from intrinsics/policy.go via dot import.
+var conditionOperators = map[string]string{
+	"StringEquals":              "StringEquals",
+	"StringNotEquals":           "StringNotEquals",
+	"StringEqualsIgnoreCase":    "StringEqualsIgnoreCase",
+	"StringNotEqualsIgnoreCase": "StringNotEqualsIgnoreCase",
+	"StringLike":                "StringLike",
+	"StringNotLike":             "StringNotLike",
+	"NumericEquals":             "NumericEquals",
+	"NumericNotEquals":          "NumericNotEquals",
+	"NumericLessThan":           "NumericLessThan",
+	"NumericLessThanEquals":     "NumericLessThanEquals",
+	"NumericGreaterThan":        "NumericGreaterThan",
+	"NumericGreaterThanEquals":  "NumericGreaterThanEquals",
+	"DateEquals":                "DateEquals",
+	"DateNotEquals":             "DateNotEquals",
+	"DateLessThan":              "DateLessThan",
+	"DateLessThanEquals":        "DateLessThanEquals",
+	"DateGreaterThan":           "DateGreaterThan",
+	"DateGreaterThanEquals":     "DateGreaterThanEquals",
+	"Bool":                      "Bool",
+	"IpAddress":                 "IpAddress",
+	"NotIpAddress":              "NotIpAddress",
+	"ArnEquals":                 "ArnEquals",
+	"ArnNotEquals":              "ArnNotEquals",
+	"ArnLike":                   "ArnLike",
+	"ArnNotLike":                "ArnNotLike",
+	"Null":                      "Null",
 }
 
 // GenerateCode generates Go code from a parsed IR template.
@@ -57,25 +103,14 @@ type codegenContext struct {
 
 // propertyBlock represents a top-level var declaration for a property type instance.
 type propertyBlock struct {
-	varName    string         // e.g., "SecurityGroupHttpsIngress"
-	typeName   string         // e.g., "ec2.SecurityGroup_Ingress"
-	properties map[string]any // the property values
+	varName    string            // e.g., "LoggingBucketBucketEncryption"
+	typeName   string            // e.g., "s3.Bucket_BucketEncryption"
+	properties map[string]any    // property key-value pairs for generation
+	isPointer  bool              // whether this should be a pointer type (&Type{})
+	deps       []string          // var names this block depends on
+	order      int               // insertion order for stable sorting
 }
 
-// knownPropertyTypes maps (service, propertyName) to the typed struct to use.
-// Property types are qualified with their parent resource (e.g., SecurityGroup_Ingress).
-// This enables generating []ec2.SecurityGroup_Ingress{...} instead of []any{map[string]any{...}}.
-// NOTE: Only include types where the parent resource name matches the actual generated type.
-// Many property types are shared across resources (e.g., EC2Fleet_BlockDeviceMapping is used by Instance).
-var knownPropertyTypes = map[string]map[string]string{
-	"ec2": {
-		"SecurityGroupIngress": "SecurityGroup_Ingress",
-		"SecurityGroupEgress":  "SecurityGroup_Egress",
-		// BlockDeviceMappings and Volumes removed - types are shared across resources
-	},
-	// iam Policies removed - Role_Policy may not exist
-	// elasticloadbalancingv2 types removed - may not match actual generated types
-}
 
 func newCodegenContext(template *IRTemplate, packageName string) *codegenContext {
 	ctx := &codegenContext{
@@ -219,28 +254,51 @@ func generateResource(ctx *codegenContext, resource *IRResource) string {
 	// Clear property blocks for this resource
 	ctx.propertyBlocks = nil
 
-	// First pass: collect property blocks by traversing properties
-	// This populates ctx.propertyBlocks with any nested property type instances
-	resourceProps := make(map[string]string) // propName -> generated value
+	// First pass: collect top-level property blocks and resource property values
+	// This populates ctx.propertyBlocks with typed property instances
+	resourceProps := make(map[string]string) // GoName -> generated value (var reference or literal)
 	for _, propName := range sortedKeys(resource.Properties) {
 		prop := resource.Properties[propName]
 		ctx.currentProperty = propName
 		var value string
 		if propName == "Tags" {
 			value = tagsToBlockStyle(ctx, prop.Value)
-		} else if typedStruct := getTypedPropertyStruct(ctx.currentResource, propName); typedStruct != "" {
-			// Block style: extract items as separate var declarations
-			value = typedArrayToBlockStyle(ctx, prop.Value, typedStruct)
 		} else {
-			// Pass property name for typed struct generation
-			value = valueToGoWithProperty(ctx, prop.Value, 1, propName)
+			// Check if this is a typed property
+			value = valueToBlockStyleProperty(ctx, prop.Value, propName, resource.LogicalID)
 		}
 		resourceProps[prop.GoName] = value
 	}
 
-	// Generate property blocks BEFORE the resource
-	for _, block := range ctx.propertyBlocks {
-		lines = append(lines, generatePropertyBlock(ctx, block))
+	// Process property blocks to generate their code
+	// Blocks may add more blocks when processed, so we iterate until stable
+	processedBlocks := make(map[int]string) // order -> generated code
+	for {
+		foundNew := false
+		for i := range ctx.propertyBlocks {
+			if _, done := processedBlocks[ctx.propertyBlocks[i].order]; done {
+				continue
+			}
+			foundNew = true
+			// Generate this block's code (may add more blocks to ctx.propertyBlocks)
+			processedBlocks[ctx.propertyBlocks[i].order] = generatePropertyBlock(ctx, ctx.propertyBlocks[i])
+		}
+		if !foundNew {
+			break
+		}
+	}
+
+	// Output blocks in reverse order (dependencies first, deepest nesting first)
+	// We use order field which increases as blocks are discovered during traversal
+	// Later orders mean nested blocks, which should be output first
+	sortedOrders := make([]int, 0, len(processedBlocks))
+	for order := range processedBlocks {
+		sortedOrders = append(sortedOrders, order)
+	}
+	sort.Sort(sort.Reverse(sort.IntSlice(sortedOrders)))
+
+	for _, order := range sortedOrders {
+		lines = append(lines, processedBlocks[order])
 		lines = append(lines, "") // blank line between blocks
 	}
 
@@ -261,10 +319,141 @@ func generateResource(ctx *codegenContext, resource *IRResource) string {
 	return strings.Join(lines, "\n")
 }
 
+// valueToBlockStyleProperty converts a property value to block style.
+// Returns either a var reference (for typed properties) or a literal value.
+func valueToBlockStyleProperty(ctx *codegenContext, value any, propName string, parentVarName string) string {
+	if value == nil {
+		return "nil"
+	}
+
+	switch v := value.(type) {
+	case *IRIntrinsic:
+		return intrinsicToGo(ctx, v)
+
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+
+	case int, int64:
+		return fmt.Sprintf("%d", v)
+
+	case float64:
+		if v == float64(int64(v)) {
+			return fmt.Sprintf("%d", int64(v))
+		}
+		return fmt.Sprintf("%g", v)
+
+	case string:
+		if pseudoConst, ok := pseudoParameterConstants[v]; ok {
+			ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
+			return pseudoConst
+		}
+		return fmt.Sprintf("%q", v)
+
+	case []any:
+		if len(v) == 0 {
+			return "[]any{}"
+		}
+		// Check if array elements are maps that should be typed
+		if propName != "" && len(v) > 0 {
+			if _, isMap := v[0].(map[string]any); isMap {
+				elemTypeName := getArrayElementTypeName(ctx, propName)
+				if elemTypeName != "" {
+					return arrayToBlockStyle(ctx, v, elemTypeName, parentVarName, propName)
+				}
+			}
+		}
+		// Fallback: inline array
+		var items []string
+		for _, item := range v {
+			items = append(items, valueToBlockStyleProperty(ctx, item, "", parentVarName))
+		}
+		return fmt.Sprintf("[]any{%s}", strings.Join(items, ", "))
+
+	case map[string]any:
+		// Check if this is an intrinsic function map
+		if len(v) == 1 {
+			for k := range v {
+				if k == "Ref" || strings.HasPrefix(k, "Fn::") || k == "Condition" {
+					intrinsic := mapToIntrinsic(v)
+					if intrinsic != nil {
+						return intrinsicToGo(ctx, intrinsic)
+					}
+				}
+			}
+		}
+
+		// Check if this is a policy document field
+		if isPolicyDocumentField(propName) {
+			return policyDocToBlocks(ctx, v, parentVarName, propName)
+		}
+
+		// Check if this should be a typed property block
+		typeName := getPropertyTypeName(ctx, propName)
+		if typeName != "" && allKeysValidIdentifiers(v) {
+			// Create a block for this property
+			blockVarName := parentVarName + propName
+			fullTypeName := fmt.Sprintf("%s.%s", ctx.currentResource, typeName)
+
+			// Check if this field is a pointer BEFORE updating type context
+			// (we need to check against the parent type, not the nested type)
+			needsPointer := isPointerField(ctx, propName)
+
+			// Save and update type context
+			savedTypeName := ctx.currentTypeName
+			ctx.currentTypeName = typeName
+
+			ctx.propertyBlocks = append(ctx.propertyBlocks, propertyBlock{
+				varName:    blockVarName,
+				typeName:   fullTypeName,
+				properties: v,
+				isPointer:  needsPointer,
+				order:      len(ctx.propertyBlocks),
+			})
+
+			// Restore type context
+			ctx.currentTypeName = savedTypeName
+
+			return blockVarName
+		}
+
+		// Fallback: inline map
+		var items []string
+		for _, k := range sortedKeys(v) {
+			val := v[k]
+			items = append(items, fmt.Sprintf("\t%q: %s,", k, valueToBlockStyleProperty(ctx, val, k, parentVarName)))
+		}
+		if len(items) == 0 {
+			return "map[string]any{}"
+		}
+		return fmt.Sprintf("map[string]any{\n%s\n}", strings.Join(items, "\n"))
+	}
+
+	return fmt.Sprintf("%#v", value)
+}
+
 // generatePropertyBlock generates a var declaration for a property type block.
 func generatePropertyBlock(ctx *codegenContext, block propertyBlock) string {
 	var lines []string
-	lines = append(lines, fmt.Sprintf("var %s = %s{", block.varName, block.typeName))
+
+	// Pointer types need & prefix
+	if block.isPointer {
+		lines = append(lines, fmt.Sprintf("var %s = &%s{", block.varName, block.typeName))
+	} else {
+		lines = append(lines, fmt.Sprintf("var %s = %s{", block.varName, block.typeName))
+	}
+
+	// Set type context from block type name (e.g., "s3.Bucket_BucketEncryption" -> "Bucket_BucketEncryption")
+	// This is needed for nested property type resolution
+	savedTypeName := ctx.currentTypeName
+	if idx := strings.LastIndex(block.typeName, "."); idx >= 0 {
+		ctx.currentTypeName = block.typeName[idx+1:]
+	}
+
+	// Check if this is a policy-related type
+	isPolicyType := block.typeName == "PolicyDocument" || block.typeName == "PolicyStatement" || block.typeName == "DenyStatement"
 
 	// Sort property keys for deterministic output
 	keys := make([]string, 0, len(block.properties))
@@ -275,108 +464,230 @@ func generatePropertyBlock(ctx *codegenContext, block propertyBlock) string {
 
 	for _, k := range keys {
 		v := block.properties[k]
-		fieldVal := valueToGo(ctx, v, 0)
-		lines = append(lines, fmt.Sprintf("\t%s: %s,", k, fieldVal))
+		var fieldVal string
+
+		// Special handling for policy types
+		if isPolicyType {
+			switch k {
+			case "Principal":
+				fieldVal = principalToGo(ctx, v)
+			case "Condition":
+				fieldVal = conditionToGo(ctx, v)
+			case "Statement":
+				// Statement is a list of var references (strings)
+				if varNames, ok := v.([]string); ok {
+					fieldVal = fmt.Sprintf("[]any{%s}", strings.Join(varNames, ", "))
+				} else {
+					fieldVal = valueToGoForBlock(ctx, v, k, block.varName)
+				}
+			default:
+				fieldVal = valueToGoForBlock(ctx, v, k, block.varName)
+			}
+		} else {
+			// Process the value, which may create nested property blocks
+			fieldVal = valueToGoForBlock(ctx, v, k, block.varName)
+		}
+
+		// Transform field name for Go keyword conflicts
+		goFieldName := transformGoFieldName(k)
+		lines = append(lines, fmt.Sprintf("\t%s: %s,", goFieldName, fieldVal))
 	}
+
+	// Restore type context
+	ctx.currentTypeName = savedTypeName
 
 	lines = append(lines, "}")
 	return strings.Join(lines, "\n")
 }
 
-// getTypedPropertyStruct returns the struct type name for a known property array.
-func getTypedPropertyStruct(service, propName string) string {
-	if serviceProps, ok := knownPropertyTypes[service]; ok {
-		if structName, ok := serviceProps[propName]; ok {
-			return structName
-		}
+// valueToGoForBlock converts values for block generation, creating nested blocks as needed.
+// Returns either a literal value or a reference to another block variable.
+func valueToGoForBlock(ctx *codegenContext, value any, propName string, parentVarName string) string {
+	if value == nil {
+		return "nil"
 	}
-	return ""
+
+	switch v := value.(type) {
+	case *IRIntrinsic:
+		return intrinsicToGo(ctx, v)
+
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+
+	case int, int64:
+		return fmt.Sprintf("%d", v)
+
+	case float64:
+		if v == float64(int64(v)) {
+			return fmt.Sprintf("%d", int64(v))
+		}
+		return fmt.Sprintf("%g", v)
+
+	case string:
+		if pseudoConst, ok := pseudoParameterConstants[v]; ok {
+			ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
+			return pseudoConst
+		}
+		return fmt.Sprintf("%q", v)
+
+	case []any:
+		if len(v) == 0 {
+			return "[]any{}"
+		}
+		// Check if array elements are maps that should be typed
+		if propName != "" && len(v) > 0 {
+			if _, isMap := v[0].(map[string]any); isMap {
+				elemTypeName := getArrayElementTypeName(ctx, propName)
+				if elemTypeName != "" {
+					return arrayToBlockStyle(ctx, v, elemTypeName, parentVarName, propName)
+				}
+			}
+		}
+		// Fallback: inline array
+		var items []string
+		for _, item := range v {
+			items = append(items, valueToGoForBlock(ctx, item, "", parentVarName))
+		}
+		return fmt.Sprintf("[]any{%s}", strings.Join(items, ", "))
+
+	case map[string]any:
+		// Check if this is an intrinsic function map
+		if len(v) == 1 {
+			for k := range v {
+				if k == "Ref" || strings.HasPrefix(k, "Fn::") || k == "Condition" {
+					intrinsic := mapToIntrinsic(v)
+					if intrinsic != nil {
+						return intrinsicToGo(ctx, intrinsic)
+					}
+				}
+			}
+		}
+
+		// Check if this is a policy document field
+		if isPolicyDocumentField(propName) {
+			return policyDocToBlocks(ctx, v, parentVarName, propName)
+		}
+
+		// Check if this should be a nested property type block
+		typeName := getPropertyTypeName(ctx, propName)
+		if typeName != "" && allKeysValidIdentifiers(v) {
+			// Create a nested block
+			nestedVarName := parentVarName + propName
+			fullTypeName := fmt.Sprintf("%s.%s", ctx.currentResource, typeName)
+
+			// Check if this field is a pointer BEFORE updating type context
+			// (we need to check against the parent type, not the nested type)
+			needsPointer := isPointerField(ctx, propName)
+
+			// Save and update type context for nested properties
+			savedTypeName := ctx.currentTypeName
+			ctx.currentTypeName = typeName
+
+			ctx.propertyBlocks = append(ctx.propertyBlocks, propertyBlock{
+				varName:    nestedVarName,
+				typeName:   fullTypeName,
+				properties: v,
+				isPointer:  needsPointer,
+				order:      len(ctx.propertyBlocks),
+			})
+
+			// Restore type context
+			ctx.currentTypeName = savedTypeName
+
+			return nestedVarName
+		}
+
+		// Fallback: inline map
+		var items []string
+		for _, k := range sortedKeys(v) {
+			val := v[k]
+			items = append(items, fmt.Sprintf("%q: %s", k, valueToGoForBlock(ctx, val, k, parentVarName)))
+		}
+		if len(items) == 0 {
+			return "map[string]any{}"
+		}
+		return fmt.Sprintf("map[string]any{%s}", strings.Join(items, ", "))
+	}
+
+	return fmt.Sprintf("%#v", value)
 }
 
-// typedArrayToBlockStyle converts an array to block-style: each item becomes a separate
-// var declaration, and returns a slice of references to those vars.
-// Example output: []ec2.SecurityGroup_Ingress{SecurityGroupHttpsIngress, SecurityGroupHttpIngress}
-func typedArrayToBlockStyle(ctx *codegenContext, value any, structType string) string {
-	arr, ok := value.([]any)
-	if !ok || len(arr) == 0 {
-		return fmt.Sprintf("[]%s.%s{}", ctx.currentResource, structType)
-	}
-
+// arrayToBlockStyle converts an array of maps to block style with separate var declarations.
+func arrayToBlockStyle(ctx *codegenContext, arr []any, elemTypeName string, parentVarName string, propName string) string {
 	var varNames []string
-	for _, item := range arr {
+
+	// Save and update type context for array elements
+	savedTypeName := ctx.currentTypeName
+	ctx.currentTypeName = elemTypeName
+
+	for i, item := range arr {
 		itemMap, ok := item.(map[string]any)
 		if !ok {
-			// Fallback: can't extract as block, skip
 			continue
 		}
 
-		// Generate a unique var name based on resource + property + distinguishing value
-		varName := generateBlockVarName(ctx, itemMap)
-		fullTypeName := fmt.Sprintf("%s.%s", ctx.currentResource, structType)
+		// Generate unique var name for this element
+		varName := generateArrayElementVarName(ctx, parentVarName, propName, itemMap, i)
+		fullTypeName := fmt.Sprintf("%s.%s", ctx.currentResource, elemTypeName)
 
-		// Add to property blocks
 		ctx.propertyBlocks = append(ctx.propertyBlocks, propertyBlock{
 			varName:    varName,
 			typeName:   fullTypeName,
 			properties: itemMap,
+			isPointer:  false, // Array elements are values, not pointers
+			order:      len(ctx.propertyBlocks),
 		})
 
 		varNames = append(varNames, varName)
 	}
 
+	// Restore type context
+	ctx.currentTypeName = savedTypeName
+
 	if len(varNames) == 0 {
-		return fmt.Sprintf("[]%s.%s{}", ctx.currentResource, structType)
+		return fmt.Sprintf("[]%s.%s{}", ctx.currentResource, elemTypeName)
 	}
 
-	// Return slice of var references
-	return fmt.Sprintf("[]%s.%s{%s}", ctx.currentResource, structType, strings.Join(varNames, ", "))
+	// Use List() helper for cleaner syntax
+	return fmt.Sprintf("List(%s)", strings.Join(varNames, ", "))
 }
 
-// generateBlockVarName generates a unique, descriptive var name for a property block.
-// Uses the resource logical ID + property name + a distinguishing value from the block.
-func generateBlockVarName(ctx *codegenContext, props map[string]any) string {
-	// Try to find a distinguishing value in the properties
-	// Priority: Port numbers, CidrIp, Name fields, etc.
+// generateArrayElementVarName generates a unique var name for an array element.
+func generateArrayElementVarName(ctx *codegenContext, parentVarName string, propName string, props map[string]any, index int) string {
+	// Try to find a distinguishing value
 	var suffix string
 
-	// For security group ingress/egress, use port info
-	if fromPort, ok := props["FromPort"]; ok {
-		if toPort, ok := props["ToPort"]; ok {
-			if fromPort == toPort {
-				suffix = fmt.Sprintf("Port%v", fromPort)
-			} else {
-				suffix = fmt.Sprintf("Ports%vTo%v", fromPort, toPort)
+	// For various types, look for identifying fields
+	for _, key := range []string{"Id", "Name", "Key", "Type", "DeviceName", "PolicyName", "Status"} {
+		if val, ok := props[key]; ok {
+			if s, ok := val.(string); ok && s != "" {
+				suffix = cleanForVarName(s)
+				break
 			}
-		} else {
+		}
+	}
+
+	// For security group rules, use port info
+	if suffix == "" {
+		if fromPort, ok := props["FromPort"]; ok {
 			suffix = fmt.Sprintf("Port%v", fromPort)
-		}
-		// Add protocol if not tcp
-		if proto, ok := props["IpProtocol"].(string); ok && proto != "tcp" {
-			suffix += strings.ToUpper(proto)
-		}
-	}
-
-	// For other types, look for name-like fields
-	if suffix == "" {
-		for _, key := range []string{"Name", "Key", "Type", "DeviceName", "PolicyName"} {
-			if val, ok := props[key]; ok {
-				if s, ok := val.(string); ok && s != "" {
-					// Clean up the value for use in a var name
-					suffix = cleanForVarName(s)
-					break
-				}
+			if proto, ok := props["IpProtocol"].(string); ok && proto != "tcp" {
+				suffix += strings.ToUpper(proto)
 			}
 		}
 	}
 
-	// Fallback to index if no distinguishing value found
+	// Fallback to index
 	if suffix == "" {
-		baseKey := ctx.currentLogicalID + ctx.currentProperty
-		ctx.blockNameCount[baseKey]++
-		suffix = fmt.Sprintf("%d", ctx.blockNameCount[baseKey])
+		suffix = fmt.Sprintf("%d", index+1)
 	}
 
-	return ctx.currentLogicalID + suffix
+	// Use singular form for array element names
+	singularProp := singularize(propName)
+	return parentVarName + singularProp + suffix
 }
 
 // cleanForVarName cleans a string value for use in a Go variable name.
@@ -402,6 +713,7 @@ func cleanForVarName(s string) string {
 }
 
 // tagsToBlockStyle converts tags to block style with separate var declarations.
+// Tags field is []any in generated resources, so we use []any{Tag{}, Tag{}, ...}
 func tagsToBlockStyle(ctx *codegenContext, value any) string {
 	ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
 
@@ -435,6 +747,8 @@ func tagsToBlockStyle(ctx *codegenContext, value any) string {
 			varName:    varName,
 			typeName:   "Tag",
 			properties: map[string]any{"Key": key, "Value": val},
+			isPointer:  false, // Tags are values
+			order:      len(ctx.propertyBlocks),
 		})
 
 		varNames = append(varNames, varName)
@@ -536,11 +850,18 @@ func valueToGoWithProperty(ctx *codegenContext, value any, indent int, propName 
 				// Determine the element type name (singular form for arrays)
 				elemTypeName := getArrayElementTypeName(ctx, propName)
 				if elemTypeName != "" {
+					// Save current type context and switch to element type for nested properties
+					savedTypeName := ctx.currentTypeName
+					ctx.currentTypeName = elemTypeName
+
 					var items []string
 					for _, item := range v {
-						// Pass singular element type name for nested properties
-						items = append(items, nextIndent+valueToGoWithProperty(ctx, item, indent+1, singularize(propName))+",")
+						// Pass empty propName - the element IS the type, not a nested property
+						items = append(items, nextIndent+valueToGoWithProperty(ctx, item, indent+1, "")+",")
 					}
+
+					// Restore type context
+					ctx.currentTypeName = savedTypeName
 					return fmt.Sprintf("[]%s.%s{\n%s\n%s}", ctx.currentResource, elemTypeName, strings.Join(items, "\n"), indentStr)
 				}
 			}
@@ -572,12 +893,31 @@ func valueToGoWithProperty(ctx *codegenContext, value any, indent int, propName 
 		// But only if all keys are valid Go identifiers
 		typeName := getPropertyTypeName(ctx, propName)
 		if typeName != "" && allKeysValidIdentifiers(v) {
+			// Save current type context and switch to nested type
+			savedTypeName := ctx.currentTypeName
+			ctx.currentTypeName = typeName
+
 			var items []string
 			for _, k := range sortedKeys(v) {
 				val := v[k]
 				items = append(items, fmt.Sprintf("%s%s: %s,", nextIndent, k, valueToGoWithProperty(ctx, val, indent+1, k)))
 			}
-			return fmt.Sprintf("%s.%s{\n%s\n%s}", ctx.currentResource, typeName, strings.Join(items, "\n"), indentStr)
+
+			// Restore type context
+			ctx.currentTypeName = savedTypeName
+			// Use pointer for property types (they're optional fields in the struct)
+			return fmt.Sprintf("&%s.%s{\n%s\n%s}", ctx.currentResource, typeName, strings.Join(items, "\n"), indentStr)
+		}
+
+		// Check if we're at an array element level (propName is empty but currentTypeName is a property type)
+		// This happens when processing elements of a typed slice like []Bucket_Rule
+		if propName == "" && strings.Contains(ctx.currentTypeName, "_") && allKeysValidIdentifiers(v) {
+			var items []string
+			for _, k := range sortedKeys(v) {
+				val := v[k]
+				items = append(items, fmt.Sprintf("%s%s: %s,", nextIndent, k, valueToGoWithProperty(ctx, val, indent+1, k)))
+			}
+			return fmt.Sprintf("%s.%s{\n%s\n%s}", ctx.currentResource, ctx.currentTypeName, strings.Join(items, "\n"), indentStr)
 		}
 
 		// Fallback to map[string]any
@@ -590,6 +930,16 @@ func valueToGoWithProperty(ctx *codegenContext, value any, indent int, propName 
 	}
 
 	return fmt.Sprintf("%#v", value)
+}
+
+// isPointerField checks if a property field expects a pointer type.
+// Uses the PointerFields registry generated by codegen.
+func isPointerField(ctx *codegenContext, propName string) bool {
+	if propName == "" || ctx.currentTypeName == "" {
+		return false
+	}
+	key := ctx.currentResource + "." + ctx.currentTypeName + "." + propName
+	return resources.PointerFields[key]
 }
 
 // getPropertyTypeName returns the typed struct name for a property, if known.
@@ -610,9 +960,26 @@ func getPropertyTypeName(ctx *codegenContext, propName string) string {
 		return ""
 	}
 
+	// First, check PropertyTypeMap for the exact mapping.
+	// Format: "service.ResourceType.PropertyName" -> "ResourceType_ActualTypeName"
+	// This handles cases where the property name differs from the type name.
+	key := ctx.currentResource + "." + ctx.currentTypeName + "." + propName
+	if typeName, ok := resources.PropertyTypeMap[key]; ok {
+		return typeName
+	}
+
+	// Fallback: Try constructing type name from property name.
 	// CloudFormation property types are flat: {ResourceType}_{PropertyTypeName}
-	// The property type name is typically the same as the property field name
-	return ctx.currentTypeName + "_" + propName
+	typeName := ctx.currentTypeName + "_" + propName
+
+	// Check if this type exists in the registry
+	fullName := ctx.currentResource + "." + typeName
+	if resources.PropertyTypes[fullName] {
+		return typeName
+	}
+
+	// Type doesn't exist, fall back to map[string]any
+	return ""
 }
 
 // getArrayElementTypeName returns the typed struct name for array elements.
@@ -630,9 +997,28 @@ func getArrayElementTypeName(ctx *codegenContext, propName string) string {
 		return ""
 	}
 
+	// First, check PropertyTypeMap for the exact mapping.
+	// Format: "service.ResourceType.PropertyName" -> "ResourceType_ActualTypeName"
+	// This handles array properties where the type name differs from singular property name.
+	// e.g., "s3.Bucket.AnalyticsConfigurations" -> "Bucket_AnalyticsConfiguration"
+	key := ctx.currentResource + "." + ctx.currentTypeName + "." + propName
+	if typeName, ok := resources.PropertyTypeMap[key]; ok {
+		return typeName
+	}
+
+	// Fallback: Try singularizing the property name.
 	// Array element types use singular form
 	singular := singularize(propName)
-	return ctx.currentTypeName + "_" + singular
+	typeName := ctx.currentTypeName + "_" + singular
+
+	// Check if this type exists in the registry
+	fullName := ctx.currentResource + "." + typeName
+	if resources.PropertyTypes[fullName] {
+		return typeName
+	}
+
+	// Type doesn't exist, fall back to []any
+	return ""
 }
 
 // singularize converts a plural property name to singular for element types.
@@ -789,18 +1175,18 @@ func intrinsicToGo(ctx *codegenContext, intrinsic *IRIntrinsic) string {
 	case IntrinsicSub:
 		switch args := intrinsic.Args.(type) {
 		case string:
-			return fmt.Sprintf("Sub{%q}", args)
+			return fmt.Sprintf("Sub{String: %q}", args)
 		case []any:
 			if len(args) >= 2 {
 				template := fmt.Sprintf("%v", args[0])
 				vars := valueToGo(ctx, args[1], 0)
-				return fmt.Sprintf("SubWithMap{%q, %s}", template, vars)
+				return fmt.Sprintf("SubWithMap{String: %q, Variables: %s}", template, vars)
 			} else if len(args) == 1 {
 				template := fmt.Sprintf("%v", args[0])
-				return fmt.Sprintf("Sub{%q}", template)
+				return fmt.Sprintf("Sub{String: %q}", template)
 			}
 		}
-		return `Sub{""}`
+		return `Sub{String: ""}`
 
 	case IntrinsicJoin:
 		if args, ok := intrinsic.Args.([]any); ok && len(args) >= 2 {
@@ -1106,14 +1492,219 @@ func SanitizeGoName(name string) string {
 	return s
 }
 
-var goKeywords = map[string]bool{
-	"break": true, "case": true, "chan": true, "const": true, "continue": true,
-	"default": true, "defer": true, "else": true, "fallthrough": true, "for": true,
-	"func": true, "go": true, "goto": true, "if": true, "import": true,
-	"interface": true, "map": true, "package": true, "range": true, "return": true,
-	"select": true, "struct": true, "switch": true, "type": true, "var": true,
+// goKeywords and isGoKeyword are defined in parser.go
+
+// --- Policy Document Flattening ---
+
+// policyDocToBlocks converts a policy document map to typed structs.
+// Creates PolicyDocument and PolicyStatement blocks, returns the PolicyDocument var name.
+func policyDocToBlocks(ctx *codegenContext, doc map[string]any, parentVarName string, propName string) string {
+	ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
+
+	// Extract version (default "2012-10-17")
+	version := "2012-10-17"
+	if v, ok := doc["Version"].(string); ok {
+		version = v
+	}
+
+	// Extract statements
+	statements, _ := doc["Statement"].([]any)
+	var statementVarNames []string
+
+	for i, stmt := range statements {
+		stmtMap, ok := stmt.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		// Generate var name for this statement
+		varName := fmt.Sprintf("%s%sStatement%d", parentVarName, propName, i)
+
+		// Create statement block
+		statementToBlock(ctx, stmtMap, varName)
+		statementVarNames = append(statementVarNames, varName)
+	}
+
+	// Create PolicyDocument block
+	policyVarName := parentVarName + propName
+	policyProps := map[string]any{
+		"Version":   version,
+		"Statement": statementVarNames, // Will be handled specially
+	}
+
+	ctx.propertyBlocks = append(ctx.propertyBlocks, propertyBlock{
+		varName:    policyVarName,
+		typeName:   "PolicyDocument",
+		properties: policyProps,
+		isPointer:  false,
+		order:      len(ctx.propertyBlocks),
+	})
+
+	return policyVarName
 }
 
-func isGoKeyword(s string) bool {
-	return goKeywords[s]
+// statementToBlock creates a PolicyStatement property block.
+func statementToBlock(ctx *codegenContext, stmt map[string]any, varName string) {
+	ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
+
+	// Determine if this is a Deny statement
+	effect, _ := stmt["Effect"].(string)
+	typeName := "PolicyStatement"
+	if effect == "Deny" {
+		typeName = "DenyStatement"
+	}
+
+	// Convert the statement properties
+	props := make(map[string]any)
+
+	// Copy fields, transforming Principal and Condition
+	for k, v := range stmt {
+		switch k {
+		case "Effect":
+			// Skip Effect for DenyStatement (it's implicit)
+			if typeName != "DenyStatement" {
+				props[k] = v
+			}
+		case "Principal":
+			props[k] = v // Will be transformed during generation
+		case "Condition":
+			props[k] = v // Will be transformed during generation
+		default:
+			props[k] = v
+		}
+	}
+
+	ctx.propertyBlocks = append(ctx.propertyBlocks, propertyBlock{
+		varName:    varName,
+		typeName:   typeName,
+		properties: props,
+		isPointer:  false,
+		order:      len(ctx.propertyBlocks),
+	})
+}
+
+// principalToGo converts a Principal value to typed Go code.
+// Converts {"Service": [...]} to ServicePrincipal{...}, etc.
+func principalToGo(ctx *codegenContext, value any) string {
+	ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
+
+	// Handle string principal (like "*")
+	if s, ok := value.(string); ok {
+		if s == "*" {
+			return `"*"`
+		}
+		return fmt.Sprintf("%q", s)
+	}
+
+	// Handle map principal
+	m, ok := value.(map[string]any)
+	if !ok {
+		return valueToGo(ctx, value, 0)
+	}
+
+	// Check for known principal types
+	if service, ok := m["Service"]; ok {
+		return principalTypeToGo(ctx, "ServicePrincipal", service)
+	}
+	if aws, ok := m["AWS"]; ok {
+		return principalTypeToGo(ctx, "AWSPrincipal", aws)
+	}
+	if federated, ok := m["Federated"]; ok {
+		return principalTypeToGo(ctx, "FederatedPrincipal", federated)
+	}
+
+	// Unknown principal format, fall back to Json
+	return jsonMapToGo(ctx, m)
+}
+
+// principalTypeToGo converts a principal value to a typed principal.
+func principalTypeToGo(ctx *codegenContext, typeName string, value any) string {
+	switch v := value.(type) {
+	case string:
+		return fmt.Sprintf("%s{%q}", typeName, v)
+	case []any:
+		var items []string
+		for _, item := range v {
+			items = append(items, valueToGo(ctx, item, 0))
+		}
+		return fmt.Sprintf("%s{%s}", typeName, strings.Join(items, ", "))
+	default:
+		return fmt.Sprintf("%s{%s}", typeName, valueToGo(ctx, value, 0))
+	}
+}
+
+// conditionToGo converts a Condition map to Go code with typed operators.
+func conditionToGo(ctx *codegenContext, value any) string {
+	ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
+
+	m, ok := value.(map[string]any)
+	if !ok {
+		return valueToGo(ctx, value, 0)
+	}
+
+	var items []string
+	for _, k := range sortedKeys(m) {
+		v := m[k]
+		// Use constant name if it's a known operator
+		keyStr := k
+		if constName, ok := conditionOperators[k]; ok {
+			keyStr = constName
+		} else {
+			keyStr = fmt.Sprintf("%q", k)
+		}
+		valStr := jsonMapToGo(ctx, v)
+		items = append(items, fmt.Sprintf("%s: %s", keyStr, valStr))
+	}
+
+	return fmt.Sprintf("Json{%s}", strings.Join(items, ", "))
+}
+
+// jsonMapToGo converts a map to Json{...} syntax.
+func jsonMapToGo(ctx *codegenContext, value any) string {
+	ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
+
+	switch v := value.(type) {
+	case map[string]any:
+		var items []string
+		for _, k := range sortedKeys(v) {
+			val := v[k]
+			items = append(items, fmt.Sprintf("%q: %s", k, jsonValueToGo(ctx, val)))
+		}
+		if len(items) == 0 {
+			return "Json{}"
+		}
+		return fmt.Sprintf("Json{%s}", strings.Join(items, ", "))
+	default:
+		return valueToGo(ctx, value, 0)
+	}
+}
+
+// jsonValueToGo converts a value for use inside Json{}.
+func jsonValueToGo(ctx *codegenContext, value any) string {
+	switch v := value.(type) {
+	case bool:
+		if v {
+			return "true"
+		}
+		return "false"
+	case int, int64:
+		return fmt.Sprintf("%d", v)
+	case float64:
+		if v == float64(int64(v)) {
+			return fmt.Sprintf("%d", int64(v))
+		}
+		return fmt.Sprintf("%g", v)
+	case string:
+		return fmt.Sprintf("%q", v)
+	case []any:
+		var items []string
+		for _, item := range v {
+			items = append(items, jsonValueToGo(ctx, item))
+		}
+		return fmt.Sprintf("[]any{%s}", strings.Join(items, ", "))
+	case map[string]any:
+		return jsonMapToGo(ctx, v)
+	default:
+		return valueToGo(ctx, value, 0)
+	}
 }
