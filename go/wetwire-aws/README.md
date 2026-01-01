@@ -59,12 +59,12 @@ go install github.com/lex00/wetwire-aws/cmd/wetwire-aws@latest
 
 | Command | Status | Description |
 |---------|--------|-------------|
-| `build` | ⚠️ Partial | Generate CloudFormation template |
-| `lint` | ⚠️ Partial | Check for issues |
+| `build` | ✅ Complete | Generate CloudFormation template |
+| `lint` | ✅ Complete | Check for issues (6 rules, --fix support) |
 | `init` | ✅ Complete | Initialize new project |
 | `import` | ✅ Complete | Import CF template to Go code |
-| `validate` | ❌ Missing | Validate resources |
-| `list` | ❌ Missing | List resources |
+| `validate` | ❌ Planned | Validate resources |
+| `list` | ❌ Planned | List resources |
 
 ## Implementation Status
 
@@ -73,34 +73,19 @@ go install github.com/lex00/wetwire-aws/cmd/wetwire-aws@latest
 - **Intrinsic Functions**: All CloudFormation intrinsics (Ref, GetAtt, Sub, Join, etc.)
 - **Pseudo-Parameters**: AWS_REGION, AWS_ACCOUNT_ID, AWS_STACK_NAME, etc.
 - **AST Discovery**: Parse Go source to find resource declarations
+- **Value Extraction**: Extract property values from compiled Go code
 - **Template Builder**: Build CF template with topological ordering
 - **Cycle Detection**: Detect circular dependencies
 - **JSON/YAML Output**: Serialize to CF template format
+- **Linter**: 6 rules (WAW001-WAW006) with auto-fix support
 - **Code Generator**: Generate Go types from CloudFormation spec
 
 ### What's Missing
 
-| Feature | Priority | Issue |
-|---------|----------|-------|
-| `build` value loading | **P0** | Currently uses empty placeholders |
-| Full linter | P1 | Only checks discovery errors, no rules |
-| `validate` command | P1 | Not implemented |
-| `list` command | P1 | Not implemented |
-
-### Known Issues
-
-1. **Empty Properties in Build Output**
-
-   The `build` command discovers resources but outputs empty properties.
-   See TODO at `cmd/wetwire-aws/build.go:65-68`:
-
-   ```go
-   // TODO: Load actual resource values from compiled Go code
-   // For now, we just use empty values as placeholder
-   for name := range result.Resources {
-       builder.SetValue(name, map[string]any{})
-   }
-   ```
+| Feature | Priority | Description |
+|---------|----------|-------------|
+| `validate` command | P1 | Validate resources against CloudFormation |
+| `list` command | P2 | List discovered resources |
 
 ## Package Structure
 
