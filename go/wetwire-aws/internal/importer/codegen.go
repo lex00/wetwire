@@ -8,6 +8,20 @@ import (
 	"unicode"
 )
 
+// pseudoParameterConstants maps pseudo-parameter strings that appear as literal values
+// to their Go constant equivalents. This handles edge cases where pseudo-parameters
+// appear outside of Ref context.
+var pseudoParameterConstants = map[string]string{
+	"AWS::NoValue":          "AWS_NO_VALUE",
+	"AWS::Region":           "AWS_REGION",
+	"AWS::AccountId":        "AWS_ACCOUNT_ID",
+	"AWS::StackName":        "AWS_STACK_NAME",
+	"AWS::StackId":          "AWS_STACK_ID",
+	"AWS::Partition":        "AWS_PARTITION",
+	"AWS::URLSuffix":        "AWS_URL_SUFFIX",
+	"AWS::NotificationARNs": "AWS_NOTIFICATION_ARNS",
+}
+
 // GenerateCode generates Go code from a parsed IR template.
 // Returns a map of filename to content.
 func GenerateCode(template *IRTemplate, packageName string) map[string]string {
@@ -286,6 +300,11 @@ func valueToGo(ctx *codegenContext, value any, indent int) string {
 		return fmt.Sprintf("%g", v)
 
 	case string:
+		// Check for pseudo-parameters that should be constants
+		if pseudoConst, ok := pseudoParameterConstants[v]; ok {
+			ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
+			return pseudoConst
+		}
 		return fmt.Sprintf("%q", v)
 
 	case []any:
@@ -302,6 +321,18 @@ func valueToGo(ctx *codegenContext, value any, indent int) string {
 		if len(v) == 0 {
 			return "map[string]any{}"
 		}
+		// Check if this is an intrinsic function map (single key starting with "Ref" or "Fn::")
+		if len(v) == 1 {
+			for k := range v {
+				if k == "Ref" || strings.HasPrefix(k, "Fn::") || k == "Condition" {
+					// Convert to IRIntrinsic and use intrinsicToGo
+					intrinsic := mapToIntrinsic(v)
+					if intrinsic != nil {
+						return intrinsicToGo(ctx, intrinsic)
+					}
+				}
+			}
+		}
 		var items []string
 		for _, k := range sortedKeys(v) {
 			val := v[k]
@@ -311,6 +342,60 @@ func valueToGo(ctx *codegenContext, value any, indent int) string {
 	}
 
 	return fmt.Sprintf("%#v", value)
+}
+
+// mapToIntrinsic converts a map with an intrinsic key to an IRIntrinsic.
+// Returns nil if the map is not a recognized intrinsic.
+func mapToIntrinsic(m map[string]any) *IRIntrinsic {
+	if len(m) != 1 {
+		return nil
+	}
+
+	for k, v := range m {
+		var intrinsicType IntrinsicType
+		switch k {
+		case "Ref":
+			intrinsicType = IntrinsicRef
+		case "Fn::GetAtt":
+			intrinsicType = IntrinsicGetAtt
+		case "Fn::Sub":
+			intrinsicType = IntrinsicSub
+		case "Fn::Join":
+			intrinsicType = IntrinsicJoin
+		case "Fn::Select":
+			intrinsicType = IntrinsicSelect
+		case "Fn::GetAZs":
+			intrinsicType = IntrinsicGetAZs
+		case "Fn::If":
+			intrinsicType = IntrinsicIf
+		case "Fn::Equals":
+			intrinsicType = IntrinsicEquals
+		case "Fn::And":
+			intrinsicType = IntrinsicAnd
+		case "Fn::Or":
+			intrinsicType = IntrinsicOr
+		case "Fn::Not":
+			intrinsicType = IntrinsicNot
+		case "Fn::Base64":
+			intrinsicType = IntrinsicBase64
+		case "Fn::FindInMap":
+			intrinsicType = IntrinsicFindInMap
+		case "Fn::Cidr":
+			intrinsicType = IntrinsicCidr
+		case "Fn::ImportValue":
+			intrinsicType = IntrinsicImportValue
+		case "Fn::Split":
+			intrinsicType = IntrinsicSplit
+		case "Fn::Transform":
+			intrinsicType = IntrinsicTransform
+		case "Condition":
+			intrinsicType = IntrinsicCondition
+		default:
+			return nil
+		}
+		return &IRIntrinsic{Type: intrinsicType, Args: v}
+	}
+	return nil
 }
 
 // intrinsicToGo converts an IRIntrinsic to Go source code.
