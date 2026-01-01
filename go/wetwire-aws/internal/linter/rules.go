@@ -13,6 +13,7 @@
 //	WAW006: Use typed policy document structs instead of inline versions
 //	WAW007: Use typed slices instead of []any{map[string]any{...}}
 //	WAW008: Use named var declarations instead of inline struct literals (block style)
+//	WAW009: Use typed structs instead of map[string]any in resource fields
 package linter
 
 import (
@@ -708,6 +709,107 @@ func (r InlineStructLiteral) Check(file *ast.File, fset *token.FileSet) []Issue 
 	return issues
 }
 
+// UnflattenedMap detects any map[string]any in resource field assignments.
+// This is a comprehensive rule that catches all cases where typed structs should be used.
+//
+// Example:
+//
+//	// Bad - unflattened map
+//	BucketEncryption: map[string]any{
+//	    "ServerSideEncryptionConfiguration": []any{...},
+//	}
+//
+//	// Good - use typed struct
+//	BucketEncryption: s3.Bucket_BucketEncryption{
+//	    ServerSideEncryptionConfiguration: []s3.Bucket_ServerSideEncryptionRule{...},
+//	}
+type UnflattenedMap struct{}
+
+func (r UnflattenedMap) ID() string { return "WAW009" }
+func (r UnflattenedMap) Description() string {
+	return "Use typed structs instead of map[string]any in resource fields"
+}
+
+// Fields to ignore (they legitimately use map[string]any or are handled elsewhere)
+var ignoreFields = map[string]bool{
+	"Tags":     true, // Handled by Tag type
+	"Metadata": true, // Arbitrary metadata
+}
+
+func (r UnflattenedMap) Check(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		// Look for field assignments in struct literals
+		kv, ok := n.(*ast.KeyValueExpr)
+		if !ok {
+			return true
+		}
+
+		// Get the field name
+		fieldName := ""
+		switch key := kv.Key.(type) {
+		case *ast.Ident:
+			fieldName = key.Name
+		case *ast.BasicLit:
+			// Skip string keys in maps (those are the map[string]any keys)
+			return true
+		}
+
+		// Skip ignored fields
+		if ignoreFields[fieldName] {
+			return true
+		}
+
+		// Check if value is map[string]any
+		comp, ok := kv.Value.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		if isMapStringAny(comp.Type) {
+			pos := fset.Position(kv.Pos())
+			issues = append(issues, Issue{
+				RuleID:     r.ID(),
+				Message:    fmt.Sprintf("%s: use typed struct instead of map[string]any", fieldName),
+				Suggestion: fmt.Sprintf("// Use the appropriate property type struct for %s", fieldName),
+				File:       pos.Filename,
+				Line:       pos.Line,
+				Column:     pos.Column,
+				Severity:   "warning",
+			})
+		}
+
+		// Also check for []any containing map[string]any
+		if arrType, ok := comp.Type.(*ast.ArrayType); ok {
+			if elemIdent, ok := arrType.Elt.(*ast.Ident); ok && elemIdent.Name == "any" {
+				// Check if any element is map[string]any
+				for _, elt := range comp.Elts {
+					if innerComp, ok := elt.(*ast.CompositeLit); ok {
+						if isMapStringAny(innerComp.Type) {
+							pos := fset.Position(kv.Pos())
+							issues = append(issues, Issue{
+								RuleID:     r.ID(),
+								Message:    fmt.Sprintf("%s: use typed slice instead of []any{map[string]any{...}}", fieldName),
+								Suggestion: fmt.Sprintf("// Use []ResourceType_%sItem{...} or extract to named vars", fieldName),
+								File:       pos.Filename,
+								Line:       pos.Line,
+								Column:     pos.Column,
+								Severity:   "warning",
+							})
+							break // Only report once per field
+						}
+					}
+				}
+			}
+		}
+
+		return true
+	})
+
+	return issues
+}
+
 // AllRules returns all available lint rules.
 func AllRules() []Rule {
 	return []Rule{
@@ -719,5 +821,6 @@ func AllRules() []Rule {
 		HardcodedPolicyVersion{},
 		InlineMapInSlice{},
 		InlineStructLiteral{},
+		UnflattenedMap{},
 	}
 }
