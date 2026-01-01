@@ -1,0 +1,82 @@
+name: wetwire-agent Go CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'go/wetwire-agent/**'
+      - '.github/workflows/wetwire-agent-go-ci.yml'
+  pull_request:
+    paths:
+      - 'go/wetwire-agent/**'
+      - '.github/workflows/wetwire-agent-go-ci.yml'
+
+defaults:
+  run:
+    working-directory: go/wetwire-agent
+
+jobs:
+  test:
+    name: Test Go ${{ matrix.go-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ['1.21', '1.22', '1.23']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-agent-${{ matrix.go-version }}
+          path: go/wetwire-agent/coverage.out
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          working-directory: go/wetwire-agent
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build CLI
+        run: go build -v ./cmd/wetwire-agent
+
+      - name: Verify CLI runs
+        run: |
+          ./wetwire-agent --help
+          ./wetwire-agent list personas
+          echo "CLI built and runs successfully"
