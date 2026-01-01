@@ -642,7 +642,9 @@ func generateParameter(ctx *codegenContext, param *IRParameter) string {
 
 	varName := param.LogicalID
 	if param.Description != "" {
-		lines = append(lines, fmt.Sprintf("// %s - %s", varName, param.Description))
+		// Wrap long descriptions to avoid multi-line comment issues
+		desc := wrapComment(param.Description, 80)
+		lines = append(lines, fmt.Sprintf("// %s - %s", varName, desc))
 	}
 
 	// Use Param() helper for clarity that this is a parameter reference
@@ -652,6 +654,20 @@ func generateParameter(ctx *codegenContext, param *IRParameter) string {
 	return strings.Join(lines, "\n")
 }
 
+// wrapComment truncates or wraps a comment to fit on a single line.
+func wrapComment(s string, maxLen int) string {
+	// Replace newlines with spaces
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	// Collapse multiple spaces
+	s = strings.Join(strings.Fields(s), " ")
+	// Truncate if too long
+	if len(s) > maxLen {
+		s = s[:maxLen-3] + "..."
+	}
+	return s
+}
+
 func generateMapping(ctx *codegenContext, mapping *IRMapping) string {
 	varName := mapping.LogicalID + "Mapping"
 	value := valueToGo(ctx, mapping.MapData, 0)
@@ -659,7 +675,7 @@ func generateMapping(ctx *codegenContext, mapping *IRMapping) string {
 }
 
 func generateCondition(ctx *codegenContext, condition *IRCondition) string {
-	varName := condition.LogicalID + "Condition"
+	varName := SanitizeGoName(condition.LogicalID) + "Condition"
 	value := valueToGo(ctx, condition.Expression, 0)
 	return fmt.Sprintf("var %s = %s", varName, value)
 }
@@ -1124,15 +1140,22 @@ func generateArrayElementVarName(ctx *codegenContext, parentVarName string, prop
 
 // cleanForVarName cleans a string value for use in a Go variable name.
 func cleanForVarName(s string) string {
-	// Remove common prefixes and special chars, convert to PascalCase
+	// Handle negative numbers (e.g., "-1" -> "Neg1") before removing hyphens
+	s = strings.ReplaceAll(s, "-", "Neg")
+
+	// Remove other special chars
 	s = strings.ReplaceAll(s, "/", "")
-	s = strings.ReplaceAll(s, "-", "")
 	s = strings.ReplaceAll(s, "_", "")
 	s = strings.ReplaceAll(s, ".", "")
 	s = strings.ReplaceAll(s, ":", "")
 
-	// Capitalize first letter
-	if len(s) > 0 {
+	// If starts with a digit, prefix with N
+	if len(s) > 0 && s[0] >= '0' && s[0] <= '9' {
+		s = "N" + s
+	}
+
+	// Capitalize first letter if lowercase
+	if len(s) > 0 && s[0] >= 'a' && s[0] <= 'z' {
 		s = strings.ToUpper(s[:1]) + s[1:]
 	}
 
