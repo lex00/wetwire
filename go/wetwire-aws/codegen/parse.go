@@ -7,10 +7,19 @@ import (
 
 // Service represents a group of resources for one AWS service.
 type Service struct {
-	Name          string                    // e.g., "s3"
-	CFPrefix      string                    // e.g., "AWS::S3"
-	Resources     map[string]ParsedResource // ResourceName -> Definition
-	PropertyTypes map[string]ParsedProperty // PropertyName -> Definition
+	Name          string                        // e.g., "s3"
+	CFPrefix      string                        // e.g., "AWS::S3"
+	Resources     map[string]ParsedResource     // ResourceName -> Definition
+	PropertyTypes map[string]ParsedPropertyType // PropertyTypeName -> Definition
+}
+
+// ParsedPropertyType is a parsed property type (nested struct).
+type ParsedPropertyType struct {
+	Name          string                    // e.g., "Ingress"
+	CFType        string                    // e.g., "AWS::EC2::SecurityGroup.Ingress"
+	ParentResource string                   // e.g., "SecurityGroup" (the resource this belongs to)
+	Documentation string
+	Properties    map[string]ParsedProperty // The properties of this type
 }
 
 // ParsedResource is a parsed resource type.
@@ -68,7 +77,7 @@ func parseSpec(spec *CFSpec, filterService string) []*Service {
 				Name:          serviceName,
 				CFPrefix:      "AWS::" + parts[1],
 				Resources:     make(map[string]ParsedResource),
-				PropertyTypes: make(map[string]ParsedProperty),
+				PropertyTypes: make(map[string]ParsedPropertyType),
 			}
 			services[serviceName] = svc
 		}
@@ -99,7 +108,7 @@ func parseSpec(spec *CFSpec, filterService string) []*Service {
 	}
 
 	// Parse property types and add to services
-	for cfType, propDef := range spec.PropertyTypes {
+	for cfType, propTypeDef := range spec.PropertyTypes {
 		// Parse AWS::S3::Bucket.VersioningConfiguration
 		parts := strings.Split(cfType, "::")
 		if len(parts) != 3 || parts[0] != "AWS" {
@@ -113,6 +122,7 @@ func parseSpec(spec *CFSpec, filterService string) []*Service {
 		}
 
 		serviceName := strings.ToLower(parts[1])
+		parentResource := dotParts[0]
 		propTypeName := dotParts[1]
 
 		if filterService != "" && serviceName != filterService {
@@ -124,11 +134,19 @@ func parseSpec(spec *CFSpec, filterService string) []*Service {
 			continue
 		}
 
-		// Parse as a nested struct
-		parsed := ParsedProperty{
-			Name:          propTypeName,
-			GoType:        propTypeName,
-			Documentation: propDef.Documentation,
+		// Parse properties for this property type
+		properties := make(map[string]ParsedProperty)
+		for propName, propDef := range propTypeDef.Properties {
+			properties[propName] = parseProperty(propName, propDef)
+		}
+
+		// Parse as a full nested struct with properties
+		parsed := ParsedPropertyType{
+			Name:           propTypeName,
+			CFType:         cfType,
+			ParentResource: parentResource,
+			Documentation:  propTypeDef.Documentation,
+			Properties:     properties,
 		}
 
 		svc.PropertyTypes[propTypeName] = parsed

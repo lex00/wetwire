@@ -63,6 +63,23 @@ func generateService(svc *Service, outputDir string, dryRun bool, stats *Generat
 		stats.Resources++
 	}
 
+	// Generate types.go for property types (always, to include Tag)
+	typesCode, err := generatePropertyTypes(svc)
+	if err != nil {
+		return fmt.Errorf("generating property types: %w", err)
+	}
+
+	typesFile := filepath.Join(svcDir, "types.go")
+	if dryRun {
+		fmt.Printf("Would write: %s\n", typesFile)
+	} else {
+		if err := os.WriteFile(typesFile, typesCode, 0644); err != nil {
+			return err
+		}
+		stats.FilesWritten++
+	}
+	stats.PropertyTypes += len(svc.PropertyTypes)
+
 	// Generate doc.go for the package
 	docCode := generateDoc(svc)
 	docFile := filepath.Join(svcDir, "doc.go")
@@ -83,11 +100,11 @@ var resourceTemplate = template.Must(template.New("resource").Parse(`// Code gen
 // Generated: {{ .Timestamp }}
 
 package {{ .PackageName }}
-
+{{ if .HasAttributes }}
 import (
 	wetwire "github.com/lex00/wetwire-aws"
 )
-
+{{ end }}
 {{ if .Documentation }}
 // {{ .ResourceName }} represents {{ .CFType }}.
 // {{ .Documentation }}
@@ -95,9 +112,9 @@ import (
 // {{ .ResourceName }} represents {{ .CFType }}.
 {{ end }}
 type {{ .ResourceName }} struct {
-	// Attributes for Fn::GetAtt
-{{ range .Attributes }}	{{ .Name }} wetwire.AttrRef ` + "`json:\"-\"`" + `
-{{ end }}
+{{ if .HasAttributes }}	// Attributes for Fn::GetAtt
+{{ range .Attributes }}	{{ .GoName }} wetwire.AttrRef ` + "`json:\"-\"`" + `
+{{ end }}{{ end }}
 	// Properties
 {{ range .Properties }}{{ if .Documentation }}	// {{ .Documentation }}
 {{ end }}	{{ .Name }} {{ .GoType }} ` + "`json:\"{{ .JSONName }},omitempty\"`" + `
@@ -110,13 +127,14 @@ func (r {{ .ResourceName }}) ResourceType() string {
 `))
 
 type resourceTemplateData struct {
-	PackageName  string
-	ResourceName string
-	CFType       string
+	PackageName   string
+	ResourceName  string
+	CFType        string
 	Documentation string
-	Timestamp    string
-	Properties   []propertyData
-	Attributes   []attributeData
+	Timestamp     string
+	Properties    []propertyData
+	Attributes    []attributeData
+	HasAttributes bool // true if there are any attributes (for conditional import)
 }
 
 type propertyData struct {
@@ -127,10 +145,27 @@ type propertyData struct {
 }
 
 type attributeData struct {
-	Name string
+	Name    string
+	GoName  string // Sanitized Go identifier
+	CFName  string // Original CloudFormation attribute name
 }
 
 func generateResource(svc *Service, res ParsedResource) ([]byte, error) {
+	// Build map of property type names to qualified names for this service
+	// Property types are named as ParentResource_PropertyType
+	// When multiple property types share the same simple name, prefer the one
+	// from the same parent resource as the current resource.
+	propTypeNames := make(map[string]string)
+	for ptName, pt := range svc.PropertyTypes {
+		qualifiedName := pt.ParentResource + "_" + ptName
+		// Prefer property types from the same parent resource
+		if pt.ParentResource == res.Name {
+			propTypeNames[ptName] = qualifiedName
+		} else if _, exists := propTypeNames[ptName]; !exists {
+			propTypeNames[ptName] = qualifiedName
+		}
+	}
+
 	// Prepare properties
 	var props []propertyData
 	propNames := make([]string, 0, len(res.Properties))
@@ -141,25 +176,32 @@ func generateResource(svc *Service, res ParsedResource) ([]byte, error) {
 
 	for _, name := range propNames {
 		prop := res.Properties[name]
-		goType := prop.GoType
-
-		// Handle pointers for optional fields
-		if prop.IsPointer {
-			goType = "*" + goType
-		}
+		goType := resolveTypeReferences(prop.GoType, propTypeNames, prop.IsPointer)
 
 		// Clean up documentation
 		doc := cleanDoc(prop.Documentation)
 
+		// Rename properties that conflict with struct methods
+		goName := name
+		if name == "ResourceType" {
+			goName = "ResourceTypeProp"
+		}
+
 		props = append(props, propertyData{
-			Name:          name,
+			Name:          goName,
 			GoType:        goType,
 			JSONName:      name,
 			Documentation: doc,
 		})
 	}
 
-	// Prepare attributes
+	// Build set of property names to avoid attribute conflicts
+	propNameSet := make(map[string]bool)
+	for _, p := range props {
+		propNameSet[p.Name] = true
+	}
+
+	// Prepare attributes (sanitized and non-conflicting)
 	var attrs []attributeData
 	attrNames := make([]string, 0, len(res.Attributes))
 	for name := range res.Attributes {
@@ -168,8 +210,20 @@ func generateResource(svc *Service, res ParsedResource) ([]byte, error) {
 	sort.Strings(attrNames)
 
 	for _, name := range attrNames {
+		// Sanitize: replace dots with underscores for valid Go identifiers
+		goName := strings.ReplaceAll(name, ".", "_")
+		// Skip attributes that conflict with property names
+		if propNameSet[goName] {
+			continue
+		}
+		// Rename attributes that conflict with struct methods
+		if goName == "ResourceType" {
+			goName = "ResourceTypeAttr"
+		}
 		attrs = append(attrs, attributeData{
-			Name: name,
+			Name:   goName,
+			GoName: goName,
+			CFName: name,
 		})
 	}
 
@@ -184,6 +238,7 @@ func generateResource(svc *Service, res ParsedResource) ([]byte, error) {
 		Timestamp:     time.Now().Format(time.RFC3339),
 		Properties:    props,
 		Attributes:    attrs,
+		HasAttributes: len(attrs) > 0,
 	}
 
 	var buf bytes.Buffer
@@ -210,6 +265,18 @@ func generateDoc(svc *Service) []byte {
 	return buf.Bytes()
 }
 
+// isGoKeyword checks if a name is a Go keyword.
+func isGoKeyword(s string) bool {
+	keywords := map[string]bool{
+		"break": true, "case": true, "chan": true, "const": true, "continue": true,
+		"default": true, "defer": true, "else": true, "fallthrough": true, "for": true,
+		"func": true, "go": true, "goto": true, "if": true, "import": true,
+		"interface": true, "map": true, "package": true, "range": true, "return": true,
+		"select": true, "struct": true, "switch": true, "type": true, "var": true,
+	}
+	return keywords[strings.ToLower(s)]
+}
+
 // toSnakeCase converts PascalCase to snake_case.
 func toSnakeCase(s string) string {
 	var result strings.Builder
@@ -220,6 +287,40 @@ func toSnakeCase(s string) string {
 		result.WriteRune(r)
 	}
 	return strings.ToLower(result.String())
+}
+
+// resolveTypeReferences resolves property type names to their qualified names.
+// Handles simple types, slices, maps, and pointers.
+func resolveTypeReferences(goType string, qualifiedNames map[string]string, isPointer bool) string {
+	// Handle slice types like []SomeType
+	if strings.HasPrefix(goType, "[]") {
+		baseType := strings.TrimPrefix(goType, "[]")
+		if qn, ok := qualifiedNames[baseType]; ok {
+			return "[]" + qn
+		}
+		return goType
+	}
+
+	// Handle map types like map[string]SomeType
+	if strings.HasPrefix(goType, "map[string]") {
+		baseType := strings.TrimPrefix(goType, "map[string]")
+		if qn, ok := qualifiedNames[baseType]; ok {
+			return "map[string]" + qn
+		}
+		return goType
+	}
+
+	// Handle simple types
+	if qn, ok := qualifiedNames[goType]; ok {
+		goType = qn
+	}
+
+	// Handle pointers for optional fields (after type resolution)
+	if isPointer {
+		goType = "*" + goType
+	}
+
+	return goType
 }
 
 // cleanDoc cleans up CloudFormation documentation for Go comments.
@@ -237,4 +338,139 @@ func cleanDoc(doc string) string {
 		doc = doc[:200] + "..."
 	}
 	return doc
+}
+
+var propertyTypesTemplate = template.Must(template.New("types").Parse(`// Code generated by wetwire-aws codegen. DO NOT EDIT.
+// Source: CloudFormation Resource Specification
+// Generated: {{ .Timestamp }}
+
+package {{ .PackageName }}
+{{ if not .SkipTag }}
+// Tag represents a CloudFormation tag.
+// This is a shared type used across all services.
+type Tag struct {
+	Key   string ` + "`json:\"Key\"`" + `
+	Value any    ` + "`json:\"Value\"`" + `
+}
+{{ end }}
+
+{{ range .Types }}
+{{ if .Documentation }}// {{ .Name }} represents {{ .CFType }}.
+// {{ .Documentation }}
+{{ else }}// {{ .Name }} represents {{ .CFType }}.
+{{ end }}type {{ .Name }} struct {
+{{ range .Properties }}{{ if .Documentation }}	// {{ .Documentation }}
+{{ end }}	{{ .Name }} {{ .GoType }} ` + "`json:\"{{ .JSONName }},omitempty\"`" + `
+{{ end }}}
+{{ end }}
+`))
+
+type typesTemplateData struct {
+	PackageName string
+	Timestamp   string
+	Types       []typeData
+	SkipTag     bool // True if the service has a Tag resource (to avoid conflict)
+}
+
+type typeData struct {
+	Name          string
+	CFType        string
+	Documentation string
+	Properties    []propertyData
+}
+
+// generatePropertyTypes generates the types.go file with all property types.
+func generatePropertyTypes(svc *Service) ([]byte, error) {
+	// Build set of resource names to detect collisions
+	resourceNames := make(map[string]bool)
+	for name := range svc.Resources {
+		resourceNames[name] = true
+	}
+
+	// Sort property type names for deterministic output
+	typeNames := make([]string, 0, len(svc.PropertyTypes))
+	for name := range svc.PropertyTypes {
+		typeNames = append(typeNames, name)
+	}
+	sort.Strings(typeNames)
+
+	// Build map of property type names to their qualified names
+	// (parent resource + property type name, e.g., "Instance_BlockDeviceMapping")
+	// Note: Some property types may have the same simple name from different resources.
+	// We use the first occurrence for the simple name lookup.
+	qualifiedNames := make(map[string]string)
+	for _, name := range typeNames {
+		propType := svc.PropertyTypes[name]
+		// Use parent resource prefix to avoid collisions
+		qualifiedName := propType.ParentResource + "_" + name
+		// Only map simple name if not already mapped (avoid overwriting)
+		if _, exists := qualifiedNames[name]; !exists {
+			qualifiedNames[name] = qualifiedName
+		}
+		// Always map the full qualified name to itself for explicit lookups
+		qualifiedNames[qualifiedName] = qualifiedName
+	}
+
+	var types []typeData
+	for _, name := range typeNames {
+		propType := svc.PropertyTypes[name]
+		qualifiedName := qualifiedNames[name]
+
+		// Sort properties
+		propNames := make([]string, 0, len(propType.Properties))
+		for pn := range propType.Properties {
+			propNames = append(propNames, pn)
+		}
+		sort.Strings(propNames)
+
+		var props []propertyData
+		for _, pn := range propNames {
+			prop := propType.Properties[pn]
+			goType := resolveTypeReferences(prop.GoType, qualifiedNames, prop.IsPointer)
+
+			// Sanitize property name if it's a Go keyword
+			goName := pn
+			if isGoKeyword(pn) {
+				goName = pn + "_"
+			}
+
+			props = append(props, propertyData{
+				Name:          goName,
+				GoType:        goType,
+				JSONName:      pn,
+				Documentation: cleanDoc(prop.Documentation),
+			})
+		}
+
+		types = append(types, typeData{
+			Name:          qualifiedName,
+			CFType:        propType.CFType,
+			Documentation: cleanDoc(propType.Documentation),
+			Properties:    props,
+		})
+	}
+
+	// Check if service has a Tag resource (to skip generating common Tag type)
+	_, hasTagResource := svc.Resources["Tag"]
+
+	data := typesTemplateData{
+		PackageName: svc.Name,
+		Timestamp:   time.Now().Format(time.RFC3339),
+		Types:       types,
+		SkipTag:     hasTagResource,
+	}
+
+	var buf bytes.Buffer
+	if err := propertyTypesTemplate.Execute(&buf, data); err != nil {
+		return nil, err
+	}
+
+	// Format the code
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		// Return unformatted if formatting fails
+		return buf.Bytes(), nil
+	}
+
+	return formatted, nil
 }

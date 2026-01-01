@@ -523,6 +523,100 @@ func (r HardcodedPolicyVersion) Check(file *ast.File, fset *token.FileSet) []Iss
 	return issues
 }
 
+// InlineMapInSlice detects []any{map[string]any{...}} patterns that should use typed slices.
+// Common in SecurityGroupIngress, BlockDeviceMappings, etc.
+type InlineMapInSlice struct{}
+
+func (r InlineMapInSlice) ID() string { return "WAW007" }
+func (r InlineMapInSlice) Description() string {
+	return "Use typed slices instead of []any{map[string]any{...}}"
+}
+
+// Known CloudFormation property arrays that should use typed structs
+var knownPropertyArrays = map[string]string{
+	"SecurityGroupIngress":  "Use ec2.Ingress struct",
+	"SecurityGroupEgress":   "Use ec2.Egress struct",
+	"BlockDeviceMappings":   "Use ec2.BlockDeviceMapping struct",
+	"Tags":                  "Use Tag struct (already handled)",
+	"Statement":             "Use iam.Statement struct",
+	"Policies":              "Use iam.Policy struct",
+	"Rules":                 "Use typed rule struct",
+	"Listeners":             "Use typed listener struct",
+	"TargetGroupAttributes": "Use typed attribute struct",
+}
+
+func (r InlineMapInSlice) Check(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		// Look for field assignments in struct literals
+		kv, ok := n.(*ast.KeyValueExpr)
+		if !ok {
+			return true
+		}
+
+		// Check if the key is a known property array field
+		keyIdent, ok := kv.Key.(*ast.Ident)
+		if !ok {
+			return true
+		}
+
+		suggestion, isKnown := knownPropertyArrays[keyIdent.Name]
+		if !isKnown {
+			return true
+		}
+
+		// Skip Tags since we handle those specially
+		if keyIdent.Name == "Tags" {
+			return true
+		}
+
+		// Check if value is []any{map[string]any{...}}
+		comp, ok := kv.Value.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		// Check for []any type
+		arrType, ok := comp.Type.(*ast.ArrayType)
+		if !ok {
+			return true
+		}
+		elemIdent, ok := arrType.Elt.(*ast.Ident)
+		if !ok || elemIdent.Name != "any" {
+			return true
+		}
+
+		// Check if elements are map[string]any
+		hasInlineMaps := false
+		for _, elt := range comp.Elts {
+			if innerComp, ok := elt.(*ast.CompositeLit); ok {
+				if isMapStringAny(innerComp.Type) {
+					hasInlineMaps = true
+					break
+				}
+			}
+		}
+
+		if hasInlineMaps {
+			pos := fset.Position(kv.Pos())
+			issues = append(issues, Issue{
+				RuleID:     r.ID(),
+				Message:    keyIdent.Name + " uses inline map[string]any. " + suggestion,
+				Suggestion: "// Refactor to use typed structs",
+				File:       pos.Filename,
+				Line:       pos.Line,
+				Column:     pos.Column,
+				Severity:   "warning",
+			})
+		}
+
+		return true
+	})
+
+	return issues
+}
+
 // AllRules returns all available lint rules.
 func AllRules() []Rule {
 	return []Rule{
@@ -532,5 +626,6 @@ func AllRules() []Rule {
 		FileTooLarge{MaxResources: 15},
 		InlinePropertyType{},
 		HardcodedPolicyVersion{},
+		InlineMapInSlice{},
 	}
 }

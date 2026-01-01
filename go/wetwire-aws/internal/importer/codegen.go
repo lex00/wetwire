@@ -37,10 +37,31 @@ func GenerateCode(template *IRTemplate, packageName string) map[string]string {
 
 // codegenContext holds state during code generation.
 type codegenContext struct {
-	template      *IRTemplate
-	packageName   string
-	imports       map[string]bool // import path -> true
-	resourceOrder []string        // topologically sorted resource IDs
+	template         *IRTemplate
+	packageName      string
+	imports          map[string]bool // import path -> true
+	resourceOrder    []string        // topologically sorted resource IDs
+	currentResource  string          // current resource type being generated (e.g., "ec2")
+	currentProperty  string          // current property being generated (e.g., "SecurityGroupIngress")
+}
+
+// knownPropertyTypes maps (service, propertyName) to the typed struct to use.
+// Property types are qualified with their parent resource (e.g., SecurityGroup_Ingress).
+// This enables generating []ec2.SecurityGroup_Ingress{...} instead of []any{map[string]any{...}}.
+var knownPropertyTypes = map[string]map[string]string{
+	"ec2": {
+		"SecurityGroupIngress": "SecurityGroup_Ingress",
+		"SecurityGroupEgress":  "SecurityGroup_Egress",
+		"BlockDeviceMappings":  "Instance_BlockDeviceMapping",
+		"Volumes":              "Instance_Volume",
+	},
+	"iam": {
+		"Policies": "Role_Policy",
+	},
+	"elasticloadbalancingv2": {
+		"TargetGroupAttributes": "TargetGroup_TargetGroupAttribute",
+		"Actions":               "Listener_Action",
+	},
 }
 
 func newCodegenContext(template *IRTemplate, packageName string) *codegenContext {
@@ -165,6 +186,9 @@ func generateResource(ctx *codegenContext, resource *IRResource) string {
 	// Add import
 	ctx.imports[fmt.Sprintf("github.com/lex00/wetwire-aws/resources/%s", module)] = true
 
+	// Set current resource context for typed property generation
+	ctx.currentResource = module
+
 	varName := resource.LogicalID
 
 	// Build struct literal
@@ -173,10 +197,14 @@ func generateResource(ctx *codegenContext, resource *IRResource) string {
 	// Properties
 	for _, propName := range sortedKeys(resource.Properties) {
 		prop := resource.Properties[propName]
+		ctx.currentProperty = propName // Set property context
 		var value string
 		// Special handling for Tags property
 		if propName == "Tags" {
 			value = tagsToGo(ctx, prop.Value, 1)
+		} else if typedStruct := getTypedPropertyStruct(ctx.currentResource, propName); typedStruct != "" {
+			// Use typed struct for known property arrays
+			value = typedArrayToGo(ctx, prop.Value, typedStruct, 1)
 		} else {
 			value = valueToGo(ctx, prop.Value, 1)
 		}
@@ -186,6 +214,48 @@ func generateResource(ctx *codegenContext, resource *IRResource) string {
 	lines = append(lines, "}")
 
 	return strings.Join(lines, "\n")
+}
+
+// getTypedPropertyStruct returns the struct type name for a known property array.
+func getTypedPropertyStruct(service, propName string) string {
+	if serviceProps, ok := knownPropertyTypes[service]; ok {
+		if structName, ok := serviceProps[propName]; ok {
+			return structName
+		}
+	}
+	return ""
+}
+
+// typedArrayToGo converts an array to a typed slice using the specified struct type.
+func typedArrayToGo(ctx *codegenContext, value any, structType string, indent int) string {
+	indentStr := strings.Repeat("\t", indent)
+	nextIndent := strings.Repeat("\t", indent+1)
+
+	arr, ok := value.([]any)
+	if !ok || len(arr) == 0 {
+		return fmt.Sprintf("[]%s.%s{}", ctx.currentResource, structType)
+	}
+
+	var items []string
+	for _, item := range arr {
+		itemMap, ok := item.(map[string]any)
+		if !ok {
+			// Fallback to generic handling
+			items = append(items, nextIndent+valueToGo(ctx, item, indent+1)+",")
+			continue
+		}
+
+		// Generate struct literal
+		var fields []string
+		for _, k := range sortedKeys(itemMap) {
+			v := itemMap[k]
+			fieldVal := valueToGo(ctx, v, 0)
+			fields = append(fields, fmt.Sprintf("%s: %s", k, fieldVal))
+		}
+		items = append(items, fmt.Sprintf("%s{%s},", nextIndent, strings.Join(fields, ", ")))
+	}
+
+	return fmt.Sprintf("[]%s.%s{\n%s\n%s}", ctx.currentResource, structType, strings.Join(items, "\n"), indentStr)
 }
 
 func generateOutput(ctx *codegenContext, output *IROutput) string {
