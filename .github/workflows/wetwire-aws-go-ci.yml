@@ -66,6 +66,7 @@ jobs:
         with:
           version: latest
           working-directory: go/wetwire-aws
+          args: ./cmd/... ./internal/... ./codegen/... ./intrinsics/... ./*.go
 
   build:
     name: Build
