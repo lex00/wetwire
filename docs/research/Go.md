@@ -1,9 +1,66 @@
 # Wetwire Go Implementation
 
-**Status**: Research complete
+**Status**: Implementation in progress (feature/go-implementation branch)
 **Purpose**: Document Go ecosystem mappings, patterns, and architectural decisions for implementing wetwire in Go.
 **Scope**: Go-specific design decisions; see `ImplementationChecklist.md` for feature matrix.
 **Recommendation**: **Viable** - Direct type declaration, direct references.
+
+---
+
+## IMPLEMENTATION STATUS (2024-12-31)
+
+### Package Locations
+
+```
+go/
+├── wetwire-aws/           # AWS CloudFormation synthesis library + CLI
+│   ├── cmd/wetwire-aws/   # CLI: build, lint, init
+│   ├── internal/          # discover, serialize, template
+│   ├── intrinsics/        # Ref, GetAtt, Sub, etc. + pseudo-parameters
+│   ├── codegen/           # Generate Go types from CF spec
+│   ├── docs/              # QUICK_START.md, CLI.md
+│   └── scripts/           # ci.sh, import_aws_samples.sh
+│
+└── wetwire-agent/         # AI agent orchestration CLI
+    ├── cmd/wetwire-agent/ # CLI: design, test, run-scenario, list
+    ├── internal/          # personas, scoring, results, orchestrator, agents
+    ├── docs/              # QUICK_START.md, CLI.md
+    └── scripts/           # ci.sh
+```
+
+### What's Working
+
+| Feature | Status | Location |
+|---------|--------|----------|
+| Intrinsic functions | ✅ | `intrinsics/intrinsics.go` |
+| Pseudo-parameters | ✅ | `intrinsics/pseudo.go` |
+| AST resource discovery | ✅ | `internal/discover/` |
+| Template builder | ✅ | `internal/template/` |
+| Topological sort | ✅ | `internal/template/template.go` |
+| JSON/YAML serialization | ✅ | `internal/serialize/` |
+| CF spec codegen | ✅ | `codegen/` |
+| Agent personas | ✅ | `internal/personas/` |
+| 5-dimension scoring | ✅ | `internal/scoring/` |
+| Session results | ✅ | `internal/results/` |
+| Orchestrator | ✅ | `internal/orchestrator/` |
+| Anthropic SDK integration | ✅ | `internal/agents/` |
+
+### What's Missing or Incomplete
+
+| Feature | Issue | Priority |
+|---------|-------|----------|
+| **`import` command** | Not implemented - blocks import_aws_samples.sh | **P0** |
+| **`build` value loading** | Uses empty placeholders (TODO in build.go:65-68) | **P0** |
+| **Full linter** | Only checks discovery errors, no rules/auto-fix | P1 |
+| `validate` command | Not implemented | P1 |
+| `list` command | Not implemented | P1 |
+
+### Critical Path
+
+1. **Implement `import` command** - Parse CF YAML/JSON → Generate Go code
+2. **Fix `build` value loading** - Load actual struct values from Go source
+3. **Run import_aws_samples.sh** - Test against real AWS templates
+4. **Debug and iterate** - Fix issues, add to ignore list as needed
 
 ---
 
