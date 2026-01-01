@@ -36,6 +36,8 @@ Then generate CloudFormation JSON:
 
 	rootCmd.AddCommand(
 		newBuildCmd(),
+		newValidateCmd(),
+		newListCmd(),
 		newLintCmd(),
 		newInitCmd(),
 		newImportCmd(),

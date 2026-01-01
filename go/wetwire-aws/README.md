@@ -60,11 +60,11 @@ go install github.com/lex00/wetwire-aws/cmd/wetwire-aws@latest
 | Command | Status | Description |
 |---------|--------|-------------|
 | `build` | ✅ Complete | Generate CloudFormation template |
+| `validate` | ✅ Complete | Validate resources and references |
+| `list` | ✅ Complete | List discovered resources |
 | `lint` | ✅ Complete | Check for issues (6 rules, --fix support) |
 | `init` | ✅ Complete | Initialize new project |
 | `import` | ✅ Complete | Import CF template to Go code |
-| `validate` | ❌ Planned | Validate resources |
-| `list` | ❌ Planned | List resources |
 
 ## Implementation Status
 
@@ -82,10 +82,11 @@ go install github.com/lex00/wetwire-aws/cmd/wetwire-aws@latest
 
 ### What's Missing
 
+All core CLI commands are now implemented. Potential future enhancements:
+
 | Feature | Priority | Description |
 |---------|----------|-------------|
-| `validate` command | P1 | Validate resources against CloudFormation |
-| `list` command | P2 | List discovered resources |
+| Additional lint rules | P3 | Port more Python lint rules to Go |
 
 ## Package Structure
 
@@ -94,6 +95,8 @@ wetwire-aws/
 ├── cmd/wetwire-aws/       # CLI application
 │   ├── main.go            # Entry point
 │   ├── build.go           # build command
+│   ├── validate.go        # validate command
+│   ├── list.go            # list command
 │   ├── lint.go            # lint command
 │   ├── init.go            # init command
 │   └── import.go          # import command
