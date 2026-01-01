@@ -10,6 +10,129 @@ import (
 	"github.com/lex00/wetwire-aws/resources"
 )
 
+// serviceCategories maps AWS service names to file categories.
+// This matches the Python implementation in linter/splitting.py.
+var serviceCategories = map[string]string{
+	// Compute
+	"EC2":         "compute",
+	"Lambda":      "compute",
+	"ECS":         "compute",
+	"EKS":         "compute",
+	"Batch":       "compute",
+	"AutoScaling": "compute",
+	// Storage
+	"S3":  "storage",
+	"EFS": "storage",
+	"FSx": "storage",
+	// Database
+	"RDS":         "database",
+	"DynamoDB":    "database",
+	"ElastiCache": "database",
+	"Neptune":     "database",
+	"DocumentDB":  "database",
+	"Redshift":    "database",
+	// Networking
+	"ElasticLoadBalancing":   "network",
+	"ElasticLoadBalancingV2": "network",
+	"Route53":                "network",
+	"CloudFront":             "network",
+	"APIGateway":             "network",
+	"ApiGatewayV2":           "network",
+	// Security/IAM
+	"IAM":            "security",
+	"Cognito":        "security",
+	"SecretsManager": "security",
+	"KMS":            "security",
+	"WAF":            "security",
+	"WAFv2":          "security",
+	"ACM":            "security",
+	"SSM":            "security",
+	// Messaging/Integration
+	"SNS":           "messaging",
+	"SQS":           "messaging",
+	"EventBridge":   "messaging",
+	"Events":        "messaging",
+	"StepFunctions": "messaging",
+	// Monitoring/Logging
+	"CloudWatch":  "monitoring",
+	"Logs":        "monitoring",
+	"CloudTrail":  "monitoring",
+	"KinesisFirehose": "monitoring",
+	// CI/CD
+	"CodeBuild":    "cicd",
+	"CodePipeline": "cicd",
+	"CodeCommit":   "cicd",
+	"CodeDeploy":   "cicd",
+	// Infrastructure
+	"CloudFormation": "infra",
+	"Config":         "infra",
+	"ServiceCatalog": "infra",
+}
+
+// ec2NetworkKeywords are keywords that identify EC2 resources as network-related.
+var ec2NetworkKeywords = []string{
+	"VPC", "Subnet", "Route", "Gateway", "Network", "Interface",
+	"Security", "Acl", "VPN", "Transit", "Peering", "EIP",
+	"Customer", "DHCP", "Carrier", "Insights", "FlowLog",
+	"Association", "Attachment", "Prefix", "Traffic", "Egress",
+	"Ingress", "LocalGateway", "Verified", "Endpoint",
+}
+
+// ec2ComputeKeywords are keywords that identify EC2 resources as compute-related.
+var ec2ComputeKeywords = []string{
+	"Instance", "Fleet", "Host", "KeyPair", "Capacity", "Volume",
+	"Placement", "IPAM", "Snapshot", "Enclave", "LaunchTemplate",
+	"SpotFleet", "Image", "AMI",
+}
+
+// isEC2NetworkType checks if an EC2 resource type is network-related.
+func isEC2NetworkType(typeName string) bool {
+	// Special case: Endpoint types are always network
+	if strings.Contains(typeName, "Endpoint") {
+		return true
+	}
+
+	// Exclude compute keywords first (these take precedence)
+	for _, kw := range ec2ComputeKeywords {
+		if strings.Contains(typeName, kw) {
+			return false
+		}
+	}
+
+	// Include network keywords
+	for _, kw := range ec2NetworkKeywords {
+		if strings.Contains(typeName, kw) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// categorizeResourceType returns the category for a CloudFormation resource type.
+// Maps AWS resource types to category names for file organization.
+func categorizeResourceType(resourceType string) string {
+	// Parse resource type: "AWS::EC2::VPC" → service="EC2", typeName="VPC"
+	parts := strings.Split(resourceType, "::")
+	if len(parts) != 3 || parts[0] != "AWS" {
+		return "main"
+	}
+
+	service := parts[1]
+	typeName := parts[2]
+
+	// Special case: EC2 VPC/networking resources go to network, not compute
+	if service == "EC2" && isEC2NetworkType(typeName) {
+		return "network"
+	}
+
+	if category, ok := serviceCategories[service]; ok {
+		return category
+	}
+
+	return "main"
+}
+
 // pseudoParameterConstants maps pseudo-parameter strings that appear as literal values
 // to their Go constant equivalents. This handles edge cases where pseudo-parameters
 // appear outside of Ref context.
@@ -70,18 +193,53 @@ var conditionOperators = map[string]string{
 
 // GenerateCode generates Go code from a parsed IR template.
 // Returns a map of filename to content.
+// Files are split by category:
+//   - params.go: Parameters + Conditions
+//   - outputs.go: Outputs
+//   - security.go: IAM, Cognito, KMS, etc.
+//   - network.go: VPC, Subnets, ELB, CloudFront, etc.
+//   - compute.go: EC2 Instances, Lambda, ECS, etc.
+//   - storage.go: S3, EFS, etc.
+//   - database.go: RDS, DynamoDB, etc.
+//   - messaging.go: SNS, SQS, EventBridge, etc.
+//   - monitoring.go: CloudWatch, Logs, etc.
+//   - main.go: Mappings + uncategorized resources
 func GenerateCode(template *IRTemplate, packageName string) map[string]string {
 	ctx := newCodegenContext(template, packageName)
 
 	// Generate multi-file output
 	files := make(map[string]string)
 
-	// First pass: generate resources to track parameter usage and collect imports
-	resourceCode, resourceImports := generateResources(ctx)
+	// First pass: categorize resources
+	resourcesByCategory := make(map[string][]string)
+	for _, resourceID := range ctx.resourceOrder {
+		resource := ctx.template.Resources[resourceID]
+		category := categorizeResourceType(resource.ResourceType)
+		resourcesByCategory[category] = append(resourcesByCategory[category], resourceID)
+	}
 
-	// Generate params.go if there are used parameters
-	if paramsCode, paramsImports := generateParams(ctx); paramsCode != "" {
-		files["params.go"] = buildFile(ctx.packageName, "Parameters", paramsImports, paramsCode)
+	// Second pass: generate resources by category to track parameter usage and collect imports
+	categoryCode := make(map[string]string)
+	categoryImports := make(map[string]map[string]bool)
+
+	for category, resourceIDs := range resourcesByCategory {
+		code, imports := generateResourcesByIDs(ctx, resourceIDs)
+		categoryCode[category] = code
+		categoryImports[category] = imports
+	}
+
+	// Generate params.go if there are used parameters or conditions
+	paramsCode, paramsImports := generateParams(ctx)
+	conditionsCode := generateConditions(ctx)
+	if paramsCode != "" || conditionsCode != "" {
+		combined := paramsCode
+		if conditionsCode != "" {
+			if combined != "" {
+				combined += "\n\n"
+			}
+			combined += conditionsCode
+		}
+		files["params.go"] = buildFile(ctx.packageName, "Parameters and Conditions", paramsImports, combined)
 	}
 
 	// Generate outputs.go if there are outputs
@@ -89,17 +247,49 @@ func GenerateCode(template *IRTemplate, packageName string) map[string]string {
 		files["outputs.go"] = buildFile(ctx.packageName, "Outputs", outputsImports, outputsCode)
 	}
 
-	// Generate main file with resources, conditions, mappings
-	mainCode := resourceCode
-	if conditionsCode := generateConditions(ctx); conditionsCode != "" {
-		mainCode = conditionsCode + "\n\n" + mainCode
-	}
-	if mappingsCode := generateMappings(ctx); mappingsCode != "" {
-		mainCode = mappingsCode + "\n\n" + mainCode
+	// Generate category files
+	categoryDescriptions := map[string]string{
+		"security":   "Security resources: IAM, Cognito, KMS, etc.",
+		"network":    "Network resources: VPC, Subnets, Load Balancers, CloudFront, etc.",
+		"compute":    "Compute resources: EC2, Lambda, ECS, etc.",
+		"storage":    "Storage resources: S3, EFS, etc.",
+		"database":   "Database resources: RDS, DynamoDB, etc.",
+		"messaging":  "Messaging resources: SNS, SQS, EventBridge, etc.",
+		"monitoring": "Monitoring resources: CloudWatch, Logs, etc.",
+		"cicd":       "CI/CD resources: CodeBuild, CodePipeline, etc.",
+		"infra":      "Infrastructure resources: CloudFormation, Config, etc.",
+		"main":       "Main resources",
 	}
 
-	if mainCode != "" {
-		files[packageName+".go"] = buildFile(ctx.packageName, ctx.template.Description, resourceImports, mainCode)
+	for category, code := range categoryCode {
+		if code == "" {
+			continue
+		}
+
+		imports := categoryImports[category]
+		description := categoryDescriptions[category]
+		if description == "" {
+			description = category + " resources"
+		}
+
+		// Add mappings to main file only
+		if category == "main" {
+			if mappingsCode := generateMappings(ctx); mappingsCode != "" {
+				code = mappingsCode + "\n\n" + code
+			}
+		}
+
+		filename := category + ".go"
+		files[filename] = buildFile(ctx.packageName, description, imports, code)
+	}
+
+	// If there are only mappings and no main resources, still generate main.go
+	if _, hasMain := categoryCode["main"]; !hasMain {
+		if mappingsCode := generateMappings(ctx); mappingsCode != "" {
+			imports := make(map[string]bool)
+			imports["github.com/lex00/wetwire-aws/intrinsics"] = true
+			files["main.go"] = buildFile(ctx.packageName, "Mappings", imports, mappingsCode)
+		}
 	}
 
 	return files
@@ -183,6 +373,31 @@ func generateResources(ctx *codegenContext) (string, map[string]bool) {
 	}
 
 	return strings.Join(sections, "\n\n"), ctx.imports
+}
+
+// generateResourcesByIDs generates resource declarations for specific resource IDs.
+// Returns code and imports for just those resources.
+func generateResourcesByIDs(ctx *codegenContext, resourceIDs []string) (string, map[string]bool) {
+	// Save and reset imports for this category
+	savedImports := ctx.imports
+	ctx.imports = make(map[string]bool)
+
+	var sections []string
+	for _, resourceID := range resourceIDs {
+		resource := ctx.template.Resources[resourceID]
+		sections = append(sections, generateResource(ctx, resource))
+	}
+
+	// Capture category imports
+	categoryImports := ctx.imports
+
+	// Merge into saved imports (for cross-category reference tracking)
+	for imp := range categoryImports {
+		savedImports[imp] = true
+	}
+	ctx.imports = savedImports
+
+	return strings.Join(sections, "\n\n"), categoryImports
 }
 
 // generateConditions generates condition declarations.
