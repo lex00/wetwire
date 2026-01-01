@@ -88,7 +88,7 @@ var ProcessorRole = iam.Role{
 
 // Flat environment - extracted from inline
 var ProcessorEnv = lambda.Environment{
-    Variables: map[string]any{
+    Variables: Json{
         "BUCKET_NAME": Ref{LogicalId: "DataBucket"},
     },
 }
@@ -159,7 +159,7 @@ import (
 
 // Flat environment variable
 var ProcessorEnv = lambda.Environment{
-    Variables: map[string]any{
+    Variables: Json{
         // Cross-file reference - DataBucket is discovered from storage.go
         "BUCKET_NAME": Ref{LogicalId: "DataBucket"},
     },
