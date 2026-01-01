@@ -29,6 +29,7 @@ type RunnerAgent struct {
 	generatedFiles []string
 	templateJSON   string
 	maxLintCycles  int
+	streamHandler  StreamHandler
 
 	// Lint enforcement state
 	lintCalled  bool // Has lint been run at least once?
@@ -36,6 +37,10 @@ type RunnerAgent struct {
 	pendingLint bool // Does code need linting (written since last lint)?
 	lintCycles  int  // Number of lint attempts
 }
+
+// StreamHandler is called for each text chunk during streaming.
+// The handler receives text chunks as they are generated.
+type StreamHandler func(text string)
 
 // RunnerConfig configures the RunnerAgent.
 type RunnerConfig struct {
@@ -56,6 +61,10 @@ type RunnerConfig struct {
 
 	// Developer to ask clarifying questions
 	Developer orchestrator.Developer
+
+	// StreamHandler is called for each text chunk during streaming.
+	// If nil, responses are not streamed.
+	StreamHandler StreamHandler
 }
 
 // NewRunnerAgent creates a new RunnerAgent.
@@ -83,6 +92,7 @@ func NewRunnerAgent(config RunnerConfig) (*RunnerAgent, error) {
 		developer:     config.Developer,
 		workDir:       config.WorkDir,
 		maxLintCycles: config.MaxLintCycles,
+		streamHandler: config.StreamHandler,
 	}, nil
 }
 
@@ -131,14 +141,24 @@ Always run_lint after writing files, and fix any issues before running build.`
 		default:
 		}
 
-		// Call the API
-		resp, err := r.client.Messages.New(ctx, anthropic.MessageNewParams{
+		params := anthropic.MessageNewParams{
 			Model:     anthropic.ModelClaudeSonnet4_20250514,
 			MaxTokens: 4096,
 			System:    []anthropic.TextBlockParam{{Text: systemPrompt}},
 			Messages:  messages,
 			Tools:     tools,
-		})
+		}
+
+		var resp *anthropic.Message
+		var err error
+
+		if r.streamHandler != nil {
+			// Use streaming API
+			resp, err = r.runWithStreaming(ctx, params)
+		} else {
+			// Use non-streaming API
+			resp, err = r.client.Messages.New(ctx, params)
+		}
 		if err != nil {
 			return fmt.Errorf("API call failed: %w", err)
 		}
@@ -189,6 +209,107 @@ Always run_lint after writing files, and fix any issues before running build.`
 	}
 
 	return nil
+}
+
+// runWithStreaming executes an API call with streaming and calls the stream handler for each text chunk.
+func (r *RunnerAgent) runWithStreaming(ctx context.Context, params anthropic.MessageNewParams) (*anthropic.Message, error) {
+	stream := r.client.Messages.NewStreaming(ctx, params)
+
+	// Accumulate the full response
+	var message *anthropic.Message
+	var contentBlocks []anthropic.ContentBlockUnion
+	var currentBlockIndex int64 = -1
+	currentTextContent := make(map[int64]*strings.Builder)
+	currentToolInput := make(map[int64]*strings.Builder)
+
+	for stream.Next() {
+		event := stream.Current()
+
+		switch event.Type {
+		case "message_start":
+			// Initialize message from start event
+			startEvent := event.AsMessageStart()
+			message = &startEvent.Message
+			contentBlocks = nil
+			currentTextContent = make(map[int64]*strings.Builder)
+
+		case "content_block_start":
+			// Initialize a new content block
+			startEvent := event.AsContentBlockStart()
+			currentBlockIndex = startEvent.Index
+
+			// Initialize content builders based on block type
+			if startEvent.ContentBlock.Type == "text" {
+				currentTextContent[currentBlockIndex] = &strings.Builder{}
+			} else if startEvent.ContentBlock.Type == "tool_use" {
+				currentToolInput[currentBlockIndex] = &strings.Builder{}
+			}
+
+			// Create the block - Input/Text will be accumulated
+			block := anthropic.ContentBlockUnion{
+				Type: startEvent.ContentBlock.Type,
+				ID:   startEvent.ContentBlock.ID,
+				Name: startEvent.ContentBlock.Name,
+				Text: startEvent.ContentBlock.Text,
+			}
+			contentBlocks = append(contentBlocks, block)
+
+		case "content_block_delta":
+			// Handle content deltas
+			deltaEvent := event.AsContentBlockDelta()
+
+			if deltaEvent.Delta.Type == "text_delta" && deltaEvent.Delta.Text != "" {
+				// Stream the text to handler
+				r.streamHandler(deltaEvent.Delta.Text)
+
+				// Accumulate text
+				if builder, ok := currentTextContent[deltaEvent.Index]; ok {
+					builder.WriteString(deltaEvent.Delta.Text)
+				}
+			}
+
+			// Handle tool use input deltas
+			if deltaEvent.Delta.Type == "input_json_delta" && deltaEvent.Delta.PartialJSON != "" {
+				if builder, ok := currentToolInput[deltaEvent.Index]; ok {
+					builder.WriteString(deltaEvent.Delta.PartialJSON)
+				}
+			}
+
+		case "content_block_stop":
+			// Finalize the content block with accumulated content
+			stopEvent := event.AsContentBlockStop()
+			idx := int(stopEvent.Index)
+			if idx < len(contentBlocks) {
+				// Set accumulated text
+				if builder, ok := currentTextContent[stopEvent.Index]; ok {
+					contentBlocks[idx].Text = builder.String()
+				}
+				// Set accumulated tool input
+				if builder, ok := currentToolInput[stopEvent.Index]; ok {
+					contentBlocks[idx].Input = json.RawMessage(builder.String())
+				}
+			}
+
+		case "message_delta":
+			// Apply final message delta (stop_reason, usage)
+			deltaEvent := event.AsMessageDelta()
+			if message != nil {
+				message.StopReason = deltaEvent.Delta.StopReason
+				message.StopSequence = deltaEvent.Delta.StopSequence
+			}
+		}
+	}
+
+	if err := stream.Err(); err != nil {
+		return nil, err
+	}
+
+	// Set accumulated content blocks on message
+	if message != nil {
+		message.Content = contentBlocks
+	}
+
+	return message, nil
 }
 
 // checkLintEnforcement checks if the agent violated lint enforcement rules.
