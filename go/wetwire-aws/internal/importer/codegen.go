@@ -1466,7 +1466,7 @@ func singularize(name string) string {
 		return name[:len(name)-2]
 	}
 	if strings.HasSuffix(name, "s") && !strings.HasSuffix(name, "ss") {
-		// e.g., Origins -> Origin, but not Address -> Addres
+		// e.g., Origins -> Origin, but keep Addresses as Address
 		return name[:len(name)-1]
 	}
 	return name

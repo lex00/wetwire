@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	wetwire "github.com/lex00/wetwire-aws"
 	"github.com/lex00/wetwire-aws/internal/discover"
+	"github.com/lex00/wetwire-aws/internal/runner"
 	"github.com/lex00/wetwire-aws/internal/template"
-	"github.com/spf13/cobra"
 )
 
 func newBuildCmd() *cobra.Command {
@@ -62,10 +64,19 @@ func runBuild(packages []string, format, outputFile string) error {
 	// Build template
 	builder := template.NewBuilder(result.Resources)
 
-	// TODO: Load actual resource values from compiled Go code
-	// For now, we just use empty values as placeholder
-	for name := range result.Resources {
-		builder.SetValue(name, map[string]any{})
+	// Extract actual resource values by running a generated Go program
+	values, err := runner.ExtractValues(packages[0], result.Resources)
+	if err != nil {
+		buildResult := wetwire.BuildResult{
+			Success: false,
+			Errors:  []string{fmt.Sprintf("extracting values: %v", err)},
+		}
+		return outputResult(buildResult, format, outputFile)
+	}
+
+	// Set the extracted values
+	for name, props := range values {
+		builder.SetValue(name, props)
 	}
 
 	tmpl, err := builder.Build()

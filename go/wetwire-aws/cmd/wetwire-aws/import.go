@@ -5,8 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lex00/wetwire-aws/internal/importer"
 	"github.com/spf13/cobra"
+
+	"github.com/lex00/wetwire-aws/internal/importer"
 )
 
 func newImportCmd() *cobra.Command {

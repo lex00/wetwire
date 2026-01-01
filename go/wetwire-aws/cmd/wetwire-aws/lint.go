@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	wetwire "github.com/lex00/wetwire-aws"
 	"github.com/lex00/wetwire-aws/internal/discover"
 	"github.com/lex00/wetwire-aws/internal/linter"
-	"github.com/spf13/cobra"
 )
 
 func newLintCmd() *cobra.Command {

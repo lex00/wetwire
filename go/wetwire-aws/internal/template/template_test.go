@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	wetwire "github.com/lex00/wetwire-aws"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	wetwire "github.com/lex00/wetwire-aws"
 )
 
 func TestBuilder_Build_SimpleResource(t *testing.T) {

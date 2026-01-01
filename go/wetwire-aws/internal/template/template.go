@@ -3,11 +3,13 @@ package template
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 
-	wetwire "github.com/lex00/wetwire-aws"
 	"gopkg.in/yaml.v3"
+
+	wetwire "github.com/lex00/wetwire-aws"
 )
 
 // Builder constructs CloudFormation templates from discovered resources.
@@ -234,10 +236,10 @@ func (b *Builder) detectCycle() error {
 				msg += "\n    → "
 			}
 		}
-		return fmt.Errorf(msg)
+		return errors.New(msg)
 	}
 
-	return fmt.Errorf("circular dependency detected")
+	return errors.New("circular dependency detected")
 }
 
 // cfResourceType converts Go type to CloudFormation type.
