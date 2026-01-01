@@ -3,7 +3,13 @@
 // This package shells out to external CLIs to validate infrastructure code:
 //   - wetwire-aws lint: Check code style and patterns
 //   - wetwire-aws build: Generate CloudFormation templates
-//   - cfn-lint: Validate CloudFormation templates
+//   - cfn-lint: Validate CloudFormation templates (supports both Python cfn-lint and cfn-lint-go)
+//
+// For cfn-lint, the package is compatible with:
+//   - Python cfn-lint: https://github.com/aws-cloudformation/cfn-lint
+//   - cfn-lint-go: https://github.com/lex00/cfn-lint-go (v0.7.0+)
+//
+// Both tools use the same JSON output format and can be used interchangeably.
 package validation
 
 import (
@@ -168,6 +174,8 @@ func RunBuildAndSave(packageDir, outputDir string) (*BuildResult, error) {
 }
 
 // RunCfnLint runs cfn-lint on the given template file and parses the JSON output.
+// This function is compatible with both Python cfn-lint and cfn-lint-go, as both
+// use the same JSON output format when invoked with "-f json".
 func RunCfnLint(templatePath string) (*CfnLintResult, error) {
 	// Check if file exists
 	if _, err := os.Stat(templatePath); err != nil {
