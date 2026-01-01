@@ -207,35 +207,20 @@ go 1.22
 require github.com/lex00/wetwire-aws v0.1.0
 `, modulePath)
 
-	// cmd/main.go - Entry point for synthesis
-	files["cmd/main.go"] = fmt.Sprintf(`package main
+	// cmd/main.go - Entry point placeholder
+	// Note: The actual synthesis is done via `wetwire-aws build`
+	files["cmd/main.go"] = `package main
 
-import (
-	"encoding/json"
-	"fmt"
-	"os"
-
-	"%s"
-	"github.com/lex00/wetwire-aws/template"
-)
+import "fmt"
 
 func main() {
-	// Build the CloudFormation template
-	tmpl := template.New("%s")
-
-	// Register all resources from the package
-	_ = %s.Environment // Reference a var to ensure package is imported
-
-	// Synthesize to JSON
-	data, err := json.MarshalIndent(tmpl.ToMap(), "", "  ")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %%v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Println(string(data))
+	// Build this template using the wetwire-aws CLI:
+	//   wetwire-aws build .
+	//
+	// This generates template.json from the Go resource definitions.
+	fmt.Println("Usage: wetwire-aws build .")
 }
-`, modulePath, packageName, packageName)
+`
 
 	// .gitignore
 	files[".gitignore"] = `# Build output
