@@ -225,8 +225,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Verify Go is installed
-if ! command -v go &> /dev/null; then
+# Find Go binary
+GO_BIN=$(command -v go 2>/dev/null || echo "/usr/local/go/bin/go")
+if [ ! -x "$GO_BIN" ]; then
     error "Go is not installed. Please install Go first:"
     echo "  https://go.dev/doc/install"
     exit 1
@@ -234,7 +235,7 @@ fi
 
 # Build the CLI first
 header "Building wetwire-aws CLI"
-go build -o wetwire-aws ./cmd/wetwire-aws
+"$GO_BIN" build -o wetwire-aws ./cmd/wetwire-aws
 success "Built wetwire-aws CLI"
 
 # Number of parallel jobs (use CPU count, cap at 8)
