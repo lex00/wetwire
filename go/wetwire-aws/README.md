@@ -32,7 +32,7 @@ var ProcessorRole = iam.Role{
 // Environment extracted to flat variable
 var ProcessorEnv = lambda.Environment{
     Variables: Json{
-        "BUCKET": Ref{LogicalId: "DataBucket"},
+        "BUCKET": Ref{"DataBucket"},
     },
 }
 

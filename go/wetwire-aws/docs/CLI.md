@@ -212,8 +212,8 @@ All CloudFormation intrinsic functions are supported:
 
 | Function | Go API |
 |----------|--------|
-| Ref | `Ref{LogicalId: "MyResource"}` |
-| GetAtt | `GetAtt{LogicalId: "MyResource", Attribute: "Arn"}` |
+| Ref | `Ref{"MyResource"}` |
+| GetAtt | `GetAtt{"MyResource", "Arn"}` |
 | Sub | `Sub{String: "${AWS::StackName}-bucket"}` |
 | SubWithMap | `SubWithMap{String: "...", Variables: Json{...}}` |
 | Join | `Join{Delimiter: ",", Values: []any{"a", "b"}}` |
