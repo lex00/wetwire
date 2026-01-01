@@ -11,11 +11,11 @@ import (
 
 func newImportCmd() *cobra.Command {
 	var (
-		outputDir      string
-		packageName    string
-		modulePath     string
-		singleFile     bool
-		withScaffold   bool
+		outputDir    string
+		packageName  string
+		modulePath   string
+		singleFile   bool
+		noScaffold   bool
 	)
 
 	cmd := &cobra.Command{
@@ -23,15 +23,18 @@ func newImportCmd() *cobra.Command {
 		Short: "Import CloudFormation template to Go code",
 		Long: `Import a CloudFormation YAML/JSON template and generate Go code.
 
+By default, generates a complete project with go.mod, README.md, CLAUDE.md,
+.gitignore, and cmd/main.go. Use --no-scaffold to generate only resource files.
+
 Examples:
-  # Import a template and generate Go package
-  wetwire-aws import template.yaml -o ./infra
+  # Import a template and generate a complete Go project
+  wetwire-aws import template.yaml -o ./myproject
 
   # Import with custom package name
   wetwire-aws import template.yaml -o ./infra --package mystack
 
-  # Generate a complete project with go.mod, cmd/main.go, .gitignore, CLAUDE.md
-  wetwire-aws import template.yaml -o ./myproject --scaffold
+  # Generate only resource files (no go.mod, README, etc.)
+  wetwire-aws import template.yaml -o ./infra --no-scaffold
 
   # Generate a single file instead of a package
   wetwire-aws import template.yaml -o ./infra --single-file`,
@@ -53,8 +56,8 @@ Examples:
 			// Generate code
 			files := importer.GenerateCode(ir, packageName)
 
-			// Add scaffold files if requested
-			if withScaffold {
+			// Add scaffold files by default (unless --no-scaffold)
+			if !noScaffold && !singleFile {
 				if modulePath == "" {
 					modulePath = packageName
 				}
@@ -94,11 +97,6 @@ Examples:
 			fmt.Printf("\nImported %d resources, %d parameters, %d outputs\n",
 				len(ir.Resources), len(ir.Parameters), len(ir.Outputs))
 
-			if withScaffold {
-				fmt.Println("\nScaffold files generated:")
-				fmt.Println("  go.mod, cmd/main.go, .gitignore, CLAUDE.md")
-			}
-
 			return nil
 		},
 	}
@@ -107,7 +105,7 @@ Examples:
 	cmd.Flags().StringVarP(&packageName, "package", "p", "", "Package name (default: derived from template filename)")
 	cmd.Flags().StringVar(&modulePath, "module", "", "Go module path (default: same as package name)")
 	cmd.Flags().BoolVar(&singleFile, "single-file", false, "Generate a single file instead of a package")
-	cmd.Flags().BoolVar(&withScaffold, "scaffold", false, "Generate scaffold files (go.mod, cmd/main.go, .gitignore, CLAUDE.md)")
+	cmd.Flags().BoolVar(&noScaffold, "no-scaffold", false, "Skip scaffold files (go.mod, README.md, CLAUDE.md, .gitignore)")
 
 	return cmd
 }
