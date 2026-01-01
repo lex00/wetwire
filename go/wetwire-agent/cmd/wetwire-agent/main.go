@@ -36,6 +36,7 @@ The two-agent pattern:
 		newDesignCmd(),
 		newTestCmd(),
 		newRunScenarioCmd(),
+		newValidateScenariosCmd(),
 		newListCmd(),
 		newVersionCmd(),
 	)

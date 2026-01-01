@@ -17,6 +17,7 @@ func newTestCmd() *cobra.Command {
 		persona   string
 		outputDir string
 		prompt    string
+		domain    string
 	)
 
 	cmd := &cobra.Command{
@@ -31,22 +32,32 @@ user types (beginner, expert, terse, verbose, etc.).
 Examples:
     wetwire-agent test --persona beginner --prompt "I need a bucket"
     wetwire-agent test --persona expert --prompt "S3 with AES-256 SSE-S3"
-    wetwire-agent test --persona all --prompt "log bucket"`,
+    wetwire-agent test --persona all --prompt "log bucket"
+    wetwire-agent test --domain aws --prompt "S3 bucket with encryption"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTest(persona, prompt, outputDir)
+			return runTest(persona, prompt, outputDir, domain)
 		},
 	}
 
 	cmd.Flags().StringVarP(&persona, "persona", "p", "beginner", "Persona to use (beginner, intermediate, expert, terse, verbose, all)")
 	cmd.Flags().StringVarP(&outputDir, "output", "o", ".", "Output directory for results")
 	cmd.Flags().StringVar(&prompt, "prompt", "", "Initial prompt for the developer")
+	cmd.Flags().StringVarP(&domain, "domain", "d", "aws", "Infrastructure domain (aws)")
 	_ = cmd.MarkFlagRequired("prompt") // Flag defined above, safe to ignore
 
 	return cmd
 }
 
-func runTest(personaName, prompt, outputDir string) error {
+func runTest(personaName, prompt, outputDir, domain string) error {
 	ctx := context.Background()
+
+	// Validate domain
+	validDomains := map[string]bool{"aws": true}
+	if !validDomains[domain] {
+		return fmt.Errorf("unsupported domain: %s (available: aws)", domain)
+	}
+
+	fmt.Printf("Domain: %s\n", domain)
 
 	// Handle "all" personas
 	if personaName == "all" {

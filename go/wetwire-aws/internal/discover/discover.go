@@ -332,9 +332,23 @@ func findDeps(expr ast.Expr, deps *[]string, seen map[string]bool, imports map[s
 // isCommonIdent returns true for identifiers that are likely not resource names.
 func isCommonIdent(name string) bool {
 	common := map[string]bool{
+		// Go built-ins
 		"true": true, "false": true, "nil": true,
 		"string": true, "int": true, "bool": true, "float64": true,
 		"any": true, "error": true,
+
+		// Intrinsic function types (from intrinsics package)
+		"Ref": true, "Sub": true, "Join": true, "GetAtt": true,
+		"Select": true, "Split": true, "If": true, "Equals": true,
+		"And": true, "Or": true, "Not": true, "Condition": true,
+		"FindInMap": true, "Base64": true, "Cidr": true, "GetAZs": true,
+		"ImportValue": true, "Transform": true, "Json": true,
+
+		// Pseudo-parameter constants (from intrinsics package)
+		"AWS_ACCOUNT_ID": true, "AWS_NOTIFICATION_ARNS": true,
+		"AWS_NO_VALUE": true, "AWS_PARTITION": true,
+		"AWS_REGION": true, "AWS_STACK_ID": true,
+		"AWS_STACK_NAME": true, "AWS_URL_SUFFIX": true,
 	}
 	return common[name]
 }
