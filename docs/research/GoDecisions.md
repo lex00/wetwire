@@ -19,9 +19,8 @@ github.com/lex00/wetwire-agent   # Agent CLI tool (CLI only, not importable)
 ## Directory Structure
 
 ```
-wetwire-aws/
+go/wetwire-aws/
 ├── go.mod
-├── go.sum
 ├── contracts.go              # All interfaces (Resource, Template, etc.)
 ├── internal/
 │   ├── discover/             # AST parsing for var X = Type{...}
@@ -35,7 +34,8 @@ wetwire-aws/
 │       └── template_test.go
 ├── intrinsics/               # Public - Ref, GetAtt, Sub, etc.
 │   ├── intrinsics.go
-│   └── intrinsics_test.go
+│   ├── intrinsics_test.go
+│   └── pseudo.go             # AWS pseudo-parameters
 ├── s3/                       # Generated
 ├── iam/                      # Generated
 ├── ec2/                      # Generated
@@ -51,22 +51,30 @@ wetwire-aws/
         ├── main.go
         ├── build.go
         ├── lint.go
-        └── validate.go
+        └── init.go
 
-wetwire-agent/
+go/wetwire-agent/
 ├── go.mod
-├── go.sum
 ├── internal/
-│   ├── personas/
-│   ├── scoring/
-│   ├── results/
-│   └── orchestrator/
+│   ├── personas/             # Developer personas for testing
+│   │   ├── personas.go
+│   │   └── personas_test.go
+│   ├── scoring/              # Rubric-based scoring
+│   │   ├── scoring.go
+│   │   └── scoring_test.go
+│   ├── results/              # Session tracking and RESULTS.md
+│   │   └── results.go
+│   ├── orchestrator/         # Developer/Runner coordination
+│   │   └── orchestrator.go
+│   └── agents/               # Anthropic SDK integration
+│       └── agents.go
 └── cmd/
     └── wetwire-agent/
         ├── main.go
         ├── design.go
         ├── test.go
-        └── scenario.go
+        ├── scenario.go
+        └── list.go
 ```
 
 ---
@@ -94,31 +102,55 @@ type AttrRef struct {
 // MarshalJSON serializes to {"Fn::GetAtt": ["Resource", "Attr"]}
 func (a AttrRef) MarshalJSON() ([]byte, error)
 
-// Template represents a CloudFormation template
+// IsZero returns true if the AttrRef has not been populated
+func (a AttrRef) IsZero() bool
+
+// Template represents a CloudFormation template (strongly typed)
 type Template struct {
-    AWSTemplateFormatVersion string
-    Description              string
-    Resources                map[string]any
-    Parameters               map[string]any
-    Outputs                  map[string]any
+    AWSTemplateFormatVersion string                 `json:"AWSTemplateFormatVersion"`
+    Description              string                 `json:"Description,omitempty"`
+    Parameters               map[string]Parameter   `json:"Parameters,omitempty"`
+    Resources                map[string]ResourceDef `json:"Resources"`
+    Outputs                  map[string]Output      `json:"Outputs,omitempty"`
+}
+
+type ResourceDef struct {
+    Type       string         `json:"Type"`
+    Properties map[string]any `json:"Properties,omitempty"`
+    DependsOn  []string       `json:"DependsOn,omitempty"`
+}
+
+type Parameter struct {
+    Type          string   `json:"Type"`
+    Description   string   `json:"Description,omitempty"`
+    Default       any      `json:"Default,omitempty"`
+    AllowedValues []string `json:"AllowedValues,omitempty"`
+}
+
+type Output struct {
+    Description string `json:"Description,omitempty"`
+    Value       any    `json:"Value"`
+    Export      *struct {
+        Name string `json:"Name"`
+    } `json:"Export,omitempty"`
 }
 
 // DiscoveredResource represents a resource found by AST parsing
 type DiscoveredResource struct {
-    Name         string            // Variable name (logical name)
-    Type         string            // Go type (e.g., "iam.Role")
-    Package      string            // Package path
-    File         string            // Source file
-    Line         int               // Line number
-    Dependencies []string          // Other resources referenced
+    Name         string   // Variable name (logical name)
+    Type         string   // Go type (e.g., "iam.Role")
+    Package      string   // Package path
+    File         string   // Source file
+    Line         int      // Line number
+    Dependencies []string // Other resources referenced
 }
 
 // BuildResult is the JSON output from `wetwire-aws build`
 type BuildResult struct {
-    Success   bool              `json:"success"`
-    Template  map[string]any    `json:"template,omitempty"`
-    Errors    []string          `json:"errors,omitempty"`
-    Resources []string          `json:"resources,omitempty"`
+    Success   bool     `json:"success"`
+    Template  Template `json:"template,omitempty"`
+    Resources []string `json:"resources,omitempty"`
+    Errors    []string `json:"errors,omitempty"`
 }
 
 // LintResult is the JSON output from `wetwire-aws lint`

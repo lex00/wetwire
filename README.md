@@ -38,14 +38,15 @@ class WebServer:
 
 ## Packages
 
-| Package | Purpose | Status |
-|---------|---------|--------|
-| `dataclass-dsl` | Typed references and resource loading | ✅ Published on PyPI |
-| `wetwire-aws` | AWS CloudFormation synthesis | ✅ In Development |
-| `wetwire-gcp` | GCP Config Connector synthesis | Future |
-| `wetwire-azure` | Azure ARM synthesis | Future |
-| `wetwire-k8s` | Kubernetes manifest synthesis | Future |
-| `wetwire-actions` | GitHub Actions workflow synthesis | Future |
+| Package | Language | Purpose | Status |
+|---------|----------|---------|--------|
+| `dataclass-dsl` | Python | Typed references and resource loading | ✅ Published on PyPI |
+| `wetwire-aws` | Python | AWS CloudFormation synthesis | ✅ Published on PyPI |
+| `wetwire-aws` | Go | AWS CloudFormation synthesis | 🚧 Nearly Ready |
+| `wetwire-gcp` | - | GCP Config Connector synthesis | Future |
+| `wetwire-azure` | - | Azure ARM synthesis | Future |
+| `wetwire-k8s` | - | Kubernetes manifest synthesis | Future |
+| `wetwire-actions` | - | GitHub Actions workflow synthesis | Future |
 
 ## Installation
 
@@ -60,7 +61,7 @@ pip install wetwire-aws
 from . import *
 
 class DataBucketVersioning:
-    resource: s3.bucket.VersioningConfiguration
+    resource: s3.Bucket.VersioningConfiguration
     status = s3.BucketVersioningStatus.ENABLED
 
 class DataBucket:
@@ -69,7 +70,7 @@ class DataBucket:
     versioning_configuration = DataBucketVersioning
 
 class ProcessorCode:
-    resource: lambda_.function.Code
+    resource: lambda_.Function.Code
     s3_bucket = DataBucket
     s3_key = "code.zip"
 
@@ -144,12 +145,12 @@ Resources:
 
 ## Multi-Language Support
 
-The wetwire pattern is language-agnostic. This repository is structured to accommodate implementations in:
+The wetwire pattern is language-agnostic. This repository contains implementations in:
 
-- **Python** (primary, in development)
-- **Go** (future)
-- **Rust** (future)
-- **TypeScript** (future)
+- **Python** — Published on PyPI
+- **Go** — Nearly ready
+- **Rust** — Future
+- **TypeScript** — Future
 
 See [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) for details.
 

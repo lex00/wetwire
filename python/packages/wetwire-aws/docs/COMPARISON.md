@@ -224,15 +224,15 @@ A Python dataclass with 5 typed fields is a better prompt than a 50-line YAML ex
 from . import *
 
 class MyBucketEncryptionDefault:
-    resource: s3.bucket.ServerSideEncryptionByDefault
+    resource: s3.Bucket.ServerSideEncryptionByDefault
     sse_algorithm = s3.ServerSideEncryption.AES256
 
 class MyBucketEncryptionRule:
-    resource: s3.bucket.ServerSideEncryptionRule
+    resource: s3.Bucket.ServerSideEncryptionRule
     server_side_encryption_by_default = MyBucketEncryptionDefault
 
 class MyBucketEncryption:
-    resource: s3.bucket.BucketEncryption
+    resource: s3.Bucket.BucketEncryption
     server_side_encryption_configuration = [MyBucketEncryptionRule]
 
 class MyBucket:

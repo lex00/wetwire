@@ -497,12 +497,12 @@ from . import *
 
 # ❌ WRONG - inline constructor in list
 security_group_ingress = [
-    ec2.security_group.Ingress(ip_protocol=ec2.IpProtocol.TCP, from_port=443)
+    ec2.SecurityGroup.Ingress(ip_protocol=ec2.IpProtocol.TCP, from_port=443)
 ]
 
 # ✅ CORRECT - separate wrapper class
 class MySecurityGroupIngress:
-    resource: ec2.security_group.Ingress
+    resource: ec2.SecurityGroup.Ingress
     ip_protocol = ec2.IpProtocol.TCP
     from_port = 443
 

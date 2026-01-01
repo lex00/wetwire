@@ -25,11 +25,13 @@ wetwire/
 │   ├── architecture/       # Architecture docs
 │   └── personas/           # Agent testing personas
 │
-├── python/                  # Python implementation
+├── python/                  # Python implementation (published on PyPI)
 │   └── packages/
 │       └── wetwire-aws/    # AWS CloudFormation synthesis
 │
-├── go/                      # Go implementation (future)
+├── go/                      # Go implementation (nearly ready)
+│   └── wetwire-aws/        # AWS CloudFormation synthesis
+│
 ├── rust/                    # Rust implementation (future)
 ├── typescript/              # TypeScript implementation (future)
 │
@@ -96,7 +98,7 @@ Cloud-specific implementations with pre-generated resources.
 from . import *
 
 class MyVersioning:
-    resource: s3.bucket.VersioningConfiguration
+    resource: s3.Bucket.VersioningConfiguration
     status = s3.BucketVersioningStatus.ENABLED
 
 class MyBucket:
@@ -185,7 +187,7 @@ Cloud Schema (JSON/YAML)
          │
          ▼
 Generated Resource Classes
-(wetwire-aws/resources/s3/bucket.*)
+(wetwire-aws/resources/s3/Bucket.*)
 ```
 
 ### Runtime Flow

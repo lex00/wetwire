@@ -747,13 +747,13 @@ class MyPolicyDoc:
         assert issues[0].suggestion == "AllowStatement"
 
     def test_detects_nested_property_type_wrapper_with_parens(self):
-        """Should detect nested PropertyType wrapper (e.g., s3.bucket.BucketEncryption) with ()."""
+        """Should detect nested PropertyType wrapper (e.g., s3.Bucket.BucketEncryption) with ()."""
         from wetwire_aws.linter.rules import PropertyTypeAsRef
 
         code = """
 @wetwire_aws
 class MyBucketEncryption:
-    resource: s3.bucket.BucketEncryption
+    resource: s3.Bucket.BucketEncryption
     sse_algorithm = "AES256"
 
 @wetwire_aws

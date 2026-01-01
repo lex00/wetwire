@@ -204,12 +204,12 @@ class MyFunction:
     architectures = [lambda_.Architecture.ARM64]
 
 class MyTableKeySchema:
-    resource: dynamodb.table.KeySchema
+    resource: dynamodb.Table.KeySchema
     attribute_name = "pk"
     key_type = dynamodb.KeyType.HASH
 
 class MyTableAttributeDefinition:
-    resource: dynamodb.table.AttributeDefinition
+    resource: dynamodb.Table.AttributeDefinition
     attribute_name = "pk"
     attribute_type = dynamodb.ScalarAttributeType.S
 

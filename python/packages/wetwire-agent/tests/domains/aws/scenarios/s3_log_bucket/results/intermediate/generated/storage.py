@@ -1,42 +1,42 @@
 from . import *
 
 class LogBucketEncryptionDefault:
-    resource: s3.bucket.ServerSideEncryptionByDefault
+    resource: s3.Bucket.ServerSideEncryptionByDefault
     sse_algorithm = s3.ServerSideEncryption.AES256
 
 class LogBucketEncryptionRule:
-    resource: s3.bucket.ServerSideEncryptionRule
+    resource: s3.Bucket.ServerSideEncryptionRule
     server_side_encryption_by_default = LogBucketEncryptionDefault
 
 class LogBucketEncryption:
-    resource: s3.bucket.BucketEncryption
+    resource: s3.Bucket.BucketEncryption
     server_side_encryption_configuration = [LogBucketEncryptionRule]
 
 class LogBucketPublicAccessBlock:
-    resource: s3.bucket.PublicAccessBlockConfiguration
+    resource: s3.Bucket.PublicAccessBlockConfiguration
     block_public_acls = True
     block_public_policy = True
     ignore_public_acls = True
     restrict_public_buckets = True
 
 class LogBucketVersioning:
-    resource: s3.bucket.VersioningConfiguration
+    resource: s3.Bucket.VersioningConfiguration
     status = s3.BucketVersioningStatus.ENABLED
 
 class LogBucketLifecycleTransition:
-    resource: s3.bucket.Transition
+    resource: s3.Bucket.Transition
     storage_class = "STANDARD_IA"
     transition_in_days = 30
 
 class LogBucketLifecycleRule:
-    resource: s3.bucket.Rule
+    resource: s3.Bucket.Rule
     id = "LogRetentionRule"
     status = s3.BucketVersioningStatus.ENABLED
     expiration_in_days = 2555  # 7 years
     transitions = [LogBucketLifecycleTransition]
 
 class LogBucketLifecycle:
-    resource: s3.bucket.LifecycleConfiguration
+    resource: s3.Bucket.LifecycleConfiguration
     rules = [LogBucketLifecycleRule]
 
 class LogBucket:
