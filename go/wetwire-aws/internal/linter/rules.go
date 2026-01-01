@@ -9,9 +9,14 @@
 //	WAW002: Use intrinsic types instead of raw map[string]any
 //	WAW003: Detect duplicate resource variable names
 //	WAW004: Split large files with too many resources
+//	WAW005: Extract inline property types to separate var declarations
+//	WAW006: Use typed policy document structs instead of inline versions
+//	WAW007: Use typed slices instead of []any{map[string]any{...}}
+//	WAW008: Use named var declarations instead of inline struct literals (block style)
 package linter
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"regexp"
@@ -617,6 +622,92 @@ func (r InlineMapInSlice) Check(file *ast.File, fset *token.FileSet) []Issue {
 	return issues
 }
 
+// InlineStructLiteral detects anonymous struct literals in typed slices.
+// Enforces the block style where each property type instance should be a named var.
+// Example:
+//
+//	// Bad - inline struct literals
+//	SecurityGroupIngress: []ec2.SecurityGroup_Ingress{{CidrIp: "0.0.0.0/0", ...}, {...}}
+//
+//	// Good - named var references
+//	SecurityGroupIngress: []ec2.SecurityGroup_Ingress{MyPort443, MyPort80}
+type InlineStructLiteral struct{}
+
+func (r InlineStructLiteral) ID() string { return "WAW008" }
+func (r InlineStructLiteral) Description() string {
+	return "Use named var declarations instead of inline struct literals (block style)"
+}
+
+// knownTypedSlices maps property names to their expected typed slice element types.
+// These are the properties where we enforce block style.
+var knownTypedSlices = map[string]bool{
+	"SecurityGroupIngress": true,
+	"SecurityGroupEgress":  true,
+	"BlockDeviceMappings":  true,
+	"Volumes":              true,
+	"Policies":             true,
+	"TargetGroupAttributes": true,
+	"Actions":              true,
+	"Tags":                 true,
+}
+
+func (r InlineStructLiteral) Check(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		// Look for field assignments in struct literals
+		kv, ok := n.(*ast.KeyValueExpr)
+		if !ok {
+			return true
+		}
+
+		// Get the field name
+		fieldName := ""
+		switch key := kv.Key.(type) {
+		case *ast.Ident:
+			fieldName = key.Name
+		}
+
+		// Check if this is a known property that should use block style
+		if !knownTypedSlices[fieldName] {
+			return true
+		}
+
+		// Check if the value is a composite literal (slice)
+		comp, ok := kv.Value.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+
+		// Check if it's a slice type (has [...] syntax)
+		_, isArray := comp.Type.(*ast.ArrayType)
+		if !isArray {
+			return true
+		}
+
+		// Check each element - if any is a composite literal (not an ident), flag it
+		for _, elt := range comp.Elts {
+			// If element is a composite literal (anonymous struct), it's inline
+			if innerComp, ok := elt.(*ast.CompositeLit); ok {
+				pos := fset.Position(innerComp.Pos())
+				issues = append(issues, Issue{
+					RuleID:     r.ID(),
+					Message:    fmt.Sprintf("Use a named var declaration for %s item instead of inline struct literal", fieldName),
+					Suggestion: "Extract to: var MyItem = Type{...} and reference by name",
+					File:       pos.Filename,
+					Line:       pos.Line,
+					Column:     pos.Column,
+					Severity:   "warning",
+				})
+			}
+		}
+
+		return true
+	})
+
+	return issues
+}
+
 // AllRules returns all available lint rules.
 func AllRules() []Rule {
 	return []Rule{
@@ -627,5 +718,6 @@ func AllRules() []Rule {
 		InlinePropertyType{},
 		HardcodedPolicyVersion{},
 		InlineMapInSlice{},
+		InlineStructLiteral{},
 	}
 }

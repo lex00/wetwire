@@ -161,6 +161,67 @@ var policy = Policy{
 	}
 }
 
+func TestInlineStructLiteral(t *testing.T) {
+	// Test inline struct literals in typed slices
+	src := `package test
+
+import "github.com/lex00/wetwire-aws/resources/ec2"
+
+var MySecurityGroup = ec2.SecurityGroup{
+	GroupDescription: "My SG",
+	SecurityGroupIngress: []ec2.SecurityGroup_Ingress{
+		{CidrIp: "0.0.0.0/0", FromPort: 443},
+		{CidrIp: "0.0.0.0/0", FromPort: 80},
+	},
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "test.go", src, 0)
+	require.NoError(t, err)
+
+	rule := InlineStructLiteral{}
+	issues := rule.Check(file, fset)
+
+	// Should detect 2 inline struct literals
+	assert.Len(t, issues, 2)
+	if len(issues) > 0 {
+		assert.Equal(t, "WAW008", issues[0].RuleID)
+		assert.Contains(t, issues[0].Message, "SecurityGroupIngress")
+	}
+}
+
+func TestInlineStructLiteral_ValidBlockStyle(t *testing.T) {
+	// Test that block-style (named var references) doesn't trigger
+	src := `package test
+
+import "github.com/lex00/wetwire-aws/resources/ec2"
+
+var Port443Ingress = ec2.SecurityGroup_Ingress{
+	CidrIp:   "0.0.0.0/0",
+	FromPort: 443,
+}
+
+var Port80Ingress = ec2.SecurityGroup_Ingress{
+	CidrIp:   "0.0.0.0/0",
+	FromPort: 80,
+}
+
+var MySecurityGroup = ec2.SecurityGroup{
+	GroupDescription:     "My SG",
+	SecurityGroupIngress: []ec2.SecurityGroup_Ingress{Port443Ingress, Port80Ingress},
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "test.go", src, 0)
+	require.NoError(t, err)
+
+	rule := InlineStructLiteral{}
+	issues := rule.Check(file, fset)
+
+	// Should not detect any issues - using named var references
+	assert.Len(t, issues, 0)
+}
+
 func TestAllRules(t *testing.T) {
 	rules := AllRules()
 	assert.GreaterOrEqual(t, len(rules), 5)

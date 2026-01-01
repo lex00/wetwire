@@ -43,6 +43,19 @@ type codegenContext struct {
 	resourceOrder    []string        // topologically sorted resource IDs
 	currentResource  string          // current resource type being generated (e.g., "ec2")
 	currentProperty  string          // current property being generated (e.g., "SecurityGroupIngress")
+	currentLogicalID string          // current resource's logical ID (e.g., "SecurityGroup")
+
+	// Block-style property type declarations
+	// Each property type instance becomes its own var declaration
+	propertyBlocks []propertyBlock // collected during resource traversal
+	blockNameCount map[string]int  // for generating unique names
+}
+
+// propertyBlock represents a top-level var declaration for a property type instance.
+type propertyBlock struct {
+	varName    string         // e.g., "SecurityGroupHttpsIngress"
+	typeName   string         // e.g., "ec2.SecurityGroup_Ingress"
+	properties map[string]any // the property values
 }
 
 // knownPropertyTypes maps (service, propertyName) to the typed struct to use.
@@ -66,9 +79,10 @@ var knownPropertyTypes = map[string]map[string]string{
 
 func newCodegenContext(template *IRTemplate, packageName string) *codegenContext {
 	ctx := &codegenContext{
-		template:    template,
-		packageName: packageName,
-		imports:     make(map[string]bool),
+		template:       template,
+		packageName:    packageName,
+		imports:        make(map[string]bool),
+		blockNameCount: make(map[string]int),
 	}
 
 	// Topologically sort resources
@@ -188,31 +202,71 @@ func generateResource(ctx *codegenContext, resource *IRResource) string {
 
 	// Set current resource context for typed property generation
 	ctx.currentResource = module
+	ctx.currentLogicalID = resource.LogicalID
 
-	varName := resource.LogicalID
+	// Clear property blocks for this resource
+	ctx.propertyBlocks = nil
 
-	// Build struct literal
-	lines = append(lines, fmt.Sprintf("var %s = %s.%s{", varName, module, typeName))
-
-	// Properties
+	// First pass: collect property blocks by traversing properties
+	// This populates ctx.propertyBlocks with any nested property type instances
+	resourceProps := make(map[string]string) // propName -> generated value
 	for _, propName := range sortedKeys(resource.Properties) {
 		prop := resource.Properties[propName]
-		ctx.currentProperty = propName // Set property context
+		ctx.currentProperty = propName
 		var value string
-		// Special handling for Tags property
 		if propName == "Tags" {
-			value = tagsToGo(ctx, prop.Value, 1)
+			value = tagsToBlockStyle(ctx, prop.Value)
 		} else if typedStruct := getTypedPropertyStruct(ctx.currentResource, propName); typedStruct != "" {
-			// Use typed struct for known property arrays
-			value = typedArrayToGo(ctx, prop.Value, typedStruct, 1)
+			// Block style: extract items as separate var declarations
+			value = typedArrayToBlockStyle(ctx, prop.Value, typedStruct)
 		} else {
 			value = valueToGo(ctx, prop.Value, 1)
 		}
+		resourceProps[prop.GoName] = value
+	}
+
+	// Generate property blocks BEFORE the resource
+	for _, block := range ctx.propertyBlocks {
+		lines = append(lines, generatePropertyBlock(ctx, block))
+		lines = append(lines, "") // blank line between blocks
+	}
+
+	varName := resource.LogicalID
+
+	// Build struct literal for the resource
+	lines = append(lines, fmt.Sprintf("var %s = %s.%s{", varName, module, typeName))
+
+	// Properties (in sorted order)
+	for _, propName := range sortedKeys(resource.Properties) {
+		prop := resource.Properties[propName]
+		value := resourceProps[prop.GoName]
 		lines = append(lines, fmt.Sprintf("\t%s: %s,", prop.GoName, value))
 	}
 
 	lines = append(lines, "}")
 
+	return strings.Join(lines, "\n")
+}
+
+// generatePropertyBlock generates a var declaration for a property type block.
+func generatePropertyBlock(ctx *codegenContext, block propertyBlock) string {
+	var lines []string
+	lines = append(lines, fmt.Sprintf("var %s = %s{", block.varName, block.typeName))
+
+	// Sort property keys for deterministic output
+	keys := make([]string, 0, len(block.properties))
+	for k := range block.properties {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		v := block.properties[k]
+		fieldVal := valueToGo(ctx, v, 0)
+		lines = append(lines, fmt.Sprintf("\t%s: %s,", k, fieldVal))
+	}
+
+	lines = append(lines, "}")
 	return strings.Join(lines, "\n")
 }
 
@@ -226,36 +280,158 @@ func getTypedPropertyStruct(service, propName string) string {
 	return ""
 }
 
-// typedArrayToGo converts an array to a typed slice using the specified struct type.
-func typedArrayToGo(ctx *codegenContext, value any, structType string, indent int) string {
-	indentStr := strings.Repeat("\t", indent)
-	nextIndent := strings.Repeat("\t", indent+1)
-
+// typedArrayToBlockStyle converts an array to block-style: each item becomes a separate
+// var declaration, and returns a slice of references to those vars.
+// Example output: []ec2.SecurityGroup_Ingress{SecurityGroupHttpsIngress, SecurityGroupHttpIngress}
+func typedArrayToBlockStyle(ctx *codegenContext, value any, structType string) string {
 	arr, ok := value.([]any)
 	if !ok || len(arr) == 0 {
 		return fmt.Sprintf("[]%s.%s{}", ctx.currentResource, structType)
 	}
 
-	var items []string
+	var varNames []string
 	for _, item := range arr {
 		itemMap, ok := item.(map[string]any)
 		if !ok {
-			// Fallback to generic handling
-			items = append(items, nextIndent+valueToGo(ctx, item, indent+1)+",")
+			// Fallback: can't extract as block, skip
 			continue
 		}
 
-		// Generate struct literal
-		var fields []string
-		for _, k := range sortedKeys(itemMap) {
-			v := itemMap[k]
-			fieldVal := valueToGo(ctx, v, 0)
-			fields = append(fields, fmt.Sprintf("%s: %s", k, fieldVal))
-		}
-		items = append(items, fmt.Sprintf("%s{%s},", nextIndent, strings.Join(fields, ", ")))
+		// Generate a unique var name based on resource + property + distinguishing value
+		varName := generateBlockVarName(ctx, itemMap)
+		fullTypeName := fmt.Sprintf("%s.%s", ctx.currentResource, structType)
+
+		// Add to property blocks
+		ctx.propertyBlocks = append(ctx.propertyBlocks, propertyBlock{
+			varName:    varName,
+			typeName:   fullTypeName,
+			properties: itemMap,
+		})
+
+		varNames = append(varNames, varName)
 	}
 
-	return fmt.Sprintf("[]%s.%s{\n%s\n%s}", ctx.currentResource, structType, strings.Join(items, "\n"), indentStr)
+	if len(varNames) == 0 {
+		return fmt.Sprintf("[]%s.%s{}", ctx.currentResource, structType)
+	}
+
+	// Return slice of var references
+	return fmt.Sprintf("[]%s.%s{%s}", ctx.currentResource, structType, strings.Join(varNames, ", "))
+}
+
+// generateBlockVarName generates a unique, descriptive var name for a property block.
+// Uses the resource logical ID + property name + a distinguishing value from the block.
+func generateBlockVarName(ctx *codegenContext, props map[string]any) string {
+	// Try to find a distinguishing value in the properties
+	// Priority: Port numbers, CidrIp, Name fields, etc.
+	var suffix string
+
+	// For security group ingress/egress, use port info
+	if fromPort, ok := props["FromPort"]; ok {
+		if toPort, ok := props["ToPort"]; ok {
+			if fromPort == toPort {
+				suffix = fmt.Sprintf("Port%v", fromPort)
+			} else {
+				suffix = fmt.Sprintf("Ports%vTo%v", fromPort, toPort)
+			}
+		} else {
+			suffix = fmt.Sprintf("Port%v", fromPort)
+		}
+		// Add protocol if not tcp
+		if proto, ok := props["IpProtocol"].(string); ok && proto != "tcp" {
+			suffix += strings.ToUpper(proto)
+		}
+	}
+
+	// For other types, look for name-like fields
+	if suffix == "" {
+		for _, key := range []string{"Name", "Key", "Type", "DeviceName", "PolicyName"} {
+			if val, ok := props[key]; ok {
+				if s, ok := val.(string); ok && s != "" {
+					// Clean up the value for use in a var name
+					suffix = cleanForVarName(s)
+					break
+				}
+			}
+		}
+	}
+
+	// Fallback to index if no distinguishing value found
+	if suffix == "" {
+		baseKey := ctx.currentLogicalID + ctx.currentProperty
+		ctx.blockNameCount[baseKey]++
+		suffix = fmt.Sprintf("%d", ctx.blockNameCount[baseKey])
+	}
+
+	return ctx.currentLogicalID + suffix
+}
+
+// cleanForVarName cleans a string value for use in a Go variable name.
+func cleanForVarName(s string) string {
+	// Remove common prefixes and special chars, convert to PascalCase
+	s = strings.ReplaceAll(s, "/", "")
+	s = strings.ReplaceAll(s, "-", "")
+	s = strings.ReplaceAll(s, "_", "")
+	s = strings.ReplaceAll(s, ".", "")
+	s = strings.ReplaceAll(s, ":", "")
+
+	// Capitalize first letter
+	if len(s) > 0 {
+		s = strings.ToUpper(s[:1]) + s[1:]
+	}
+
+	// Limit length
+	if len(s) > 20 {
+		s = s[:20]
+	}
+
+	return s
+}
+
+// tagsToBlockStyle converts tags to block style with separate var declarations.
+func tagsToBlockStyle(ctx *codegenContext, value any) string {
+	ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
+
+	tags, ok := value.([]any)
+	if !ok || len(tags) == 0 {
+		return "[]Tag{}"
+	}
+
+	var varNames []string
+	for _, tag := range tags {
+		tagMap, ok := tag.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		key, hasKey := tagMap["Key"]
+		val, hasValue := tagMap["Value"]
+		if !hasKey || !hasValue {
+			continue
+		}
+
+		// Generate var name from tag key
+		keyStr, ok := key.(string)
+		if !ok {
+			continue
+		}
+		varName := ctx.currentLogicalID + "Tag" + cleanForVarName(keyStr)
+
+		// Add to property blocks
+		ctx.propertyBlocks = append(ctx.propertyBlocks, propertyBlock{
+			varName:    varName,
+			typeName:   "Tag",
+			properties: map[string]any{"Key": key, "Value": val},
+		})
+
+		varNames = append(varNames, varName)
+	}
+
+	if len(varNames) == 0 {
+		return "[]Tag{}"
+	}
+
+	return fmt.Sprintf("[]Tag{%s}", strings.Join(varNames, ", "))
 }
 
 func generateOutput(ctx *codegenContext, output *IROutput) string {
@@ -298,43 +474,6 @@ func generateOutput(ctx *codegenContext, output *IROutput) string {
 	lines = append(lines, "}")
 
 	return strings.Join(lines, "\n")
-}
-
-// tagsToGo converts a Tags array to clean Go syntax using the Tag type.
-func tagsToGo(ctx *codegenContext, value any, indent int) string {
-	ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
-	indentStr := strings.Repeat("\t", indent)
-	nextIndent := strings.Repeat("\t", indent+1)
-
-	tags, ok := value.([]any)
-	if !ok || len(tags) == 0 {
-		return "[]Tag{}"
-	}
-
-	var items []string
-	for _, tag := range tags {
-		tagMap, ok := tag.(map[string]any)
-		if !ok {
-			// Fallback to generic handling
-			items = append(items, nextIndent+valueToGo(ctx, tag, indent+1)+",")
-			continue
-		}
-
-		key, hasKey := tagMap["Key"]
-		val, hasValue := tagMap["Value"]
-		if !hasKey || !hasValue {
-			// Not a standard tag, fallback to generic
-			items = append(items, nextIndent+valueToGo(ctx, tag, indent+1)+",")
-			continue
-		}
-
-		// Generate clean Tag{Key: "...", Value: ...} syntax
-		keyStr := valueToGo(ctx, key, 0)
-		valStr := valueToGo(ctx, val, 0)
-		items = append(items, fmt.Sprintf("%sTag{Key: %s, Value: %s},", nextIndent, keyStr, valStr))
-	}
-
-	return fmt.Sprintf("[]Tag{\n%s\n%s}", strings.Join(items, "\n"), indentStr)
 }
 
 // valueToGo converts an IR value to Go source code.
