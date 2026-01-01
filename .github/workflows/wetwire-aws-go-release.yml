@@ -1,0 +1,124 @@
+name: wetwire-aws Go Release
+
+on:
+  push:
+    tags:
+      - 'wetwire-aws-go-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0)'
+        required: true
+
+defaults:
+  run:
+    working-directory: go/wetwire-aws
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Generate resources
+        run: go run ./codegen
+
+      - name: Run tests
+        run: go test -v -race ./...
+
+  build:
+    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Generate resources
+        run: go run ./codegen
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then
+            EXT=".exe"
+          fi
+          go build -ldflags="-s -w" -o wetwire-aws-${{ matrix.goos }}-${{ matrix.goarch }}${EXT} ./cmd/wetwire-aws
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wetwire-aws-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: go/wetwire-aws/wetwire-aws-*
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: wetwire-aws-*
+          merge-multiple: true
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            # Extract version from tag (wetwire-aws-go-v0.1.0 -> 0.1.0)
+            VERSION=${GITHUB_REF#refs/tags/wetwire-aws-go-v}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create checksums
+        working-directory: artifacts
+        run: |
+          sha256sum wetwire-aws-* > checksums.txt
+          cat checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: wetwire-aws (Go) v${{ steps.version.outputs.version }}
+          tag_name: wetwire-aws-go-v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/wetwire-aws-*
+            artifacts/checksums.txt
