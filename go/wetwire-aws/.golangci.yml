@@ -1,9 +1,5 @@
 run:
   timeout: 5m
-  # Skip generated code directories
-  skip-files:
-    - "^resources/"
-    - "^examples/"
 
 linters:
   enable:
@@ -24,3 +20,7 @@ issues:
   # Don't limit issues per linter
   max-issues-per-linter: 0
   max-same-issues: 0
+  # Exclude generated directories using regex patterns
+  exclude-files:
+    - "resources/.*"
+    - "examples/.*"
