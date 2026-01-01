@@ -330,6 +330,351 @@ Port cfn-lint's custom JSON Schema validation:
 - Language extensions transform
 - Python interop
 
+## Parallelization Strategy for Claude
+
+The rule porting is highly parallelizable. Here's how to speed up implementation:
+
+### 1. Parallel Rule Porting by Category
+
+Each rule category is independent. Run parallel agents:
+
+```
+Agent 1: E0xxx (Template errors)     - 30 rules
+Agent 2: E1xxx (Functions)           - 25 rules
+Agent 3: E2xxx (Parameters)          - 20 rules
+Agent 4: E3xxx (Resources) batch 1   - 50 rules
+Agent 5: E3xxx (Resources) batch 2   - 50 rules
+Agent 6: E4xxx + E6xxx + E7xxx       - 35 rules
+Agent 7: E8xxx (Conditions)          - 15 rules
+```
+
+### 2. Rule Porting Template
+
+Each agent follows this pattern per rule:
+
+```go
+// 1. Fetch Python source
+// https://github.com/aws-cloudformation/cfn-lint/blob/main/src/cfnlint/rules/{category}/{rule}.py
+
+// 2. Create Go file: internal/rules/{category}/{rule_id}.go
+package {category}
+
+import "github.com/wetwire/cfn-lint/pkg/rules"
+
+func init() {
+    rules.Register(&E{XXXX}{})
+}
+
+type E{XXXX} struct{}
+
+func (r *E{XXXX}) ID() string          { return "E{XXXX}" }
+func (r *E{XXXX}) ShortDesc() string   { return "..." }
+func (r *E{XXXX}) Description() string { return "..." }
+func (r *E{XXXX}) Source() string      { return "..." }
+func (r *E{XXXX}) Tags() []string      { return []string{...} }
+
+func (r *E{XXXX}) Match(template *template.Template) []rules.Match {
+    // Port logic from Python match() method
+}
+
+// 3. Port test fixtures
+// From: test/fixtures/templates/good/{rule}/
+// From: test/fixtures/templates/bad/{rule}/
+// To:   internal/rules/{category}/testdata/{rule_id}/
+
+// 4. Create test: internal/rules/{category}/{rule_id}_test.go
+```
+
+### 3. Batch Instructions for Agents
+
+**Prompt template for rule porting agents:**
+
+```
+Port cfn-lint rules E{START} through E{END} from Python to Go.
+
+For each rule:
+1. Read the Python source at:
+   https://raw.githubusercontent.com/aws-cloudformation/cfn-lint/main/src/cfnlint/rules/{path}
+
+2. Create Go implementation at:
+   internal/rules/{category}/{rule_id}.go
+
+3. Port test fixtures from:
+   https://github.com/aws-cloudformation/cfn-lint/tree/main/test/fixtures/templates/good/{rule}
+   https://github.com/aws-cloudformation/cfn-lint/tree/main/test/fixtures/templates/bad/{rule}
+
+4. Create test file at:
+   internal/rules/{category}/{rule_id}_test.go
+
+Use the existing rule interface and match patterns already established.
+Ensure each rule compiles and tests pass before moving to the next.
+```
+
+### 4. Dependency Order
+
+Some work must be sequential:
+
+```
+Phase 1 (Sequential - Foundation):
+├── Template parser with line tracking
+├── Rule interface and registry
+├── Match/RuleMatch types
+└── Basic CLI structure
+
+Phase 2 (Parallel - Can start after Phase 1):
+├── Agent 1: E0xxx rules
+├── Agent 2: E1xxx rules
+├── Agent 3: Output formatters (text, JSON, SARIF)
+└── Agent 4: DOT graph generation
+
+Phase 3 (Parallel - Can start after Phase 1):
+├── Agent 5: JSON Schema system
+├── Agent 6: E2xxx rules
+├── Agent 7: E3xxx rules (batch 1)
+└── Agent 8: E3xxx rules (batch 2)
+
+Phase 4 (Parallel - After JSON Schema):
+├── Agent 9: E4xxx + E6xxx rules
+├── Agent 10: E7xxx + E8xxx rules
+└── Agent 11: Schema-based resource validation
+```
+
+### 5. Speed Optimizations
+
+| Technique | Speedup | Notes |
+|-----------|---------|-------|
+| **7 parallel agents** | 5-7x | Each handles independent rule batch |
+| **Port tests alongside rules** | 1.5x | Don't defer testing |
+| **Use existing Go patterns** | 2x | Copy from early rules, adapt |
+| **Skip low-value rules initially** | 1.3x | Focus on E/W, skip I (informational) |
+| **Batch similar rules** | 1.5x | Port all GetAtt rules together |
+
+### 6. Checkpoints
+
+After each phase, verify:
+
+```bash
+# All rules compile
+go build ./...
+
+# All tests pass
+go test ./internal/rules/... -v
+
+# No regressions
+go test ./... -v
+
+# Lint output matches Python for sample templates
+./cfn-lint testdata/sample.yaml --format json | diff - expected.json
+```
+
+### 7. Attack High-Priority Rules in Parallel
+
+Don't wait to finish all of one category before starting another. Attack the most important rules across categories simultaneously:
+
+**Parallel Sprint 1 - Core Validation (Week 3-4):**
+```
+Agent A: E0000 (Parse error) + E0001 (Template format)
+Agent B: E1001 (Ref undefined) + E1010 (GetAtt undefined)
+Agent C: E3001 (Invalid property) + E3002 (Required property)
+Agent D: E3012 (Type mismatch) + E3003 (Property type)
+```
+
+**Parallel Sprint 2 - Extended Validation (Week 5-6):**
+```
+Agent A: E1012-E1019 (GetAtt attribute validation)
+Agent B: E1020-E1029 (Sub, Join, Select functions)
+Agent C: E3004-E3020 (Resource property rules)
+Agent D: E2001-E2010 (Parameter validation)
+```
+
+**Parallel Sprint 3 - Complete Coverage (Week 7-8):**
+```
+Agent A: Remaining E0xxx + E1xxx
+Agent B: Remaining E2xxx + E3xxx batch 1
+Agent C: Remaining E3xxx batch 2
+Agent D: E4xxx + E6xxx + E7xxx + E8xxx
+```
+
+**Key principle:** Each agent works on the *most valuable* rules available, not sequential rule numbers.
+
+### 8. Rule Priority by Usage
+
+Port high-usage rules first (based on GitHub issues/mentions):
+
+**Tier 1 - Critical (port in Sprint 1):**
+| Rule | Description | Why Critical |
+|------|-------------|--------------|
+| E0000 | Template parse error | Blocks all other linting |
+| E1001 | Ref to undefined resource | Most common error |
+| E1010 | GetAtt to undefined resource | Second most common |
+| E3001 | Invalid resource property | Catches typos |
+| E3002 | Required property missing | Catches incomplete resources |
+| E3012 | Property value type mismatch | Catches wrong types |
+
+**Tier 2 - High Value (port in Sprint 2):**
+| Rule | Description |
+|------|-------------|
+| E1012 | GetAtt invalid attribute |
+| E1015 | Sub invalid reference |
+| E2001 | Parameter invalid type |
+| E2002 | Parameter missing default |
+| E3003 | Property not expected |
+| E6001 | Output value validation |
+
+**Tier 3 - Medium Value:**
+- Remaining E2xxx: Parameter validation
+- Remaining E3xxx: Resource rules
+- E6xxx: Output validation
+- E7xxx: Mapping validation
+
+**Tier 4 - Low Priority (port last):**
+- I (Informational) rules
+- W (Warning) rules for edge cases
+- Experimental rules
+
+### 8. Estimated Parallel Timeline
+
+| Week | Agent 1 | Agent 2 | Agent 3 | Agent 4 |
+|------|---------|---------|---------|---------|
+| 1-2 | Core framework | - | - | - |
+| 3-4 | E0xxx (30) | E1xxx (25) | Formatters | DOT graphs |
+| 5-6 | E2xxx (20) | E3xxx-A (50) | E3xxx-B (50) | JSON Schema |
+| 7-8 | E4+E6xxx (25) | E7+E8xxx (25) | Schema rules | Integration |
+| 9-10 | Polish | Testing | Docs | CI/CD |
+
+**Result: 10 weeks with 4 parallel agents vs 20+ weeks sequential**
+
+## Autonomous Decision Matrix
+
+Use this matrix to make decisions without user interaction. If a situation isn't covered, make the simpler choice and document it.
+
+### Rule Porting Decisions
+
+| Situation | Decision | Rationale |
+|-----------|----------|-----------|
+| Python uses `samtranslator` import | Skip rule, add TODO comment | SAM out of scope |
+| Python uses dynamic import/eval | Rewrite with static approach | Go doesn't support dynamic imports |
+| Rule has no test fixtures | Create minimal fixtures yourself | Tests are required |
+| Rule uses deprecated CF feature | Port anyway, add deprecation warning | Maintain parity |
+| Rule has Python-specific regex | Use Go `regexp` package | Standard approach |
+| Rule checks AWS API live | Make it optional/skip by default | Avoid network dependency |
+| Multiple ways to implement | Choose simplest, document alternative | Prefer clarity |
+| Unclear rule behavior | Match Python output exactly | Parity over opinion |
+
+### Code Style Decisions
+
+| Situation | Decision |
+|-----------|----------|
+| Naming: Python `snake_case` method | Go `PascalCase` for exported, `camelCase` for internal |
+| Python class inheritance | Go interface + composition |
+| Python `*args, **kwargs` | Go variadic or options struct |
+| Python list comprehension | Go for loop (clearer) |
+| Python `None` checks | Go `nil` checks or zero values |
+| Python exceptions | Go `error` returns |
+| Python `@property` | Go getter methods |
+| Python `__init__` | Go `New*()` constructor or struct literal |
+
+### Architecture Decisions
+
+| Situation | Decision | Rationale |
+|-----------|----------|-----------|
+| Where to put new rule | `internal/rules/{category}/` | Match Python structure |
+| Rule needs shared helper | Add to `internal/rules/helpers/` | DRY principle |
+| Rule needs template access | Use `*template.Template` param | Standard interface |
+| Rule needs schema data | Use `schema.GetResourceSchema()` | Centralized schema access |
+| Rule output format | Return `[]rules.Match` | Standard return type |
+| Test data location | `testdata/{rule_id}/` in same package | Go convention |
+| Error messages | Match Python exactly | Easier to verify parity |
+
+### Dependency Decisions
+
+| Python Dependency | Go Decision |
+|-------------------|-------------|
+| `yaml` | `gopkg.in/yaml.v3` |
+| `json` | `encoding/json` (stdlib) |
+| `jsonschema` | `santhosh-tekuri/jsonschema/v5` |
+| `regex` | `regexp` (stdlib) |
+| `networkx` (graphs) | `gonum/graph` or custom |
+| `boto3` / `botocore` | `aws-sdk-go-v2` if needed, else skip |
+| `samtranslator` | **SKIP** - out of scope |
+| `requests` | `net/http` (stdlib) |
+
+### Error Handling
+
+| Python Pattern | Go Pattern |
+|----------------|------------|
+| `raise Exception(msg)` | `return fmt.Errorf(msg)` |
+| `try/except` | `if err != nil` |
+| `assert` | `if !condition { return error }` |
+| Silent failure | Log warning, continue |
+| Panic on invalid state | `panic()` only for programmer errors |
+
+### When to Deviate from Python
+
+**DO deviate when:**
+- Python pattern doesn't translate (metaclasses, decorators)
+- Go has a cleaner idiomatic approach
+- Performance is significantly better
+- Type safety can be improved
+
+**DON'T deviate when:**
+- Just a style preference
+- Would change rule behavior
+- Would change error messages
+- Would break test fixture compatibility
+
+### Completion Criteria Per Rule
+
+A rule is complete when:
+
+```
+[ ] Go file exists at correct path
+[ ] Implements Rule interface (ID, ShortDesc, Description, Tags, Match)
+[ ] init() registers rule
+[ ] Test file exists with good/bad fixtures
+[ ] go test passes
+[ ] go vet passes
+[ ] gofmt applied
+[ ] Error messages match Python output
+[ ] Rule is added to registry
+```
+
+### When to Stop and Ask
+
+Only stop for user input if:
+
+1. **Fundamental architecture question** - affects many rules
+2. **Conflicting requirements** - two rules need opposite approaches
+3. **Missing Python behavior** - can't determine what Python does
+4. **Security concern** - rule might expose sensitive data
+5. **Breaking change** - would break existing Go code
+
+For everything else: make a decision, document it in code comments, continue.
+
+### Progress Tracking
+
+Each agent should maintain a status file:
+
+```markdown
+# Agent {N} Progress
+
+## Current Sprint: {N}
+
+### Completed
+- [x] E1001 - Ref undefined
+- [x] E1010 - GetAtt undefined
+
+### In Progress
+- [ ] E1012 - GetAtt invalid attribute
+
+### Blocked
+- E1050 - Needs schema system (waiting on Agent 5)
+
+### Decisions Made
+- E1001: Used map lookup instead of linear search (5x faster)
+- E1010: Matched Python error message format exactly
+```
+
 ## Sources
 
 - [cfn-lint GitHub](https://github.com/aws-cloudformation/cfn-lint)
