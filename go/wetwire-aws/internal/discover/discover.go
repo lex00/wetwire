@@ -58,6 +58,9 @@ type Options struct {
 type Result struct {
 	// Resources maps logical name to discovered resource
 	Resources map[string]wetwire.DiscoveredResource
+	// AllVars tracks all package-level var declarations (including non-resources)
+	// Used to avoid false positives when checking dependencies
+	AllVars map[string]bool
 	// Errors encountered during parsing
 	Errors []error
 }
@@ -66,6 +69,7 @@ type Result struct {
 func Discover(opts Options) (*Result, error) {
 	result := &Result{
 		Resources: make(map[string]wetwire.DiscoveredResource),
+		AllVars:   make(map[string]bool),
 	}
 
 	for _, pkg := range opts.Packages {
@@ -74,15 +78,22 @@ func Discover(opts Options) (*Result, error) {
 		}
 	}
 
-	// Validate dependencies
+	// Validate dependencies - only flag truly undefined references
+	// Skip vars that are defined locally (including property type blocks)
 	for name, res := range result.Resources {
 		for _, dep := range res.Dependencies {
-			if _, ok := result.Resources[dep]; !ok {
-				result.Errors = append(result.Errors, fmt.Errorf(
-					"%s:%d: %s references undefined resource %q",
-					res.File, res.Line, name, dep,
-				))
+			// Skip if it's a known resource
+			if _, ok := result.Resources[dep]; ok {
+				continue
 			}
+			// Skip if it's a local var declaration (e.g., Tag blocks, property types)
+			if result.AllVars[dep] {
+				continue
+			}
+			result.Errors = append(result.Errors, fmt.Errorf(
+				"%s:%d: %s references undefined resource %q",
+				res.File, res.Line, name, dep,
+			))
 		}
 	}
 
@@ -172,6 +183,9 @@ func discoverFile(fset *token.FileSet, filename string, file *ast.File, result *
 
 			name := valueSpec.Names[0].Name
 			value := valueSpec.Values[0]
+
+			// Track ALL var declarations to avoid false positive undefined references
+			result.AllVars[name] = true
 
 			// Check if it's a composite literal (Type{...})
 			compLit, ok := value.(*ast.CompositeLit)
