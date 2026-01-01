@@ -62,6 +62,14 @@ go/
 3. **Run import_aws_samples.sh** - Test against real AWS templates
 4. **Debug and iterate** - Fix issues, add to ignore list as needed
 
+### Future Considerations
+
+| Feature | Description | Options |
+|---------|-------------|---------|
+| **Ref syntax ergonomics** | Go requires explicit `Ref{"Name"}` for parameter/variable references unlike Python's implicit resolution | (1) Keep as-is - explicit is Go-idiomatic, (2) Add `.Ref()` method to resources for `MyBucket.Ref()`, (3) Use pointer semantics `*MyBucket` for Ref |
+| **GetAtt helper methods** | Currently using `MyRole.Arn` field access which requires generated attr fields | Consider adding `.GetAtt("AttrName")` method for dynamic attributes |
+| **Multi-file resource discovery** | Currently single-package discovery via AST | Consider cross-package resolution like Python's `setup_resources()` |
+
 ---
 
 ## Executive Summary
