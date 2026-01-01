@@ -25,9 +25,9 @@ Resources:
 
 	files := GenerateCode(ir, "mystack")
 
-	assert.Len(t, files, 1)
-	code, ok := files["mystack.go"]
-	require.True(t, ok, "Should generate mystack.go")
+	// S3 bucket goes to storage.go with category-based splitting
+	code, ok := files["storage.go"]
+	require.True(t, ok, "Should generate storage.go for S3 bucket")
 
 	// Check package declaration
 	assert.Contains(t, code, "package mystack")
@@ -60,7 +60,8 @@ Resources:
 	require.NoError(t, err)
 
 	files := GenerateCode(ir, "vpc")
-	code := files["vpc.go"]
+	// VPC and Subnet go to network.go (EC2 network resources)
+	code := files["network.go"]
 
 	// Check imports - uses dot import for intrinsics
 	assert.Contains(t, code, `"github.com/lex00/wetwire-aws/resources/ec2"`)
@@ -88,13 +89,14 @@ Resources:
 	require.NoError(t, err)
 
 	files := GenerateCode(ir, "stack")
-	code := files["stack.go"]
+	// S3 bucket goes to storage.go
+	code := files["storage.go"]
 
 	// Check intrinsics import (dot import)
 	assert.Contains(t, code, `. "github.com/lex00/wetwire-aws/intrinsics"`)
 
 	// Check Sub usage (no intrinsics. prefix with dot import)
-	assert.Contains(t, code, `Sub{"${AWS::StackName}-bucket-${AWS::Region}"}`)
+	assert.Contains(t, code, `Sub{String: "${AWS::StackName}-bucket-${AWS::Region}"}`)
 }
 
 func TestGenerateCode_WithParameters(t *testing.T) {
@@ -122,17 +124,20 @@ Resources:
 	require.NoError(t, err)
 
 	files := GenerateCode(ir, "params")
-	code := files["params.go"]
+	// Parameters go to params.go
+	paramsCode := files["params.go"]
 
 	// Used parameters ARE generated as typed vars using Param()
-	assert.Contains(t, code, "// Environment - Environment name")
-	assert.Contains(t, code, `var Environment = Param("Environment")`)
-
-	// Parameter is referenced by bare identifier
-	assert.Contains(t, code, "BucketName: Environment,")
+	assert.Contains(t, paramsCode, "// Environment - Environment name")
+	assert.Contains(t, paramsCode, `var Environment = Param("Environment")`)
 
 	// Unused parameters are NOT generated
-	assert.NotContains(t, code, "UnusedParam")
+	assert.NotContains(t, paramsCode, "UnusedParam")
+
+	// S3 bucket goes to storage.go
+	storageCode := files["storage.go"]
+	// Parameter is referenced by bare identifier
+	assert.Contains(t, storageCode, "BucketName: Environment,")
 }
 
 func TestGenerateCode_WithOutputs(t *testing.T) {
@@ -153,6 +158,7 @@ Outputs:
 	require.NoError(t, err)
 
 	files := GenerateCode(ir, "outputs")
+	// Outputs go to outputs.go
 	code := files["outputs.go"]
 
 	// Check output uses Output type
@@ -182,7 +188,8 @@ Resources:
 	require.NoError(t, err)
 
 	files := GenerateCode(ir, "cond")
-	code := files["cond.go"]
+	// Conditions go to params.go with parameters
+	code := files["params.go"]
 
 	// Check condition - uses bare parameter identifier (typed via Param())
 	assert.Contains(t, code, `var IsProdCondition = Equals{Environment, "prod"}`)
@@ -196,18 +203,30 @@ Mappings:
       AMI: ami-12345
     us-west-2:
       AMI: ami-67890
+
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !FindInMap [RegionMap, !Ref "AWS::Region", AMI]
 `)
 
 	ir, err := ParseTemplateContent(content, "test.yaml")
 	require.NoError(t, err)
 
 	files := GenerateCode(ir, "mapping")
-	code := files["mapping.go"]
 
-	// Check mapping - note the actual output format
-	assert.Contains(t, code, "var RegionMapMapping = ")
-	assert.Contains(t, code, `"us-east-1"`)
-	assert.Contains(t, code, `"ami-12345"`)
+	// Mappings go to params.go; find the mapping in any generated file
+	var foundMapping bool
+	for _, code := range files {
+		if strings.Contains(code, "var RegionMapMapping = ") {
+			foundMapping = true
+			assert.Contains(t, code, `"us-east-1"`)
+			assert.Contains(t, code, `"ami-12345"`)
+			break
+		}
+	}
+	assert.True(t, foundMapping, "Should generate RegionMapMapping in some file")
 }
 
 func TestTopologicalSort(t *testing.T) {
@@ -375,6 +394,7 @@ Resources:
 	require.NoError(t, err)
 
 	files := GenerateCode(ir, "network")
+	// VPC and Subnet are EC2 network resources -> network.go
 	code := files["network.go"]
 
 	// VPC should appear before Subnet in the generated code
