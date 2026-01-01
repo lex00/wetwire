@@ -69,7 +69,7 @@ class DataBucket:
     versioning_configuration = DataBucketVersioning
 
 class ProcessorCode:
-    resource: lambda_.function.Code
+    resource: lambda_.Function.Code
     s3_bucket = DataBucket
     s3_key = "code.zip"
 
