@@ -262,7 +262,7 @@ for template in "${TEMPLATES[@]}"; do
         rm -rf "$pkg_output"
     fi
 
-    if error_output=$("$PROJECT_ROOT/wetwire-aws" build "$template" > "$pkg_output.json" 2>&1); then
+    if error_output=$("$PROJECT_ROOT/wetwire-aws" import "$template" -o "$pkg_output" 2>&1); then
         IMPORT_OK=$((IMPORT_OK + 1))
         if [ "$VERBOSE" = "true" ]; then
             success "Imported: $template_name"

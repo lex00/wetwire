@@ -230,7 +230,7 @@ func extractDependencies(lit *ast.CompositeLit, imports map[string]string) []str
 	var deps []string
 	seen := make(map[string]bool)
 
-	for _, elt := range lit.Elements {
+	for _, elt := range lit.Elts {
 		kv, ok := elt.(*ast.KeyValueExpr)
 		if !ok {
 			continue
