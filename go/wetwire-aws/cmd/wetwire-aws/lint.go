@@ -7,6 +7,7 @@ import (
 
 	wetwire "github.com/lex00/wetwire-aws"
 	"github.com/lex00/wetwire-aws/internal/discover"
+	"github.com/lex00/wetwire-aws/internal/linter"
 	"github.com/spf13/cobra"
 )
 
@@ -20,6 +21,14 @@ func newLintCmd() *cobra.Command {
 		Use:   "lint [packages...]",
 		Short: "Check Go packages for issues",
 		Long: `Lint checks Go packages containing CloudFormation resources for common issues.
+
+Rules:
+    WAW001: Use pseudo-parameter constants instead of hardcoded strings
+    WAW002: Use intrinsic types instead of raw map[string]any
+    WAW003: Detect duplicate resource variable names
+    WAW004: Split large files with too many resources
+    WAW005: Use struct types instead of inline map[string]any
+    WAW006: Use constant for IAM policy version
 
 Examples:
     wetwire-aws lint ./infra/...
@@ -37,8 +46,10 @@ Examples:
 }
 
 func runLint(packages []string, format string, fix bool) error {
-	// Discover resources (also validates references)
-	result, err := discover.Discover(discover.Options{
+	var issues []wetwire.LintIssue
+
+	// Discover resources (validates references)
+	discoverResult, err := discover.Discover(discover.Options{
 		Packages: packages,
 	})
 	if err != nil {
@@ -46,8 +57,7 @@ func runLint(packages []string, format string, fix bool) error {
 	}
 
 	// Convert discovery errors to lint issues
-	var issues []wetwire.LintIssue
-	for _, e := range result.Errors {
+	for _, e := range discoverResult.Errors {
 		issues = append(issues, wetwire.LintIssue{
 			Severity: "error",
 			Message:  e.Error(),
@@ -55,18 +65,33 @@ func runLint(packages []string, format string, fix bool) error {
 		})
 	}
 
-	// TODO: Add more lint rules:
-	// - Hardcoded strings that should be parameters
-	// - Missing required properties
-	// - Deprecated resource types
-	// - Security best practices (public S3 buckets, etc.)
+	// Run lint rules on each package
+	for _, pkg := range packages {
+		lintResult, err := linter.LintPackage(pkg, linter.Options{})
+		if err != nil {
+			// Log but continue on errors
+			fmt.Fprintf(os.Stderr, "Warning: failed to lint %s: %v\n", pkg, err)
+			continue
+		}
 
-	lintResult := wetwire.LintResult{
+		for _, issue := range lintResult.Issues {
+			issues = append(issues, wetwire.LintIssue{
+				Severity: issue.Severity,
+				Message:  issue.Message,
+				Rule:     issue.RuleID,
+				File:     issue.File,
+				Line:     issue.Line,
+				Column:   issue.Column,
+			})
+		}
+	}
+
+	result := wetwire.LintResult{
 		Success: len(issues) == 0,
 		Issues:  issues,
 	}
 
-	return outputLintResult(lintResult, format)
+	return outputLintResult(result, format)
 }
 
 func outputLintResult(result wetwire.LintResult, format string) error {

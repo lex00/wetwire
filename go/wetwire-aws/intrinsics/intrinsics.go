@@ -273,3 +273,39 @@ func (c Condition) MarshalJSON() ([]byte, error) {
 		"Condition": c.Name,
 	})
 }
+
+// Tag represents a CloudFormation resource tag.
+// This is a common type used across many AWS resources.
+//
+// Example:
+//
+//	Tag{Key: "Name", Value: "my-resource"}
+//	Tag{Key: "Environment", Value: Sub{"${Environment}"}}
+type Tag struct {
+	Key   string
+	Value any
+}
+
+// MarshalJSON serializes to CloudFormation tag syntax.
+func (t Tag) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]any{
+		"Key":   t.Key,
+		"Value": t.Value,
+	})
+}
+
+// Transform represents a CloudFormation Fn::Transform intrinsic function.
+type Transform struct {
+	Name       string
+	Parameters map[string]any
+}
+
+// MarshalJSON serializes to CloudFormation Transform syntax.
+func (t Transform) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]any{
+		"Fn::Transform": map[string]any{
+			"Name":       t.Name,
+			"Parameters": t.Parameters,
+		},
+	})
+}

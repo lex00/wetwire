@@ -159,7 +159,13 @@ func generateResource(ctx *codegenContext, resource *IRResource) string {
 	// Properties
 	for _, propName := range sortedKeys(resource.Properties) {
 		prop := resource.Properties[propName]
-		value := valueToGo(ctx, prop.Value, 1)
+		var value string
+		// Special handling for Tags property
+		if propName == "Tags" {
+			value = tagsToGo(ctx, prop.Value, 1)
+		} else {
+			value = valueToGo(ctx, prop.Value, 1)
+		}
 		lines = append(lines, fmt.Sprintf("\t%s: %s,", prop.GoName, value))
 	}
 
@@ -208,6 +214,43 @@ func generateOutput(ctx *codegenContext, output *IROutput) string {
 	lines = append(lines, "}")
 
 	return strings.Join(lines, "\n")
+}
+
+// tagsToGo converts a Tags array to clean Go syntax using the Tag type.
+func tagsToGo(ctx *codegenContext, value any, indent int) string {
+	ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
+	indentStr := strings.Repeat("\t", indent)
+	nextIndent := strings.Repeat("\t", indent+1)
+
+	tags, ok := value.([]any)
+	if !ok || len(tags) == 0 {
+		return "[]Tag{}"
+	}
+
+	var items []string
+	for _, tag := range tags {
+		tagMap, ok := tag.(map[string]any)
+		if !ok {
+			// Fallback to generic handling
+			items = append(items, nextIndent+valueToGo(ctx, tag, indent+1)+",")
+			continue
+		}
+
+		key, hasKey := tagMap["Key"]
+		val, hasValue := tagMap["Value"]
+		if !hasKey || !hasValue {
+			// Not a standard tag, fallback to generic
+			items = append(items, nextIndent+valueToGo(ctx, tag, indent+1)+",")
+			continue
+		}
+
+		// Generate clean Tag{Key: "...", Value: ...} syntax
+		keyStr := valueToGo(ctx, key, 0)
+		valStr := valueToGo(ctx, val, 0)
+		items = append(items, fmt.Sprintf("%sTag{Key: %s, Value: %s},", nextIndent, keyStr, valStr))
+	}
+
+	return fmt.Sprintf("[]Tag{\n%s\n%s}", strings.Join(items, "\n"), indentStr)
 }
 
 // valueToGo converts an IR value to Go source code.
