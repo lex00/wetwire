@@ -131,13 +131,8 @@ func parseScalarString(node *yaml.Node) string {
 	return ""
 }
 
-// parseNodeContents parses the contents of a tagged node without re-checking the tag.
+// parseNodeContentsWithVisited parses the contents of a tagged node without re-checking the tag.
 // This prevents infinite recursion when an intrinsic like !Base64 wraps another structure.
-func parseNodeContents(node *yaml.Node) any {
-	return parseNodeContentsWithVisited(node, make(map[*yaml.Node]bool))
-}
-
-// parseNodeContentsWithVisited is the internal implementation with cycle detection.
 func parseNodeContentsWithVisited(node *yaml.Node, visited map[*yaml.Node]bool) any {
 	switch node.Kind {
 	case yaml.ScalarNode:
@@ -161,12 +156,7 @@ func parseNodeContentsWithVisited(node *yaml.Node, visited map[*yaml.Node]bool) 
 	return nil
 }
 
-// parseIntrinsicTag handles CloudFormation intrinsic function YAML tags.
-func parseIntrinsicTag(node *yaml.Node) *IRIntrinsic {
-	return parseIntrinsicTagWithVisited(node, make(map[*yaml.Node]bool))
-}
-
-// parseIntrinsicTagWithVisited is the internal implementation with cycle detection.
+// parseIntrinsicTagWithVisited handles CloudFormation intrinsic function YAML tags.
 func parseIntrinsicTagWithVisited(node *yaml.Node, visited map[*yaml.Node]bool) *IRIntrinsic {
 	tag := strings.TrimPrefix(node.Tag, "!")
 

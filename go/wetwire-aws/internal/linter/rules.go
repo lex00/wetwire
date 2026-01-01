@@ -108,22 +108,22 @@ func (r MapShouldBeIntrinsic) Description() string {
 }
 
 var intrinsicKeys = map[string]string{
-	"Ref":            "Ref",
-	"Fn::Sub":        "Sub",
-	"Fn::Join":       "Join",
-	"Fn::Select":     "Select",
-	"Fn::GetAZs":     "GetAZs",
-	"Fn::GetAtt":     "GetAtt",
-	"Fn::If":         "If",
-	"Fn::Equals":     "Equals",
-	"Fn::And":        "And",
-	"Fn::Or":         "Or",
-	"Fn::Not":        "Not",
-	"Fn::Base64":     "Base64",
-	"Fn::Split":      "Split",
+	"Ref":             "Ref",
+	"Fn::Sub":         "Sub",
+	"Fn::Join":        "Join",
+	"Fn::Select":      "Select",
+	"Fn::GetAZs":      "GetAZs",
+	"Fn::GetAtt":      "GetAtt",
+	"Fn::If":          "If",
+	"Fn::Equals":      "Equals",
+	"Fn::And":         "And",
+	"Fn::Or":          "Or",
+	"Fn::Not":         "Not",
+	"Fn::Base64":      "Base64",
+	"Fn::Split":       "Split",
 	"Fn::ImportValue": "ImportValue",
-	"Fn::FindInMap":  "FindInMap",
-	"Fn::Cidr":       "Cidr",
+	"Fn::FindInMap":   "FindInMap",
+	"Fn::Cidr":        "Cidr",
 }
 
 func (r MapShouldBeIntrinsic) Check(file *ast.File, fset *token.FileSet) []Issue {
@@ -643,14 +643,14 @@ func (r InlineStructLiteral) Description() string {
 // knownTypedSlices maps property names to their expected typed slice element types.
 // These are the properties where we enforce block style.
 var knownTypedSlices = map[string]bool{
-	"SecurityGroupIngress": true,
-	"SecurityGroupEgress":  true,
-	"BlockDeviceMappings":  true,
-	"Volumes":              true,
-	"Policies":             true,
+	"SecurityGroupIngress":  true,
+	"SecurityGroupEgress":   true,
+	"BlockDeviceMappings":   true,
+	"Volumes":               true,
+	"Policies":              true,
 	"TargetGroupAttributes": true,
-	"Actions":              true,
-	"Tags":                 true,
+	"Actions":               true,
+	"Tags":                  true,
 }
 
 func (r InlineStructLiteral) Check(file *ast.File, fset *token.FileSet) []Issue {

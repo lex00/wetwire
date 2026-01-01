@@ -11,11 +11,11 @@ import (
 
 func newImportCmd() *cobra.Command {
 	var (
-		outputDir    string
-		packageName  string
-		modulePath   string
-		singleFile   bool
-		noScaffold   bool
+		outputDir   string
+		packageName string
+		modulePath  string
+		singleFile  bool
+		noScaffold  bool
 	)
 
 	cmd := &cobra.Command{

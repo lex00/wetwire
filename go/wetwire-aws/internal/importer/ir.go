@@ -188,15 +188,15 @@ type IRCondition struct {
 
 // IRTemplate represents a complete parsed CloudFormation template.
 type IRTemplate struct {
-	Description               string
-	AWSTemplateFormatVersion  string
-	Parameters                map[string]*IRParameter
-	Mappings                  map[string]*IRMapping
-	Conditions                map[string]*IRCondition
-	Resources                 map[string]*IRResource
-	Outputs                   map[string]*IROutput
-	SourceFile                string
-	ReferenceGraph            map[string][]string // resource -> list of resources it references
+	Description              string
+	AWSTemplateFormatVersion string
+	Parameters               map[string]*IRParameter
+	Mappings                 map[string]*IRMapping
+	Conditions               map[string]*IRCondition
+	Resources                map[string]*IRResource
+	Outputs                  map[string]*IROutput
+	SourceFile               string
+	ReferenceGraph           map[string][]string // resource -> list of resources it references
 }
 
 // NewIRTemplate creates a new empty IR template.

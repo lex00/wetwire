@@ -146,8 +146,8 @@ func (g GetAZs) MarshalJSON() ([]byte, error) {
 //
 //	If{"CreateResources", "yes", "no"}
 type If struct {
-	Condition   string
-	ValueIfTrue any
+	Condition    string
+	ValueIfTrue  any
 	ValueIfFalse any
 }
 
@@ -333,7 +333,7 @@ func (t Transform) MarshalJSON() ([]byte, error) {
 type Output struct {
 	Value       any
 	Description string
-	ExportName  any // optional, for cross-stack references
+	ExportName  any    // optional, for cross-stack references
 	Condition   string // optional, conditional output
 }
 

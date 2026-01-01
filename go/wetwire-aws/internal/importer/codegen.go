@@ -54,9 +54,9 @@ var serviceCategories = map[string]string{
 	"Events":        "messaging",
 	"StepFunctions": "messaging",
 	// Monitoring/Logging
-	"CloudWatch":  "monitoring",
-	"Logs":        "monitoring",
-	"CloudTrail":  "monitoring",
+	"CloudWatch":      "monitoring",
+	"Logs":            "monitoring",
+	"CloudTrail":      "monitoring",
 	"KinesisFirehose": "monitoring",
 	// CI/CD
 	"CodeBuild":    "cicd",
@@ -548,18 +548,6 @@ func generateOutputs(ctx *codegenContext) (string, map[string]bool) {
 	return strings.Join(sections, "\n\n"), imports
 }
 
-// generateResources generates resource declarations and returns code + imports.
-func generateResources(ctx *codegenContext) (string, map[string]bool) {
-	var sections []string
-
-	for _, resourceID := range ctx.resourceOrder {
-		resource := ctx.template.Resources[resourceID]
-		sections = append(sections, generateResource(ctx, resource))
-	}
-
-	return strings.Join(sections, "\n\n"), ctx.imports
-}
-
 // generateResourcesByIDs generates resource declarations for specific resource IDs.
 // Returns code and imports for just those resources.
 func generateResourcesByIDs(ctx *codegenContext, resourceIDs []string) (string, map[string]bool) {
@@ -627,14 +615,12 @@ type codegenContext struct {
 
 // propertyBlock represents a top-level var declaration for a property type instance.
 type propertyBlock struct {
-	varName    string            // e.g., "LoggingBucketBucketEncryption"
-	typeName   string            // e.g., "s3.Bucket_BucketEncryption"
-	properties map[string]any    // property key-value pairs for generation
-	isPointer  bool              // whether this should be a pointer type (&Type{})
-	deps       []string          // var names this block depends on
-	order      int               // insertion order for stable sorting
+	varName    string         // e.g., "LoggingBucketBucketEncryption"
+	typeName   string         // e.g., "s3.Bucket_BucketEncryption"
+	properties map[string]any // property key-value pairs for generation
+	isPointer  bool           // whether this should be a pointer type (&Type{})
+	order      int            // insertion order for stable sorting
 }
-
 
 func newCodegenContext(template *IRTemplate, packageName string) *codegenContext {
 	ctx := &codegenContext{
@@ -1764,13 +1750,6 @@ func pseudoParameterToGo(ctx *codegenContext, name string) string {
 	}
 }
 
-// rewriteSubString rewrites ${Resource} patterns in Sub strings.
-func rewriteSubString(ctx *codegenContext, template string) string {
-	// For now, just quote the string
-	// TODO: Implement proper rewriting for known resources
-	return fmt.Sprintf("%q", template)
-}
-
 // resolveResourceType converts a CloudFormation resource type to Go module and type name.
 // e.g., "AWS::S3::Bucket" -> ("s3", "Bucket")
 func resolveResourceType(cfType string) (module, typeName string) {
@@ -2092,7 +2071,7 @@ func conditionToGo(ctx *codegenContext, value any) string {
 	for _, k := range sortedKeys(m) {
 		v := m[k]
 		// Use constant name if it's a known operator
-		keyStr := k
+		var keyStr string
 		if constName, ok := conditionOperators[k]; ok {
 			keyStr = constName
 		} else {

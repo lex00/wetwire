@@ -15,17 +15,17 @@ type Service struct {
 
 // ParsedPropertyType is a parsed property type (nested struct).
 type ParsedPropertyType struct {
-	Name          string                    // e.g., "Ingress"
-	CFType        string                    // e.g., "AWS::EC2::SecurityGroup.Ingress"
-	ParentResource string                   // e.g., "SecurityGroup" (the resource this belongs to)
-	Documentation string
-	Properties    map[string]ParsedProperty // The properties of this type
+	Name           string // e.g., "Ingress"
+	CFType         string // e.g., "AWS::EC2::SecurityGroup.Ingress"
+	ParentResource string // e.g., "SecurityGroup" (the resource this belongs to)
+	Documentation  string
+	Properties     map[string]ParsedProperty // The properties of this type
 }
 
 // ParsedResource is a parsed resource type.
 type ParsedResource struct {
-	Name          string                    // e.g., "Bucket"
-	CFType        string                    // e.g., "AWS::S3::Bucket"
+	Name          string // e.g., "Bucket"
+	CFType        string // e.g., "AWS::S3::Bucket"
 	Documentation string
 	Properties    map[string]ParsedProperty
 	Attributes    map[string]ParsedAttribute

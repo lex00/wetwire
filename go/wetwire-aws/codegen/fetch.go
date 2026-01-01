@@ -12,17 +12,17 @@ import (
 
 // CFSpec represents the CloudFormation Resource Specification.
 type CFSpec struct {
-	ResourceSpecificationVersion string                    `json:"ResourceSpecificationVersion"`
-	ResourceTypes                map[string]ResourceType   `json:"ResourceTypes"`
-	PropertyTypes                map[string]PropertyType   `json:"PropertyTypes"`
+	ResourceSpecificationVersion string                  `json:"ResourceSpecificationVersion"`
+	ResourceTypes                map[string]ResourceType `json:"ResourceTypes"`
+	PropertyTypes                map[string]PropertyType `json:"PropertyTypes"`
 }
 
 // ResourceType is a CloudFormation resource type definition.
 type ResourceType struct {
-	Documentation       string              `json:"Documentation"`
-	Attributes          map[string]Attribute `json:"Attributes"`
-	Properties          map[string]Property  `json:"Properties"`
-	AdditionalProperties bool                `json:"AdditionalProperties"`
+	Documentation        string               `json:"Documentation"`
+	Attributes           map[string]Attribute `json:"Attributes"`
+	Properties           map[string]Property  `json:"Properties"`
+	AdditionalProperties bool                 `json:"AdditionalProperties"`
 }
 
 // PropertyType is a property type definition (nested structures).
@@ -35,11 +35,11 @@ type PropertyType struct {
 type Property struct {
 	Documentation     string `json:"Documentation"`
 	Required          bool   `json:"Required"`
-	PrimitiveType     string `json:"PrimitiveType"`      // String, Integer, Boolean, etc.
-	Type              string `json:"Type"`               // List, Map, or property type name
-	ItemType          string `json:"ItemType"`           // For List/Map
-	PrimitiveItemType string `json:"PrimitiveItemType"`  // For List/Map of primitives
-	UpdateType        string `json:"UpdateType"`         // Mutable, Immutable, Conditional
+	PrimitiveType     string `json:"PrimitiveType"`     // String, Integer, Boolean, etc.
+	Type              string `json:"Type"`              // List, Map, or property type name
+	ItemType          string `json:"ItemType"`          // For List/Map
+	PrimitiveItemType string `json:"PrimitiveItemType"` // For List/Map of primitives
+	UpdateType        string `json:"UpdateType"`        // Mutable, Immutable, Conditional
 	DuplicatesAllowed bool   `json:"DuplicatesAllowed"`
 }
 

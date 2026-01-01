@@ -323,7 +323,7 @@ func TestSanitizeGoName(t *testing.T) {
 		{"123Invalid", "_23Invalid"},
 		{"with-dash", "withdash"},
 		{"with.dot", "withdot"},
-		{"type", "type_"},     // Go keyword
+		{"type", "type_"},       // Go keyword
 		{"package", "package_"}, // Go keyword
 		{"", "_"},
 	}
