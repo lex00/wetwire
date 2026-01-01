@@ -709,25 +709,30 @@ func (r InlineStructLiteral) Check(file *ast.File, fset *token.FileSet) []Issue 
 	return issues
 }
 
-// UnflattenedMap detects any map[string]any in resource field assignments.
-// This is a comprehensive rule that catches all cases where typed structs should be used.
+// UnflattenedMap detects any map[string]any in resource field assignments, recursively.
+// This is a comprehensive rule that catches all cases where typed structs should be used,
+// including deeply nested maps within slices and other maps.
 //
 // Example:
 //
-//	// Bad - unflattened map
-//	BucketEncryption: map[string]any{
-//	    "ServerSideEncryptionConfiguration": []any{...},
+//	// Bad - unflattened maps at any depth
+//	DistributionConfig: map[string]any{
+//	    "Origins": []any{
+//	        map[string]any{
+//	            "CustomOriginConfig": map[string]any{...},  // Nested - also caught
+//	        },
+//	    },
 //	}
 //
-//	// Good - use typed struct
-//	BucketEncryption: s3.Bucket_BucketEncryption{
-//	    ServerSideEncryptionConfiguration: []s3.Bucket_ServerSideEncryptionRule{...},
+//	// Good - use typed structs at all levels
+//	DistributionConfig: cloudfront.Distribution_DistributionConfig{
+//	    Origins: []cloudfront.Distribution_Origin{...},
 //	}
 type UnflattenedMap struct{}
 
 func (r UnflattenedMap) ID() string { return "WAW009" }
 func (r UnflattenedMap) Description() string {
-	return "Use typed structs instead of map[string]any in resource fields"
+	return "Use typed structs instead of map[string]any in resource fields (recursive)"
 }
 
 // Fields to ignore (they legitimately use map[string]any or are handled elsewhere)
@@ -761,51 +766,81 @@ func (r UnflattenedMap) Check(file *ast.File, fset *token.FileSet) []Issue {
 			return true
 		}
 
-		// Check if value is map[string]any
-		comp, ok := kv.Value.(*ast.CompositeLit)
-		if !ok {
-			return true
-		}
+		// Recursively find all map[string]any in the value
+		foundIssues := findUnflattenedMaps(kv.Value, fieldName, fset, r.ID())
+		issues = append(issues, foundIssues...)
 
-		if isMapStringAny(comp.Type) {
-			pos := fset.Position(kv.Pos())
-			issues = append(issues, Issue{
-				RuleID:     r.ID(),
-				Message:    fmt.Sprintf("%s: use typed struct instead of map[string]any", fieldName),
-				Suggestion: fmt.Sprintf("// Use the appropriate property type struct for %s", fieldName),
-				File:       pos.Filename,
-				Line:       pos.Line,
-				Column:     pos.Column,
-				Severity:   "warning",
-			})
-		}
+		// Return false to prevent double-processing of nested KeyValueExpr
+		// (we handle them recursively in findUnflattenedMaps)
+		return false
+	})
 
-		// Also check for []any containing map[string]any
-		if arrType, ok := comp.Type.(*ast.ArrayType); ok {
-			if elemIdent, ok := arrType.Elt.(*ast.Ident); ok && elemIdent.Name == "any" {
-				// Check if any element is map[string]any
-				for _, elt := range comp.Elts {
-					if innerComp, ok := elt.(*ast.CompositeLit); ok {
-						if isMapStringAny(innerComp.Type) {
-							pos := fset.Position(kv.Pos())
-							issues = append(issues, Issue{
-								RuleID:     r.ID(),
-								Message:    fmt.Sprintf("%s: use typed slice instead of []any{map[string]any{...}}", fieldName),
-								Suggestion: fmt.Sprintf("// Use []ResourceType_%sItem{...} or extract to named vars", fieldName),
-								File:       pos.Filename,
-								Line:       pos.Line,
-								Column:     pos.Column,
-								Severity:   "warning",
-							})
-							break // Only report once per field
-						}
-					}
+	return issues
+}
+
+// findUnflattenedMaps recursively searches for map[string]any patterns in an expression.
+// It tracks the path through the structure for meaningful error messages.
+func findUnflattenedMaps(expr ast.Expr, path string, fset *token.FileSet, ruleID string) []Issue {
+	var issues []Issue
+
+	comp, ok := expr.(*ast.CompositeLit)
+	if !ok {
+		return issues
+	}
+
+	// Check if this is map[string]any
+	if isMapStringAny(comp.Type) {
+		pos := fset.Position(comp.Pos())
+		issues = append(issues, Issue{
+			RuleID:     ruleID,
+			Message:    fmt.Sprintf("%s: use typed struct instead of map[string]any", path),
+			Suggestion: fmt.Sprintf("// Use the appropriate property type struct for %s", path),
+			File:       pos.Filename,
+			Line:       pos.Line,
+			Column:     pos.Column,
+			Severity:   "warning",
+		})
+
+		// Recursively check map values
+		for _, elt := range comp.Elts {
+			if kv, ok := elt.(*ast.KeyValueExpr); ok {
+				// Get the key name for the path
+				keyName := "?"
+				if lit, ok := kv.Key.(*ast.BasicLit); ok && lit.Kind == token.STRING {
+					keyName = strings.Trim(lit.Value, `"`)
 				}
+				newPath := path + "." + keyName
+				issues = append(issues, findUnflattenedMaps(kv.Value, newPath, fset, ruleID)...)
 			}
 		}
+		return issues
+	}
 
-		return true
-	})
+	// Check if this is []any containing elements
+	if arrType, ok := comp.Type.(*ast.ArrayType); ok {
+		if elemIdent, ok := arrType.Elt.(*ast.Ident); ok && elemIdent.Name == "any" {
+			// Check each element recursively
+			for i, elt := range comp.Elts {
+				newPath := fmt.Sprintf("%s[%d]", path, i)
+				issues = append(issues, findUnflattenedMaps(elt, newPath, fset, ruleID)...)
+			}
+			return issues
+		}
+	}
+
+	// For typed struct literals, check their field values
+	for _, elt := range comp.Elts {
+		if kv, ok := elt.(*ast.KeyValueExpr); ok {
+			fieldName := ""
+			if ident, ok := kv.Key.(*ast.Ident); ok {
+				fieldName = ident.Name
+			}
+			if fieldName != "" && !ignoreFields[fieldName] {
+				newPath := path + "." + fieldName
+				issues = append(issues, findUnflattenedMaps(kv.Value, newPath, fset, ruleID)...)
+			}
+		}
+	}
 
 	return issues
 }
