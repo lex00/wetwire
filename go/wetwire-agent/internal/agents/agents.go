@@ -218,7 +218,6 @@ func (r *RunnerAgent) runWithStreaming(ctx context.Context, params anthropic.Mes
 	// Accumulate the full response
 	var message *anthropic.Message
 	var contentBlocks []anthropic.ContentBlockUnion
-	var currentBlockIndex int64 = -1
 	currentTextContent := make(map[int64]*strings.Builder)
 	currentToolInput := make(map[int64]*strings.Builder)
 
@@ -236,13 +235,12 @@ func (r *RunnerAgent) runWithStreaming(ctx context.Context, params anthropic.Mes
 		case "content_block_start":
 			// Initialize a new content block
 			startEvent := event.AsContentBlockStart()
-			currentBlockIndex = startEvent.Index
 
 			// Initialize content builders based on block type
 			if startEvent.ContentBlock.Type == "text" {
-				currentTextContent[currentBlockIndex] = &strings.Builder{}
+				currentTextContent[startEvent.Index] = &strings.Builder{}
 			} else if startEvent.ContentBlock.Type == "tool_use" {
-				currentToolInput[currentBlockIndex] = &strings.Builder{}
+				currentToolInput[startEvent.Index] = &strings.Builder{}
 			}
 
 			// Create the block - Input/Text will be accumulated
