@@ -149,7 +149,10 @@ func parseSpec(spec *CFSpec, filterService string) []*Service {
 			Properties:     properties,
 		}
 
-		svc.PropertyTypes[propTypeName] = parsed
+		// Use qualified key to avoid collisions when multiple resources have
+		// property types with the same name (e.g., PublicAccessBlockConfiguration)
+		qualifiedKey := parentResource + "_" + propTypeName
+		svc.PropertyTypes[qualifiedKey] = parsed
 	}
 
 	// Convert to sorted slice

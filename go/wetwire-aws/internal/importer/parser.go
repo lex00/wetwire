@@ -60,21 +60,32 @@ func ParseTemplateContent(content []byte, sourceName string) (*IRTemplate, error
 
 // parseYAMLNode recursively converts a yaml.Node to Go values, handling CF intrinsic tags.
 func parseYAMLNode(node *yaml.Node) any {
+	return parseYAMLNodeWithVisited(node, make(map[*yaml.Node]bool))
+}
+
+// parseYAMLNodeWithVisited is the internal implementation with cycle detection.
+func parseYAMLNodeWithVisited(node *yaml.Node, visited map[*yaml.Node]bool) any {
 	if node == nil {
 		return nil
 	}
 
+	// Cycle detection
+	if visited[node] {
+		return nil // Break cycle
+	}
+	visited[node] = true
+
 	// Handle document node
 	if node.Kind == yaml.DocumentNode {
 		if len(node.Content) > 0 {
-			return parseYAMLNode(node.Content[0])
+			return parseYAMLNodeWithVisited(node.Content[0], visited)
 		}
 		return nil
 	}
 
 	// Check for CloudFormation intrinsic function tags (single !, not !! standard tags)
 	if node.Tag != "" && strings.HasPrefix(node.Tag, "!") && !strings.HasPrefix(node.Tag, "!!") {
-		return parseIntrinsicTag(node)
+		return parseIntrinsicTagWithVisited(node, visited)
 	}
 
 	switch node.Kind {
@@ -84,7 +95,7 @@ func parseYAMLNode(node *yaml.Node) any {
 	case yaml.SequenceNode:
 		result := make([]any, 0, len(node.Content))
 		for _, child := range node.Content {
-			result = append(result, parseYAMLNode(child))
+			result = append(result, parseYAMLNodeWithVisited(child, visited))
 		}
 		return result
 
@@ -94,12 +105,12 @@ func parseYAMLNode(node *yaml.Node) any {
 			keyNode := node.Content[i]
 			valueNode := node.Content[i+1]
 			key := parseScalarString(keyNode)
-			result[key] = parseYAMLNode(valueNode)
+			result[key] = parseYAMLNodeWithVisited(valueNode, visited)
 		}
 		return result
 
 	case yaml.AliasNode:
-		return parseYAMLNode(node.Alias)
+		return parseYAMLNodeWithVisited(node.Alias, visited)
 	}
 
 	return nil
@@ -123,13 +134,18 @@ func parseScalarString(node *yaml.Node) string {
 // parseNodeContents parses the contents of a tagged node without re-checking the tag.
 // This prevents infinite recursion when an intrinsic like !Base64 wraps another structure.
 func parseNodeContents(node *yaml.Node) any {
+	return parseNodeContentsWithVisited(node, make(map[*yaml.Node]bool))
+}
+
+// parseNodeContentsWithVisited is the internal implementation with cycle detection.
+func parseNodeContentsWithVisited(node *yaml.Node, visited map[*yaml.Node]bool) any {
 	switch node.Kind {
 	case yaml.ScalarNode:
 		return parseScalar(node)
 	case yaml.SequenceNode:
 		result := make([]any, 0, len(node.Content))
 		for _, child := range node.Content {
-			result = append(result, parseYAMLNode(child))
+			result = append(result, parseYAMLNodeWithVisited(child, visited))
 		}
 		return result
 	case yaml.MappingNode:
@@ -138,7 +154,7 @@ func parseNodeContents(node *yaml.Node) any {
 			keyNode := node.Content[i]
 			valueNode := node.Content[i+1]
 			key := parseScalarString(keyNode)
-			result[key] = parseYAMLNode(valueNode)
+			result[key] = parseYAMLNodeWithVisited(valueNode, visited)
 		}
 		return result
 	}
@@ -147,6 +163,11 @@ func parseNodeContents(node *yaml.Node) any {
 
 // parseIntrinsicTag handles CloudFormation intrinsic function YAML tags.
 func parseIntrinsicTag(node *yaml.Node) *IRIntrinsic {
+	return parseIntrinsicTagWithVisited(node, make(map[*yaml.Node]bool))
+}
+
+// parseIntrinsicTagWithVisited is the internal implementation with cycle detection.
+func parseIntrinsicTagWithVisited(node *yaml.Node, visited map[*yaml.Node]bool) *IRIntrinsic {
 	tag := strings.TrimPrefix(node.Tag, "!")
 
 	switch tag {
@@ -175,7 +196,7 @@ func parseIntrinsicTag(node *yaml.Node) *IRIntrinsic {
 		if node.Kind == yaml.SequenceNode {
 			args := make([]any, 0, len(node.Content))
 			for _, child := range node.Content {
-				args = append(args, parseYAMLNode(child))
+				args = append(args, parseYAMLNodeWithVisited(child, visited))
 			}
 			return &IRIntrinsic{Type: IntrinsicSub, Args: args}
 		}
@@ -183,14 +204,14 @@ func parseIntrinsicTag(node *yaml.Node) *IRIntrinsic {
 	case "Join":
 		if node.Kind == yaml.SequenceNode && len(node.Content) >= 2 {
 			delimiter := parseScalarString(node.Content[0])
-			values := parseYAMLNode(node.Content[1])
+			values := parseYAMLNodeWithVisited(node.Content[1], visited)
 			return &IRIntrinsic{Type: IntrinsicJoin, Args: []any{delimiter, values}}
 		}
 
 	case "Select":
 		if node.Kind == yaml.SequenceNode && len(node.Content) >= 2 {
-			index := parseYAMLNode(node.Content[0])
-			list := parseYAMLNode(node.Content[1])
+			index := parseYAMLNodeWithVisited(node.Content[0], visited)
+			list := parseYAMLNodeWithVisited(node.Content[1], visited)
 			return &IRIntrinsic{Type: IntrinsicSelect, Args: []any{index, list}}
 		}
 
@@ -202,8 +223,8 @@ func parseIntrinsicTag(node *yaml.Node) *IRIntrinsic {
 			return &IRIntrinsic{Type: IntrinsicGetAZs, Args: parseScalarString(node.Content[0])}
 		}
 		if node.Kind == yaml.MappingNode {
-			// Handle nested intrinsic
-			return &IRIntrinsic{Type: IntrinsicGetAZs, Args: parseYAMLNode(node)}
+			// Handle nested intrinsic - use parseNodeContentsWithVisited to avoid infinite recursion
+			return &IRIntrinsic{Type: IntrinsicGetAZs, Args: parseNodeContentsWithVisited(node, visited)}
 		}
 		return &IRIntrinsic{Type: IntrinsicGetAZs, Args: ""}
 
@@ -211,16 +232,16 @@ func parseIntrinsicTag(node *yaml.Node) *IRIntrinsic {
 		if node.Kind == yaml.SequenceNode && len(node.Content) >= 3 {
 			args := make([]any, 3)
 			args[0] = parseScalarString(node.Content[0])
-			args[1] = parseYAMLNode(node.Content[1])
-			args[2] = parseYAMLNode(node.Content[2])
+			args[1] = parseYAMLNodeWithVisited(node.Content[1], visited)
+			args[2] = parseYAMLNodeWithVisited(node.Content[2], visited)
 			return &IRIntrinsic{Type: IntrinsicIf, Args: args}
 		}
 
 	case "Equals":
 		if node.Kind == yaml.SequenceNode && len(node.Content) >= 2 {
 			args := make([]any, 2)
-			args[0] = parseYAMLNode(node.Content[0])
-			args[1] = parseYAMLNode(node.Content[1])
+			args[0] = parseYAMLNodeWithVisited(node.Content[0], visited)
+			args[1] = parseYAMLNodeWithVisited(node.Content[1], visited)
 			return &IRIntrinsic{Type: IntrinsicEquals, Args: args}
 		}
 
@@ -228,7 +249,7 @@ func parseIntrinsicTag(node *yaml.Node) *IRIntrinsic {
 		if node.Kind == yaml.SequenceNode {
 			args := make([]any, 0, len(node.Content))
 			for _, child := range node.Content {
-				args = append(args, parseYAMLNode(child))
+				args = append(args, parseYAMLNodeWithVisited(child, visited))
 			}
 			return &IRIntrinsic{Type: IntrinsicAnd, Args: args}
 		}
@@ -237,14 +258,14 @@ func parseIntrinsicTag(node *yaml.Node) *IRIntrinsic {
 		if node.Kind == yaml.SequenceNode {
 			args := make([]any, 0, len(node.Content))
 			for _, child := range node.Content {
-				args = append(args, parseYAMLNode(child))
+				args = append(args, parseYAMLNodeWithVisited(child, visited))
 			}
 			return &IRIntrinsic{Type: IntrinsicOr, Args: args}
 		}
 
 	case "Not":
 		if node.Kind == yaml.SequenceNode && len(node.Content) > 0 {
-			return &IRIntrinsic{Type: IntrinsicNot, Args: parseYAMLNode(node.Content[0])}
+			return &IRIntrinsic{Type: IntrinsicNot, Args: parseYAMLNodeWithVisited(node.Content[0], visited)}
 		}
 
 	case "Condition":
@@ -254,7 +275,7 @@ func parseIntrinsicTag(node *yaml.Node) *IRIntrinsic {
 		if node.Kind == yaml.SequenceNode && len(node.Content) >= 3 {
 			args := make([]any, 3)
 			for i := 0; i < 3; i++ {
-				args[i] = parseYAMLNode(node.Content[i])
+				args[i] = parseYAMLNodeWithVisited(node.Content[i], visited)
 			}
 			return &IRIntrinsic{Type: IntrinsicFindInMap, Args: args}
 		}
@@ -264,13 +285,13 @@ func parseIntrinsicTag(node *yaml.Node) *IRIntrinsic {
 			return &IRIntrinsic{Type: IntrinsicBase64, Args: node.Value}
 		}
 		// For non-scalar (e.g., mapping with Fn::Join), parse contents directly
-		return &IRIntrinsic{Type: IntrinsicBase64, Args: parseNodeContents(node)}
+		return &IRIntrinsic{Type: IntrinsicBase64, Args: parseNodeContentsWithVisited(node, visited)}
 
 	case "Cidr":
 		if node.Kind == yaml.SequenceNode && len(node.Content) >= 3 {
 			args := make([]any, 3)
 			for i := 0; i < 3; i++ {
-				args[i] = parseYAMLNode(node.Content[i])
+				args[i] = parseYAMLNodeWithVisited(node.Content[i], visited)
 			}
 			return &IRIntrinsic{Type: IntrinsicCidr, Args: args}
 		}
@@ -280,24 +301,24 @@ func parseIntrinsicTag(node *yaml.Node) *IRIntrinsic {
 			return &IRIntrinsic{Type: IntrinsicImportValue, Args: node.Value}
 		}
 		// For non-scalar (e.g., nested intrinsics), parse contents directly
-		return &IRIntrinsic{Type: IntrinsicImportValue, Args: parseNodeContents(node)}
+		return &IRIntrinsic{Type: IntrinsicImportValue, Args: parseNodeContentsWithVisited(node, visited)}
 
 	case "Split":
 		if node.Kind == yaml.SequenceNode && len(node.Content) >= 2 {
 			args := make([]any, 2)
 			args[0] = parseScalarString(node.Content[0])
-			args[1] = parseYAMLNode(node.Content[1])
+			args[1] = parseYAMLNodeWithVisited(node.Content[1], visited)
 			return &IRIntrinsic{Type: IntrinsicSplit, Args: args}
 		}
 
 	case "Transform":
-		return &IRIntrinsic{Type: IntrinsicTransform, Args: parseNodeContents(node)}
+		return &IRIntrinsic{Type: IntrinsicTransform, Args: parseNodeContentsWithVisited(node, visited)}
 
 	case "ValueOf":
 		if node.Kind == yaml.SequenceNode && len(node.Content) >= 2 {
 			args := make([]any, len(node.Content))
 			for i, child := range node.Content {
-				args[i] = parseYAMLNode(child)
+				args[i] = parseYAMLNodeWithVisited(child, visited)
 			}
 			return &IRIntrinsic{Type: IntrinsicValueOf, Args: args}
 		}
@@ -493,9 +514,38 @@ func parseResource(logicalID string, resourceDef map[string]any) *IRResource {
 func parseProperty(cfName string, value any) *IRProperty {
 	return &IRProperty{
 		DomainName: cfName,
-		GoName:     cfName, // Keep PascalCase for Go
+		GoName:     transformGoFieldName(cfName),
 		Value:      resolveLongFormIntrinsics(value),
 	}
+}
+
+// transformGoFieldName handles Go keyword conflicts in field names.
+// CloudFormation uses PascalCase (Type), Go keywords are lowercase (type).
+// If the lowercase version is a keyword, append underscore (Type_).
+func transformGoFieldName(name string) string {
+	// Check if the lowercase version is a Go keyword
+	lower := strings.ToLower(name)
+	if isGoKeyword(lower) {
+		return name + "_"
+	}
+	// Also handle ResourceType which conflicts with a method
+	if name == "ResourceType" {
+		return "ResourceTypeProp"
+	}
+	return name
+}
+
+// goKeywords lists Go keywords that require field name transformation.
+var goKeywords = map[string]bool{
+	"break": true, "case": true, "chan": true, "const": true, "continue": true,
+	"default": true, "defer": true, "else": true, "fallthrough": true, "for": true,
+	"func": true, "go": true, "goto": true, "if": true, "import": true,
+	"interface": true, "map": true, "package": true, "range": true, "return": true,
+	"select": true, "struct": true, "switch": true, "type": true, "var": true,
+}
+
+func isGoKeyword(s string) bool {
+	return goKeywords[s]
 }
 
 func parseOutput(logicalID string, outputDef map[string]any) *IROutput {

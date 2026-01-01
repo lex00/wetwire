@@ -64,9 +64,11 @@ EXCLUDE_TEMPLATES=(
     "CloudFormation/MacrosExamples/PyPlate/python.yaml"
     "CloudFormation/MacrosExamples/StringFunctions/string.yaml"
     "CloudFormation/StackSets/common-resources-stackset_1.yaml"
+    "CloudFormation/StackSets/common-resources-stackset.yaml"
     "CloudFormation/StackSets/common-resources.yaml"
     "CloudFormation/StackSets/common-resources.json"
     "CloudFormation/StackSets/log-setup-management_1.yaml"
+    "CloudFormation/StackSets/log-setup-management.yaml"
     "ElastiCache/Elasticache-snapshot.yaml"
     "IoT/amzn2-greengrass-cfn.yaml"
     "RainModules/api-resource.yml"
@@ -344,6 +346,13 @@ for template in "${TEMPLATES[@]}"; do
 
     if error_output=$("$PROJECT_ROOT/wetwire-aws" import "$template" -o "$pkg_output" 2>&1); then
         IMPORT_OK=$((IMPORT_OK + 1))
+
+        # Add replace directive for local development and tidy
+        if [ -f "$pkg_output/go.mod" ]; then
+            sed -i '' 's|// replace github.com/lex00/wetwire-aws => ../path/to/wetwire-aws|replace github.com/lex00/wetwire-aws => ../../..|' "$pkg_output/go.mod"
+            (cd "$pkg_output" && "$GO_BIN" mod tidy 2>/dev/null) || true
+        fi
+
         if [ "$VERBOSE" = "true" ]; then
             success "Imported: $template_name"
         fi

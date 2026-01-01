@@ -72,6 +72,12 @@ func main() {
 		log.Fatalf("generating code: %v", err)
 	}
 
+	// Step 4: Generate property type registry
+	fmt.Println("\nGenerating property type registry...")
+	if err := generateRegistry(services, outputDir, dryRun); err != nil {
+		log.Fatalf("generating registry: %v", err)
+	}
+
 	fmt.Printf("\nGeneration complete:\n")
 	fmt.Printf("  Services: %d\n", stats.Services)
 	fmt.Printf("  Resources: %d\n", stats.Resources)

@@ -1,0 +1,26 @@
+run:
+  timeout: 5m
+  # Skip generated code
+  skip-dirs:
+    - resources
+    - examples
+
+linters:
+  enable:
+    - gofmt
+    - goimports
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - misspell
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/lex00/wetwire-aws
+
+issues:
+  # Don't limit issues per linter
+  max-issues-per-linter: 0
+  max-same-issues: 0

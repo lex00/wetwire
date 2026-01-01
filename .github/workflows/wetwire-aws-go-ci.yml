@@ -35,6 +35,12 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
+      - name: Generate resources
+        run: |
+          go run ./codegen/fetch.go
+          go run ./codegen/parse.go
+          go run ./codegen/main.go
+
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.out ./...
 
@@ -55,6 +61,12 @@ jobs:
         with:
           go-version: '1.22'
 
+      - name: Generate resources
+        run: |
+          go run ./codegen/fetch.go
+          go run ./codegen/parse.go
+          go run ./codegen/main.go
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v4
         with:
@@ -71,6 +83,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+
+      - name: Generate resources
+        run: |
+          go run ./codegen/fetch.go
+          go run ./codegen/parse.go
+          go run ./codegen/main.go
 
       - name: Build CLI
         run: go build -v ./cmd/wetwire-aws
@@ -97,16 +115,13 @@ jobs:
       - name: Parse spec
         run: go run ./codegen/parse.go
 
-      - name: Generate types (dry run)
-        run: |
-          mkdir -p resources
-          go run ./codegen/generate.go --dry-run || echo "Dry run complete"
+      - name: Generate resources
+        run: go run ./codegen/main.go
 
-      - name: Verify spec was downloaded
+      - name: Verify generated code compiles
+        run: go build ./resources/...
+
+      - name: Count generated services
         run: |
-          if [ -f "specs/CloudFormationResourceSpecification.json" ]; then
-            echo "Spec downloaded successfully"
-            ls -la specs/
-          else
-            echo "Spec download verification skipped (may be cached)"
-          fi
+          COUNT=$(ls -d resources/*/ | wc -l)
+          echo "Generated $COUNT service packages"

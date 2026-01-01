@@ -205,6 +205,9 @@ func GenerateTemplateFiles(packageName string, modulePath string) map[string]str
 go 1.22
 
 require github.com/lex00/wetwire-aws v0.1.0
+
+// For local development, uncomment and adjust the path:
+// replace github.com/lex00/wetwire-aws => ../path/to/wetwire-aws
 `, modulePath)
 
 	// cmd/main.go - Entry point placeholder

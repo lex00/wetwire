@@ -36,8 +36,8 @@ func generateCode(services []*Service, outputDir string, dryRun bool) (*Generati
 }
 
 func generateService(svc *Service, outputDir string, dryRun bool, stats *GenerationStats) error {
-	// Create service directory
-	svcDir := filepath.Join(outputDir, svc.Name)
+	// Create service directory under resources/
+	svcDir := filepath.Join(outputDir, "resources", svc.Name)
 	if !dryRun {
 		if err := os.MkdirAll(svcDir, 0755); err != nil {
 			return err
@@ -177,18 +177,29 @@ type attributeData struct {
 }
 
 func generateResource(svc *Service, res ParsedResource) ([]byte, error) {
-	// Build map of property type names to qualified names for this service
-	// Property types are named as ParentResource_PropertyType
+	// Build map of property type names to qualified names for this service.
+	// Property types are named as ParentResource_PropertyType.
 	// When multiple property types share the same simple name, prefer the one
 	// from the same parent resource as the current resource.
+	// The map key in svc.PropertyTypes is already qualified (e.g., "Bucket_PublicAccessBlockConfiguration"),
+	// and pt.Name is the short name (e.g., "PublicAccessBlockConfiguration").
+	// Use sorted iteration for deterministic results.
+	sortedTypeKeys := make([]string, 0, len(svc.PropertyTypes))
+	for k := range svc.PropertyTypes {
+		sortedTypeKeys = append(sortedTypeKeys, k)
+	}
+	sort.Strings(sortedTypeKeys)
+
 	propTypeNames := make(map[string]string)
-	for ptName, pt := range svc.PropertyTypes {
-		qualifiedName := pt.ParentResource + "_" + ptName
+	for _, qualifiedKey := range sortedTypeKeys {
+		pt := svc.PropertyTypes[qualifiedKey]
+		// qualifiedKey is already "ParentResource_PropertyType"
+		// pt.Name is just "PropertyType"
 		// Prefer property types from the same parent resource
 		if pt.ParentResource == res.Name {
-			propTypeNames[ptName] = qualifiedName
-		} else if _, exists := propTypeNames[ptName]; !exists {
-			propTypeNames[ptName] = qualifiedName
+			propTypeNames[pt.Name] = qualifiedKey
+		} else if _, exists := propTypeNames[pt.Name]; !exists {
+			propTypeNames[pt.Name] = qualifiedKey
 		}
 	}
 
@@ -204,17 +215,20 @@ func generateResource(svc *Service, res ParsedResource) ([]byte, error) {
 		prop := res.Properties[name]
 		goType := resolveTypeReferences(prop.GoType, propTypeNames, prop.IsPointer)
 
-		// Convert property type fields to any to allow both typed structs and map literals
-		// This enables the importer to generate flexible code without knowing exact type names
-		goType = flexiblePropertyType(goType, propTypeNames)
+		// Special case: Tags uses []any to allow intrinsics.Tag from dot import
+		if goType == "[]Tag" {
+			goType = "[]any"
+		}
 
 		// Clean up documentation
 		doc := cleanDoc(prop.Documentation)
 
-		// Rename properties that conflict with struct methods
+		// Rename properties that conflict with struct methods or Go keywords
 		goName := name
 		if name == "ResourceType" {
 			goName = "ResourceTypeProp"
+		} else if isGoKeyword(name) {
+			goName = name + "_"
 		}
 
 		props = append(props, propertyData{
@@ -353,51 +367,6 @@ func resolveTypeReferences(goType string, qualifiedNames map[string]string, isPo
 	return goType
 }
 
-// flexiblePropertyType converts property type fields to any to allow both typed structs
-// and inline map literals. This enables the importer to generate flexible code.
-func flexiblePropertyType(goType string, propTypeNames map[string]string) string {
-	// If already any or primitive-like, leave it
-	if goType == "any" || goType == "[]any" || goType == "map[string]any" {
-		return goType
-	}
-
-	// Tags field uses []any to allow intrinsics.Tag from dot import
-	if goType == "[]Tag" {
-		return "[]any"
-	}
-
-	// Check if this is a property type reference (contains underscore pattern like "Resource_Type")
-	isPropertyType := func(t string) bool {
-		// Strip slice/pointer prefix
-		base := strings.TrimPrefix(strings.TrimPrefix(t, "*"), "[]")
-		// Check if it's a qualified name (contains underscore) from property types
-		for _, qn := range propTypeNames {
-			if base == qn {
-				return true
-			}
-		}
-		// Also check for underscore pattern indicating a property type
-		return strings.Contains(base, "_")
-	}
-
-	// Handle slice types like []SomeResource_Type -> []any
-	if strings.HasPrefix(goType, "[]") && isPropertyType(goType) {
-		return "[]any"
-	}
-
-	// Handle pointer types like *SomeResource_Type -> any
-	if strings.HasPrefix(goType, "*") && isPropertyType(goType) {
-		return "any"
-	}
-
-	// Handle non-pointer property types -> any
-	if isPropertyType(goType) {
-		return "any"
-	}
-
-	return goType
-}
-
 // cleanDoc cleans up CloudFormation documentation for Go comments.
 func cleanDoc(doc string) string {
 	if doc == "" {
@@ -472,20 +441,30 @@ func generateSharedTypes(svc *Service) []byte {
 
 // generateResourcePropertyTypes generates a {resource}_types.go file for property types of a single resource.
 func generateResourcePropertyTypes(svc *Service, resourceName string, typeNames []string) ([]byte, error) {
-	// Build qualified names map for type reference resolution
+	// Build qualified names map for type reference resolution.
+	// The map key in svc.PropertyTypes is already qualified (e.g., "Bucket_PublicAccessBlockConfiguration").
+	// Sort keys for deterministic ordering (alphabetically first wins for short names).
 	qualifiedNames := make(map[string]string)
-	for name, propType := range svc.PropertyTypes {
-		qualifiedName := propType.ParentResource + "_" + name
-		if _, exists := qualifiedNames[name]; !exists {
-			qualifiedNames[name] = qualifiedName
+	sortedTypeKeys := make([]string, 0, len(svc.PropertyTypes))
+	for k := range svc.PropertyTypes {
+		sortedTypeKeys = append(sortedTypeKeys, k)
+	}
+	sort.Strings(sortedTypeKeys)
+	for _, qualifiedKey := range sortedTypeKeys {
+		propType := svc.PropertyTypes[qualifiedKey]
+		// Map short name to qualified key (first alphabetically wins)
+		if _, exists := qualifiedNames[propType.Name]; !exists {
+			qualifiedNames[propType.Name] = qualifiedKey
 		}
-		qualifiedNames[qualifiedName] = qualifiedName
+		// Also map qualified key to itself for explicit lookups
+		qualifiedNames[qualifiedKey] = qualifiedKey
 	}
 
 	var types []typeData
-	for _, name := range typeNames {
-		propType := svc.PropertyTypes[name]
-		qualifiedName := resourceName + "_" + name
+	for _, qualifiedKey := range typeNames {
+		propType := svc.PropertyTypes[qualifiedKey]
+		// qualifiedKey is already "ResourceName_PropertyType"
+		qualifiedName := qualifiedKey
 
 		// Sort properties
 		propNames := make([]string, 0, len(propType.Properties))
@@ -538,6 +517,256 @@ func generateResourcePropertyTypes(svc *Service, resourceName string, typeNames 
 	}
 
 	return formatted, nil
+}
+
+// generateRegistry creates resources/registry.go with all property type names and mappings.
+// This allows the importer to check if a type exists and look up the correct type for a property.
+func generateRegistry(services []*Service, outputDir string, dryRun bool) error {
+	// PropertyTypes: map of all property type names for existence check.
+	// The map key in svc.PropertyTypes is already qualified (e.g., "Bucket_PublicAccessBlockConfiguration").
+	var typeEntries []string
+	for _, svc := range services {
+		for qualifiedKey := range svc.PropertyTypes {
+			// Format: "service.Resource_PropertyType"
+			fullName := fmt.Sprintf("%s.%s", svc.Name, qualifiedKey)
+			typeEntries = append(typeEntries, fullName)
+		}
+	}
+	sort.Strings(typeEntries)
+
+	// PropertyTypeMap: maps property paths to their actual type names
+	// Format: "service.Resource.PropertyName" -> "Resource_ActualTypeName"
+	// Format: "service.Resource_Type.PropertyName" -> "Resource_ActualTypeName"
+	propMap := make(map[string]string)
+
+	for _, svc := range services {
+		// Build sorted list of property type keys for deterministic ordering.
+		sortedTypeKeys := make([]string, 0, len(svc.PropertyTypes))
+		for k := range svc.PropertyTypes {
+			sortedTypeKeys = append(sortedTypeKeys, k)
+		}
+		sort.Strings(sortedTypeKeys)
+
+		// Build qualifiedNames map with deterministic ordering (alphabetically first wins).
+		// This matches the logic in generateResourcePropertyTypes.
+		qualifiedNames := make(map[string]string)
+		for _, qualifiedKey := range sortedTypeKeys {
+			propType := svc.PropertyTypes[qualifiedKey]
+			if _, exists := qualifiedNames[propType.Name]; !exists {
+				qualifiedNames[propType.Name] = qualifiedKey
+			}
+			qualifiedNames[qualifiedKey] = qualifiedKey
+		}
+
+		// resolveTypeName resolves a short type name to its qualified form.
+		resolveTypeName := func(shortName string) string {
+			if qn, ok := qualifiedNames[shortName]; ok {
+				return qn
+			}
+			return shortName
+		}
+
+		// Map resource properties to their types.
+		// For resources, we use parent preference (matching generateResource logic).
+		for resName, res := range svc.Resources {
+			// Build propTypeNames with parent preference for this resource
+			// (matching the logic in generateResource at lines 180-196)
+			propTypeNames := make(map[string]string)
+			for _, qualifiedKey := range sortedTypeKeys {
+				pt := svc.PropertyTypes[qualifiedKey]
+				// Prefer property types from the same parent resource
+				if pt.ParentResource == resName {
+					propTypeNames[pt.Name] = qualifiedKey
+				} else if _, exists := propTypeNames[pt.Name]; !exists {
+					propTypeNames[pt.Name] = qualifiedKey
+				}
+			}
+
+			resolveForResource := func(shortName string) string {
+				if qn, ok := propTypeNames[shortName]; ok {
+					return qn
+				}
+				return shortName
+			}
+
+			for propName, prop := range res.Properties {
+				// Skip primitives and any
+				if prop.GoType == "any" || prop.GoType == "" {
+					continue
+				}
+
+				var typeName string
+				if prop.IsList && prop.ItemType != "" && !isPrimitive(prop.ItemType) {
+					// List of property types: []SomeType
+					typeName = resolveForResource(prop.ItemType)
+				} else if prop.IsMap && prop.ItemType != "" && !isPrimitive(prop.ItemType) {
+					// Map of property types: map[string]SomeType
+					typeName = resolveForResource(prop.ItemType)
+				} else if !prop.IsList && !prop.IsMap && !isPrimitive(prop.GoType) {
+					// Direct property type reference
+					typeName = resolveForResource(prop.GoType)
+				}
+
+				if typeName != "" {
+					// Check if this type exists
+					fullTypeName := svc.Name + "." + typeName
+					exists := false
+					for _, e := range typeEntries {
+						if e == fullTypeName {
+							exists = true
+							break
+						}
+					}
+					if exists {
+						key := fmt.Sprintf("%s.%s.%s", svc.Name, resName, propName)
+						propMap[key] = typeName
+					}
+				}
+			}
+		}
+
+		// Map property type properties to their types.
+		// The map key is already qualified (e.g., "Bucket_PublicAccessBlockConfiguration").
+		for qualifiedKey, pt := range svc.PropertyTypes {
+			// qualifiedKey is already the qualified type name
+			parentTypeName := qualifiedKey
+			for propName, prop := range pt.Properties {
+				// Skip primitives and any
+				if prop.GoType == "any" || prop.GoType == "" {
+					continue
+				}
+
+				var typeName string
+				if prop.IsList && prop.ItemType != "" && !isPrimitive(prop.ItemType) {
+					// List of property types
+					typeName = resolveTypeName(prop.ItemType)
+				} else if prop.IsMap && prop.ItemType != "" && !isPrimitive(prop.ItemType) {
+					// Map of property types
+					typeName = resolveTypeName(prop.ItemType)
+				} else if !prop.IsList && !prop.IsMap && !isPrimitive(prop.GoType) {
+					// Direct property type reference
+					typeName = resolveTypeName(prop.GoType)
+				}
+
+				if typeName != "" {
+					// Check if this type exists
+					fullTypeName := svc.Name + "." + typeName
+					exists := false
+					for _, e := range typeEntries {
+						if e == fullTypeName {
+							exists = true
+							break
+						}
+					}
+					if exists {
+						key := fmt.Sprintf("%s.%s.%s", svc.Name, parentTypeName, propName)
+						propMap[key] = typeName
+					}
+				}
+			}
+		}
+	}
+
+	// Sort property map keys
+	propMapKeys := make([]string, 0, len(propMap))
+	for k := range propMap {
+		propMapKeys = append(propMapKeys, k)
+	}
+	sort.Strings(propMapKeys)
+
+	// PointerFields: tracks which fields expect pointer types
+	// Format: "service.ParentType.PropertyName" -> true if pointer
+	pointerFields := make(map[string]bool)
+
+	for _, svc := range services {
+		// Check resource properties
+		for resName, res := range svc.Resources {
+			for propName, prop := range res.Properties {
+				if prop.IsPointer {
+					key := fmt.Sprintf("%s.%s.%s", svc.Name, resName, propName)
+					pointerFields[key] = true
+				}
+			}
+		}
+
+		// Check property type properties
+		for qualifiedKey, pt := range svc.PropertyTypes {
+			for propName, prop := range pt.Properties {
+				if prop.IsPointer {
+					key := fmt.Sprintf("%s.%s.%s", svc.Name, qualifiedKey, propName)
+					pointerFields[key] = true
+				}
+			}
+		}
+	}
+
+	// Sort pointer fields keys
+	pointerFieldKeys := make([]string, 0, len(pointerFields))
+	for k := range pointerFields {
+		pointerFieldKeys = append(pointerFieldKeys, k)
+	}
+	sort.Strings(pointerFieldKeys)
+
+	// Generate the registry file content
+	var buf bytes.Buffer
+	buf.WriteString("// Code generated by wetwire-aws codegen. DO NOT EDIT.\n\n")
+	buf.WriteString("package resources\n\n")
+
+	buf.WriteString("// PropertyTypes lists all generated property type names.\n")
+	buf.WriteString("// Used by the importer to check if a type exists.\n")
+	buf.WriteString("var PropertyTypes = map[string]bool{\n")
+	for _, entry := range typeEntries {
+		buf.WriteString(fmt.Sprintf("\t%q: true,\n", entry))
+	}
+	buf.WriteString("}\n\n")
+
+	buf.WriteString("// PropertyTypeMap maps property paths to their actual type names.\n")
+	buf.WriteString("// Format: \"service.ParentType.PropertyName\" -> \"ParentResource_ActualTypeName\"\n")
+	buf.WriteString("// Used by the importer to look up the correct type for a property.\n")
+	buf.WriteString("var PropertyTypeMap = map[string]string{\n")
+	for _, key := range propMapKeys {
+		buf.WriteString(fmt.Sprintf("\t%q: %q,\n", key, propMap[key]))
+	}
+	buf.WriteString("}\n\n")
+
+	buf.WriteString("// PointerFields tracks which property fields expect pointer types.\n")
+	buf.WriteString("// Format: \"service.ParentType.PropertyName\" -> true if pointer\n")
+	buf.WriteString("// Used by the importer to determine if a block should be a pointer.\n")
+	buf.WriteString("var PointerFields = map[string]bool{\n")
+	for _, key := range pointerFieldKeys {
+		buf.WriteString(fmt.Sprintf("\t%q: true,\n", key))
+	}
+	buf.WriteString("}\n")
+
+	// Write the file
+	resourcesDir := filepath.Join(outputDir, "resources")
+	registryFile := filepath.Join(resourcesDir, "registry.go")
+
+	if dryRun {
+		fmt.Printf("Would write: %s (%d property types, %d mappings)\n", registryFile, len(typeEntries), len(propMap))
+		return nil
+	}
+
+	// Ensure resources directory exists
+	if err := os.MkdirAll(resourcesDir, 0755); err != nil {
+		return fmt.Errorf("creating resources directory: %w", err)
+	}
+
+	if err := os.WriteFile(registryFile, buf.Bytes(), 0644); err != nil {
+		return fmt.Errorf("writing registry file: %w", err)
+	}
+
+	fmt.Printf("Generated registry with %d property types, %d mappings: %s\n", len(typeEntries), len(propMap), registryFile)
+	return nil
+}
+
+// isPrimitive checks if a type is a Go primitive (not a property type reference).
+func isPrimitive(t string) bool {
+	primitives := map[string]bool{
+		"string": true, "int": true, "int64": true, "float64": true,
+		"bool": true, "any": true, "": true,
+	}
+	return primitives[t]
 }
 
 // generatePropertyTypes generates the types.go file with all property types.

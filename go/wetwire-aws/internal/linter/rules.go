@@ -14,6 +14,7 @@
 //	WAW007: Use typed slices instead of []any{map[string]any{...}}
 //	WAW008: Use named var declarations instead of inline struct literals (block style)
 //	WAW009: Use typed structs instead of map[string]any in resource fields
+//	WAW010: Flatten inline typed struct literals to named var declarations
 package linter
 
 import (
@@ -845,6 +846,136 @@ func findUnflattenedMaps(expr ast.Expr, path string, fset *token.FileSet, ruleID
 	return issues
 }
 
+// InlineTypedStruct detects typed property type struct literals that should be
+// extracted to separate named variable declarations (block style).
+//
+// This enforces the pattern where each property type instance is a separate
+// top-level var declaration, matching the Python wetwire-aws pattern:
+//
+//	// Bad - inline typed struct literals
+//	var LoggingBucket = s3.Bucket{
+//	    BucketEncryption: &s3.Bucket_BucketEncryption{
+//	        ServerSideEncryptionConfiguration: []s3.Bucket_ServerSideEncryptionRule{
+//	            s3.Bucket_ServerSideEncryptionRule{...},
+//	        },
+//	    },
+//	}
+//
+//	// Good - flattened to named var declarations (block style)
+//	var LoggingBucketSSEByDefault = &s3.Bucket_ServerSideEncryptionByDefault{...}
+//	var LoggingBucketSSERule = s3.Bucket_ServerSideEncryptionRule{
+//	    ServerSideEncryptionByDefault: LoggingBucketSSEByDefault,
+//	}
+//	var LoggingBucketEncryption = &s3.Bucket_BucketEncryption{
+//	    ServerSideEncryptionConfiguration: []s3.Bucket_ServerSideEncryptionRule{LoggingBucketSSERule},
+//	}
+//	var LoggingBucket = s3.Bucket{
+//	    BucketEncryption: LoggingBucketEncryption,
+//	}
+type InlineTypedStruct struct{}
+
+func (r InlineTypedStruct) ID() string { return "WAW010" }
+func (r InlineTypedStruct) Description() string {
+	return "Flatten inline typed struct literals to named var declarations (block style)"
+}
+
+func (r InlineTypedStruct) Check(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	// Track nesting depth - we only flag structs that are nested (depth > 0)
+	// Top-level var declarations are fine
+	ast.Inspect(file, func(n ast.Node) bool {
+		// Look for top-level var declarations
+		genDecl, ok := n.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.VAR {
+			return true
+		}
+
+		for _, spec := range genDecl.Specs {
+			valueSpec, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+
+			for _, value := range valueSpec.Values {
+				// Find inline typed structs within this top-level var
+				foundIssues := findInlineTypedStructs(value, fset, r.ID(), 0)
+				issues = append(issues, foundIssues...)
+			}
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// findInlineTypedStructs recursively finds typed property type struct literals
+// that are nested (depth > 0) and should be flattened.
+func findInlineTypedStructs(expr ast.Expr, fset *token.FileSet, ruleID string, depth int) []Issue {
+	var issues []Issue
+
+	switch e := expr.(type) {
+	case *ast.CompositeLit:
+		// Check if this is a typed property type struct (contains "_" in type name)
+		isPropertyType := false
+		typeName := ""
+
+		if sel, ok := e.Type.(*ast.SelectorExpr); ok {
+			typeName = sel.Sel.Name
+			// Property types contain underscore: Bucket_BucketEncryption
+			if strings.Contains(typeName, "_") {
+				isPropertyType = true
+			}
+		}
+
+		// Check if this is a slice type (array)
+		isSlice := false
+		if _, ok := e.Type.(*ast.ArrayType); ok {
+			isSlice = true
+		}
+
+		// Flag if this is a nested property type struct (depth > 0)
+		if isPropertyType && depth > 0 {
+			pos := fset.Position(e.Pos())
+			issues = append(issues, Issue{
+				RuleID:     ruleID,
+				Message:    fmt.Sprintf("Flatten inline %s to a named var declaration", typeName),
+				Suggestion: fmt.Sprintf("var My%s = ...", typeName),
+				File:       pos.Filename,
+				Line:       pos.Line,
+				Column:     pos.Column,
+				Severity:   "warning",
+			})
+		}
+
+		// Recurse into elements
+		for _, elt := range e.Elts {
+			if kv, ok := elt.(*ast.KeyValueExpr); ok {
+				// Struct field: key-value pair
+				issues = append(issues, findInlineTypedStructs(kv.Value, fset, ruleID, depth+1)...)
+			} else if isSlice {
+				// Array element: direct element (not key-value)
+				issues = append(issues, findInlineTypedStructs(elt, fset, ruleID, depth+1)...)
+			}
+		}
+
+	case *ast.UnaryExpr:
+		// Handle pointer expressions like &s3.Bucket_BucketEncryption{...}
+		if e.Op == token.AND {
+			issues = append(issues, findInlineTypedStructs(e.X, fset, ruleID, depth)...)
+		}
+
+	case *ast.CallExpr:
+		// Recurse into function call arguments
+		for _, arg := range e.Args {
+			issues = append(issues, findInlineTypedStructs(arg, fset, ruleID, depth+1)...)
+		}
+	}
+
+	return issues
+}
+
 // AllRules returns all available lint rules.
 func AllRules() []Rule {
 	return []Rule{
@@ -857,5 +988,6 @@ func AllRules() []Rule {
 		InlineMapInSlice{},
 		InlineStructLiteral{},
 		UnflattenedMap{},
+		InlineTypedStruct{},
 	}
 }
