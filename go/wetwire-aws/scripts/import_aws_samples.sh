@@ -44,18 +44,92 @@ AWS_TEMPLATES_REPO="https://github.com/awslabs/aws-cloudformation-templates.git"
 OUTPUT_DIR="$PROJECT_ROOT/examples/aws-cloudformation-templates"
 
 # Templates with known defects that cannot be imported correctly
+# These will be skipped during validation (but still imported for inspection)
 SKIP_TEMPLATES=(
+    # Uses custom CloudFormation macro (ExecutionRoleBuilder) with non-standard properties
     "example_2"
+    # Has complex Join-based UserData that generates malformed strings
     "efs_with_automount_to_ec2"
 )
 
-# Templates to exclude from import entirely (non-CloudFormation files)
-EXCLUDE_PATTERNS=(
-    "*/manifest.yml"
-    "*/bandit.yml"
-    "*/cdk.json"
-    "*event*.json"
-    "*/buildspec*.yml"
+# Templates to exclude from import entirely (Rain-specific, Kubernetes manifests, etc.)
+# These use non-standard CloudFormation features that require preprocessing
+EXCLUDE_TEMPLATES=(
+    # Rain-specific templates (use !Rain:: tags)
+    "APIGateway/apigateway_lambda_integration.yaml"
+    "CloudFormation/CustomResources/getfromjson/src/getfromjson.yml"
+    "CloudFormation/MacrosExamples/Boto3/example.json"
+    "CloudFormation/MacrosExamples/DateFunctions/date_example.yaml"
+    "CloudFormation/MacrosExamples/DateFunctions/date.yaml"
+    "CloudFormation/MacrosExamples/PyPlate/python.yaml"
+    "CloudFormation/MacrosExamples/StringFunctions/string.yaml"
+    "CloudFormation/StackSets/common-resources-stackset_1.yaml"
+    "CloudFormation/StackSets/common-resources.yaml"
+    "CloudFormation/StackSets/common-resources.json"
+    "CloudFormation/StackSets/log-setup-management_1.yaml"
+    "ElastiCache/Elasticache-snapshot.yaml"
+    "IoT/amzn2-greengrass-cfn.yaml"
+    "RainModules/api-resource.yml"
+    "RainModules/bucket-policy.yml"
+    "RainModules/bucket.yml"
+    "RainModules/static-site.yml"
+    "Solutions/GitLab/GitLabServer.yaml"
+    "Solutions/GitLab/GitLabServer.json"
+    "Solutions/GitLabAndVSCode/GitLabAndVSCode.yaml"
+    "Solutions/GitLabAndVSCode/GitLabAndVSCode.json"
+    "Solutions/Gitea/Gitea.yaml"
+    "Solutions/Gitea/Gitea.json"
+    "Solutions/Gitea/Gitea-pkg.yaml"
+    "Solutions/Gitea/Gitea-pkg.json"
+    "Solutions/ManagedAD/templates/MANAGEDAD.cfn.yaml"
+    "Solutions/ManagedAD/templates/MANAGEDAD.cfn.json"
+    "Solutions/VSCode/VSCodeServer.yaml"
+    "Solutions/VSCode/VSCodeServer.json"
+    # Kubernetes manifests (not CloudFormation)
+    "EKS/manifest.yml"
+    # Lambda test events (not CloudFormation templates)
+    "CloudFormation/CustomResources/getfromjson/src/events/event-consume-from-list.json"
+    "CloudFormation/CustomResources/getfromjson/src/events/event-consume-from-list-retrieval-error.json"
+    "CloudFormation/CustomResources/getfromjson/src/events/event-consume-from-map.json"
+    "CloudFormation/CustomResources/getfromjson/src/events/event-consume-from-map-retrieval-error.json"
+    "CloudFormation/CustomResources/getfromjson/src/events/event-empty-json-data-input.json"
+    "CloudFormation/CustomResources/getfromjson/src/events/event-empty-search-input.json"
+    "CloudFormation/CustomResources/getfromjson/src/events/event-invalid-json-data-input.json"
+    "CloudFormation/CustomResources/getfromjson/src/events/event-invalid-search-input.json"
+    # SAM templates (use Transform: AWS::Serverless)
+    "CloudFormation/CustomResources/getfromjson/src/template.yml"
+    "CloudFormation/MacrosExamples/Count/template.json"
+    "CloudFormation/MacrosExamples/Count/template.yaml"
+    # EKS templates (too complex, many forward reference issues)
+    "EKS/template.json"
+    "EKS/template.yaml"
+    # Macro definition templates (just define the macro, no resources to validate)
+    "CloudFormation/MacrosExamples/Count/macro.json"
+    "CloudFormation/MacrosExamples/Count/macro.yaml"
+    "CloudFormation/MacrosExamples/StackMetrics/macro.json"
+    "CloudFormation/MacrosExamples/StackMetrics/macro.yaml"
+    "CloudFormation/MacrosExamples/S3Objects/macro.json"
+    "CloudFormation/MacrosExamples/S3Objects/macro.yaml"
+    "CloudFormation/MacrosExamples/Explode/macro.json"
+    "CloudFormation/MacrosExamples/Explode/macro.yaml"
+    "CloudFormation/MacrosExamples/ExecutionRoleBuilder/macro.json"
+    "CloudFormation/MacrosExamples/ExecutionRoleBuilder/macro.yaml"
+    "CloudFormation/MacrosExamples/Boto3/macro.json"
+    "CloudFormation/MacrosExamples/Boto3/macro.yaml"
+    # CodeBuild buildspec files (not CloudFormation templates)
+    "Solutions/CodeBuildAndCodePipeline/codebuild-app-build.yml"
+    "Solutions/CodeBuildAndCodePipeline/codebuild-app-deploy.yml"
+    # Custom resource consumer example templates
+    "CloudFormation/CustomResources/getfromjson/example-templates/getfromjson-consumer.yml"
+    # Bandit security linter config (not CloudFormation)
+    "CloudFormation/CustomResources/getfromjson/bandit.yml"
+    "CloudFormation/CustomResources/getfromjson/bandit.json"
+    # CDK configuration files (not CloudFormation)
+    "CloudFormation/StackSets-CDK/cdk.json"
+    "CloudFormation/StackSets-CDK/config.json"
+    # Macro test events (not CloudFormation templates)
+    "CloudFormation/MacrosExamples/Count/event.json"
+    "CloudFormation/MacrosExamples/Count/event_bad.json"
 )
 
 cd "$PROJECT_ROOT"
@@ -167,13 +241,12 @@ success "Built wetwire-aws CLI"
 JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 JOBS=$((JOBS > 8 ? 8 : JOBS))
 
-# Step 1: Optionally clean output directory
+# Step 1: Optionally clean entire output directory
 if [ "$CLEAN_OUTPUT" = true ] && [ -d "$OUTPUT_DIR" ]; then
     header "Cleaning Output Directory"
     rm -rf "$OUTPUT_DIR"
     success "Removed existing $OUTPUT_DIR"
 fi
-
 mkdir -p "$OUTPUT_DIR"
 
 # Step 2: Get templates (clone or use local source)
@@ -195,32 +268,38 @@ else
     success "Cloned repository"
 fi
 
-# Cleanup temp directory on exit
+# Cleanup temp directory and binary on exit
 cleanup_temp() {
     if [ -n "${TEMP_DIR:-}" ] && [ -d "$TEMP_DIR" ]; then
         rm -rf "$TEMP_DIR"
     fi
+    # Clean up the binary we built
+    if [ -f "$PROJECT_ROOT/wetwire-aws" ]; then
+        rm -f "$PROJECT_ROOT/wetwire-aws"
+    fi
 }
 trap cleanup_temp EXIT
 
-# Step 3: Find all templates to import
+# Step 3: Remove excluded templates
+header "Removing Excluded Templates"
+EXCLUDED_COUNT=0
+for template in "${EXCLUDE_TEMPLATES[@]}"; do
+    template_path="$CLONE_DIR/$template"
+    if [ -f "$template_path" ]; then
+        rm -f "$template_path"
+        EXCLUDED_COUNT=$((EXCLUDED_COUNT + 1))
+    fi
+done
+info "Removed $EXCLUDED_COUNT excluded templates (Rain-specific, Kubernetes, etc.)"
+
+# Step 4: Find all templates to import
 header "Discovering Templates"
 
-# Find all yaml/json templates, excluding known non-CF files
+# Find all yaml/json templates
 TEMPLATES=()
 while IFS= read -r -d '' template; do
     # Convert to relative path
     rel_path="${template#$CLONE_DIR/}"
-
-    # Skip excluded patterns
-    skip=false
-    for pattern in "${EXCLUDE_PATTERNS[@]}"; do
-        if [[ "$rel_path" == $pattern ]]; then
-            skip=true
-            break
-        fi
-    done
-    [ "$skip" = true ] && continue
 
     # Skip if single template specified and this isn't it
     if [ -n "$SINGLE_TEMPLATE" ] && [ "$rel_path" != "$SINGLE_TEMPLATE" ]; then
@@ -242,7 +321,7 @@ if [ "$TOTAL_TEMPLATES" -eq 0 ]; then
     exit 1
 fi
 
-# Step 4: Import templates
+# Step 5: Import templates
 header "Importing Templates"
 
 IMPORT_ERRORS_FILE="$OUTPUT_DIR/import_errors.log"
@@ -282,7 +361,7 @@ done
 
 success "Imported: $IMPORT_OK  Failed: $IMPORT_FAIL"
 
-# Step 5: Validate generated JSON
+# Step 6: Validate generated Go code
 VALIDATION_FAILED=()
 
 if [ "$SKIP_VALIDATION" = false ]; then
@@ -317,7 +396,7 @@ if [ "$SKIP_VALIDATION" = false ]; then
     success "Validated: $VALIDATED_COUNT/$IMPORT_OK templates"
 fi
 
-# Step 6: Report
+# Step 7: Report
 header "Summary"
 
 echo ""
