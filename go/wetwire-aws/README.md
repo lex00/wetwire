@@ -16,7 +16,8 @@ package infra
 import (
     "github.com/lex00/wetwire-aws/resources/s3"
     "github.com/lex00/wetwire-aws/resources/iam"
-    "github.com/lex00/wetwire-aws/intrinsics"
+    "github.com/lex00/wetwire-aws/resources/lambda"
+    . "github.com/lex00/wetwire-aws/intrinsics"
 )
 
 // Direct type declaration - no wrappers, no registration
@@ -28,14 +29,17 @@ var ProcessorRole = iam.Role{
     RoleName: "processor-role",
 }
 
+// Environment extracted to flat variable
+var ProcessorEnv = lambda.Environment{
+    Variables: map[string]any{
+        "BUCKET": Ref{LogicalId: "DataBucket"},
+    },
+}
+
 var ProcessorFunction = lambda.Function{
     FunctionName: "processor",
     Role:         ProcessorRole.Arn,  // GetAtt via field access
-    Environment: lambda.Environment{
-        Variables: map[string]any{
-            "BUCKET": intrinsics.Ref{"DataBucket"},
-        },
-    },
+    Environment:  ProcessorEnv,
 }
 ```
 

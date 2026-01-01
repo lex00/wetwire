@@ -212,21 +212,23 @@ All CloudFormation intrinsic functions are supported:
 
 | Function | Go API |
 |----------|--------|
-| Ref | `intrinsics.Ref{"LogicalId"}` |
-| GetAtt | `intrinsics.GetAtt{"LogicalId", "Attr"}` |
-| Sub | `intrinsics.Sub{"${AWS::StackName}-bucket"}` |
-| SubWithMap | `intrinsics.SubWithMap{String: "...", Variables: map[string]any{...}}` |
-| Join | `intrinsics.Join{",", []any{"a", "b"}}` |
-| If | `intrinsics.If{"ConditionName", trueValue, falseValue}` |
-| Equals | `intrinsics.Equals{value1, value2}` |
-| And/Or/Not | `intrinsics.And{[]any{...}}`, `intrinsics.Or{...}`, `intrinsics.Not{...}` |
-| FindInMap | `intrinsics.FindInMap{"MapName", "TopKey", "SecondKey"}` |
-| Select | `intrinsics.Select{0, GetAZs{""}}` |
-| Split | `intrinsics.Split{",", "a,b,c"}` |
-| Base64 | `intrinsics.Base64{"Hello"}` |
-| Cidr | `intrinsics.Cidr{"10.0.0.0/16", 256, 8}` |
-| GetAZs | `intrinsics.GetAZs{"us-east-1"}` or `intrinsics.GetAZs{""}` |
-| ImportValue | `intrinsics.ImportValue{"ExportedValue"}` |
+| Ref | `Ref{LogicalId: "MyResource"}` |
+| GetAtt | `GetAtt{LogicalId: "MyResource", Attribute: "Arn"}` |
+| Sub | `Sub{String: "${AWS::StackName}-bucket"}` |
+| SubWithMap | `SubWithMap{String: "...", Variables: Json{...}}` |
+| Join | `Join{Delimiter: ",", Values: []any{"a", "b"}}` |
+| If | `If{Condition: "IsProd", IfTrue: val1, IfFalse: val2}` |
+| Equals | `Equals{Left: value1, Right: value2}` |
+| And/Or/Not | `And{Conditions: []any{...}}`, `Or{...}`, `Not{...}` |
+| FindInMap | `FindInMap{MapName: "...", TopKey: "...", SecondKey: "..."}` |
+| Select | `Select{Index: 0, List: GetAZs{}}` |
+| Split | `Split{Delimiter: ",", String: "a,b,c"}` |
+| Base64 | `Base64{Value: "Hello"}` |
+| Cidr | `Cidr{IpBlock: "10.0.0.0/16", Count: 256, CidrBits: 8}` |
+| GetAZs | `GetAZs{Region: "us-east-1"}` or `GetAZs{}` |
+| ImportValue | `ImportValue{Name: "ExportedValue"}` |
+
+**Note:** Use dot import for cleaner syntax: `import . "github.com/lex00/wetwire-aws/intrinsics"`
 
 ---
 
@@ -249,8 +251,10 @@ intrinsics.AWS_NO_VALUE      // {"Ref": "AWS::NoValue"}
 
 Usage:
 ```go
+import . "github.com/lex00/wetwire-aws/intrinsics"
+
 var MyBucket = s3.Bucket{
-    BucketName: intrinsics.Sub{"${AWS::StackName}-data"},
+    BucketName: Sub{String: "${AWS::StackName}-data"},
 }
 ```
 

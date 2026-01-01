@@ -57,10 +57,10 @@ Reference other resources using the `Ref` and `GetAtt` intrinsics:
 package infra
 
 import (
-    "github.com/lex00/wetwire-aws/intrinsics"
     "github.com/lex00/wetwire-aws/resources/s3"
     "github.com/lex00/wetwire-aws/resources/iam"
     "github.com/lex00/wetwire-aws/resources/lambda"
+    . "github.com/lex00/wetwire-aws/intrinsics"
 )
 
 // DataBucket is an S3 bucket for data
@@ -68,16 +68,28 @@ var DataBucket = s3.Bucket{
     BucketName: "data",
 }
 
+// Flat policy statement - extracted from inline slice
+var LambdaAssumeRoleStatement = PolicyStatement{
+    Effect:    "Allow",
+    Principal: ServicePrincipal{"lambda.amazonaws.com"},
+    Action:    "sts:AssumeRole",
+}
+
+// Flat policy document - references the statement
+var LambdaAssumeRolePolicy = PolicyDocument{
+    Statement: []any{LambdaAssumeRoleStatement},
+}
+
 // ProcessorRole is the IAM role for the Lambda function
 var ProcessorRole = iam.Role{
-    RoleName: "processor",
-    AssumeRolePolicyDocument: iam.PolicyDocument{
-        Version: "2012-10-17",
-        Statement: []iam.PolicyStatement{{
-            Effect:    "Allow",
-            Principal: map[string]any{"Service": "lambda.amazonaws.com"},
-            Action:    "sts:AssumeRole",
-        }},
+    RoleName:                 "processor",
+    AssumeRolePolicyDocument: LambdaAssumeRolePolicy,
+}
+
+// Flat environment - extracted from inline
+var ProcessorEnv = lambda.Environment{
+    Variables: map[string]any{
+        "BUCKET_NAME": Ref{LogicalId: "DataBucket"},
     },
 }
 
@@ -86,12 +98,8 @@ var ProcessorFunction = lambda.Function{
     FunctionName: "processor",
     Runtime:      lambda.RuntimePython312,
     Handler:      "index.handler",
-    Role:         intrinsics.GetAtt{"ProcessorRole", "Arn"},
-    Environment: lambda.Environment{
-        Variables: map[string]any{
-            "BUCKET_NAME": intrinsics.Ref{"DataBucket"},
-        },
-    },
+    Role:         GetAtt{LogicalId: "ProcessorRole", Attribute: "Arn"},
+    Environment:  ProcessorEnv,
 }
 ```
 
@@ -145,20 +153,23 @@ var DataBucket = s3.Bucket{
 package infra
 
 import (
-    "github.com/lex00/wetwire-aws/intrinsics"
     "github.com/lex00/wetwire-aws/resources/lambda"
+    . "github.com/lex00/wetwire-aws/intrinsics"
 )
+
+// Flat environment variable
+var ProcessorEnv = lambda.Environment{
+    Variables: map[string]any{
+        // Cross-file reference - DataBucket is discovered from storage.go
+        "BUCKET_NAME": Ref{LogicalId: "DataBucket"},
+    },
+}
 
 var ProcessorFunction = lambda.Function{
     FunctionName: "processor",
     Runtime:      lambda.RuntimePython312,
     Handler:      "index.handler",
-    // Cross-file reference - DataBucket is discovered from storage.go
-    Environment: lambda.Environment{
-        Variables: map[string]any{
-            "BUCKET_NAME": intrinsics.Ref{"DataBucket"},
-        },
-    },
+    Environment:  ProcessorEnv,
 }
 ```
 
@@ -186,15 +197,21 @@ var MyFunction = lambda.Function{
     Architectures: []string{lambda.ArchitectureArm64},
 }
 
+// Flat key schema - extracted from inline slice
+var MyTablePK = dynamodb.KeySchema{
+    AttributeName: "pk",
+    KeyType:       dynamodb.KeyTypeHash,
+}
+
+// Flat attribute definition - extracted from inline slice
+var MyTablePKAttr = dynamodb.AttributeDefinition{
+    AttributeName: "pk",
+    AttributeType: dynamodb.ScalarAttributeTypeS,
+}
+
 var MyTable = dynamodb.Table{
-    KeySchema: []dynamodb.KeySchema{{
-        AttributeName: "pk",
-        KeyType:       dynamodb.KeyTypeHash,
-    }},
-    AttributeDefinitions: []dynamodb.AttributeDefinition{{
-        AttributeName: "pk",
-        AttributeType: dynamodb.ScalarAttributeTypeS,
-    }},
+    KeySchema:            []dynamodb.KeySchema{MyTablePK},
+    AttributeDefinitions: []dynamodb.AttributeDefinition{MyTablePKAttr},
 }
 ```
 
@@ -211,6 +228,7 @@ import (
     "fmt"
     "github.com/lex00/wetwire-aws/internal/template"
     "github.com/lex00/wetwire-aws/resources/s3"
+    . "github.com/lex00/wetwire-aws/intrinsics"
 )
 
 func main() {
@@ -229,9 +247,9 @@ func main() {
         AllowedValues: []string{"dev", "staging", "prod"},
     })
 
-    // Add outputs
+    // Add outputs - use typed intrinsics, not raw maps
     t.AddOutput("BucketArn", template.Output{
-        Value:       map[string]any{"Fn::GetAtt": []string{"DataBucket", "Arn"}},
+        Value:       GetAtt{LogicalId: "DataBucket", Attribute: "Arn"},
         Description: "Data bucket ARN",
     })
 
