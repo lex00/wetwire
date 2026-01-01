@@ -1,9 +1,9 @@
 module github.com/lex00/wetwire-agent
 
-go 1.22
+go 1.23.0
 
 require (
-	github.com/anthropics/anthropic-sdk-go v0.2.0-alpha.6
+	github.com/anthropics/anthropic-sdk-go v1.19.0
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.9.0
 )

@@ -22,13 +22,19 @@ import (
 
 // RunnerAgent generates infrastructure code using the Anthropic API.
 type RunnerAgent struct {
-	client         *anthropic.Client
+	client         anthropic.Client
 	session        *results.Session
 	developer      orchestrator.Developer
 	workDir        string
 	generatedFiles []string
 	templateJSON   string
 	maxLintCycles  int
+
+	// Lint enforcement state
+	lintCalled  bool // Has lint been run at least once?
+	lintPassed  bool // Did lint pass on the most recent run?
+	pendingLint bool // Does code need linting (written since last lint)?
+	lintCycles  int  // Number of lint attempts
 }
 
 // RunnerConfig configures the RunnerAgent.
@@ -127,45 +133,136 @@ Always run_lint after writing files, and fix any issues before running build.`
 
 		// Call the API
 		resp, err := r.client.Messages.New(ctx, anthropic.MessageNewParams{
-			Model:     anthropic.F(anthropic.ModelClaudeSonnet4_20250514),
-			MaxTokens: anthropic.Int(4096),
-			System:    anthropic.F([]anthropic.TextBlockParam{anthropic.NewTextBlock(systemPrompt)}),
-			Messages:  anthropic.F(messages),
-			Tools:     anthropic.F(tools),
+			Model:     anthropic.ModelClaudeSonnet4_20250514,
+			MaxTokens: 4096,
+			System:    []anthropic.TextBlockParam{{Text: systemPrompt}},
+			Messages:  messages,
+			Tools:     tools,
 		})
 		if err != nil {
 			return fmt.Errorf("API call failed: %w", err)
 		}
 
 		// Add assistant response to messages
-		messages = append(messages, anthropic.NewAssistantMessage(resp.Content...))
+		messages = append(messages, resp.ToParam())
 
 		// Check for stop reason
-		if resp.StopReason == anthropic.MessageStopReasonEndTurn {
+		if resp.StopReason == anthropic.StopReasonEndTurn {
+			// Completion gate: check if lint requirements are met
+			if enforcement := r.checkCompletionGate(resp); enforcement != "" {
+				// Force agent to continue
+				messages = append(messages, anthropic.NewUserMessage(
+					anthropic.NewTextBlock(enforcement),
+				))
+				continue
+			}
 			// Agent is done
 			break
 		}
 
 		// Process tool calls
-		if resp.StopReason == anthropic.MessageStopReasonToolUse {
+		if resp.StopReason == anthropic.StopReasonToolUse {
 			var toolResults []anthropic.ContentBlockParamUnion
+			var toolsCalled []string
 
 			for _, block := range resp.Content {
-				if block.Type == anthropic.ContentBlockTypeToolUse {
+				if block.Type == "tool_use" {
 					result := r.executeTool(ctx, block.Name, block.Input)
 					toolResults = append(toolResults, anthropic.NewToolResultBlock(
 						block.ID,
 						result,
 						false,
 					))
+					toolsCalled = append(toolsCalled, block.Name)
 				}
 			}
 
 			messages = append(messages, anthropic.NewUserMessage(toolResults...))
+
+			// Check for lint enforcement violations after this turn
+			if enforcement := r.checkLintEnforcement(toolsCalled); enforcement != "" {
+				messages = append(messages, anthropic.NewUserMessage(
+					anthropic.NewTextBlock(enforcement),
+				))
+			}
 		}
 	}
 
 	return nil
+}
+
+// checkLintEnforcement checks if the agent violated lint enforcement rules.
+// Returns an enforcement message if a violation occurred, empty string otherwise.
+func (r *RunnerAgent) checkLintEnforcement(toolsCalled []string) string {
+	wroteFile := false
+	ranLint := false
+
+	for _, tool := range toolsCalled {
+		if tool == "write_file" {
+			wroteFile = true
+		}
+		if tool == "run_lint" {
+			ranLint = true
+		}
+	}
+
+	// Enforcement: If write_file was called but run_lint wasn't in the same turn
+	if wroteFile && !ranLint {
+		return `ENFORCEMENT: You wrote a file but did not call run_lint in the same turn.
+You MUST call run_lint immediately after writing code to check for issues.
+Call run_lint now before proceeding.`
+	}
+
+	return ""
+}
+
+// checkCompletionGate checks if the agent can complete.
+// Returns an enforcement message if completion is not allowed.
+func (r *RunnerAgent) checkCompletionGate(resp *anthropic.Message) string {
+	// Extract text from response to check for completion indicators
+	var responseText string
+	for _, block := range resp.Content {
+		if block.Type == "text" {
+			responseText += block.Text
+		}
+	}
+
+	// Check for completion indicators
+	lowerText := strings.ToLower(responseText)
+	isCompletionAttempt := strings.Contains(lowerText, "done") ||
+		strings.Contains(lowerText, "complete") ||
+		strings.Contains(lowerText, "finished") ||
+		strings.Contains(lowerText, "that's it") ||
+		strings.Contains(lowerText, "all set")
+
+	if !isCompletionAttempt && len(r.generatedFiles) == 0 {
+		// Agent hasn't written any files yet, let it continue thinking
+		return ""
+	}
+
+	// Gate 1: Must have called lint at least once
+	if !r.lintCalled {
+		return `ENFORCEMENT: You cannot complete without running the linter.
+You MUST call run_lint to validate your code before finishing.
+Call run_lint now.`
+	}
+
+	// Gate 2: Code must not be pending lint (written since last lint)
+	if r.pendingLint {
+		return `ENFORCEMENT: You have written code since the last lint run.
+You MUST call run_lint to validate your latest changes before finishing.
+Call run_lint now.`
+	}
+
+	// Gate 3: Lint must have passed
+	if !r.lintPassed {
+		return `ENFORCEMENT: The linter found issues that have not been resolved.
+You MUST fix the lint errors and run_lint again until it passes.
+Review the lint output and fix the issues.`
+	}
+
+	// All gates passed
+	return ""
 }
 
 // AskDeveloper sends a question to the Developer.
@@ -196,96 +293,112 @@ func (r *RunnerAgent) GetTemplate() string {
 	return r.templateJSON
 }
 
+// GetLintCycles returns the number of lint attempts.
+func (r *RunnerAgent) GetLintCycles() int {
+	return r.lintCycles
+}
+
+// LintPassed returns whether the last lint run passed.
+func (r *RunnerAgent) LintPassed() bool {
+	return r.lintPassed
+}
+
 // getTools returns the tool definitions for the agent.
-func (r *RunnerAgent) getTools() []anthropic.ToolParam {
-	return []anthropic.ToolParam{
+func (r *RunnerAgent) getTools() []anthropic.ToolUnionParam {
+	return []anthropic.ToolUnionParam{
 		{
-			Name:        anthropic.F("init_package"),
-			Description: anthropic.F("Initialize a new wetwire-aws package directory"),
-			InputSchema: anthropic.F(anthropic.ToolInputSchemaParam{
-				Type: anthropic.F(anthropic.ToolInputSchemaTypeObject),
-				Properties: anthropic.F(map[string]interface{}{
-					"name": map[string]interface{}{
-						"type":        "string",
-						"description": "Package name (directory name)",
+			OfTool: &anthropic.ToolParam{
+				Name:        "init_package",
+				Description: anthropic.String("Initialize a new wetwire-aws package directory"),
+				InputSchema: anthropic.ToolInputSchemaParam{
+					Properties: map[string]any{
+						"name": map[string]any{
+							"type":        "string",
+							"description": "Package name (directory name)",
+						},
 					},
-				}),
-				Required: anthropic.F([]string{"name"}),
-			}),
+					Required: []string{"name"},
+				},
+			},
 		},
 		{
-			Name:        anthropic.F("write_file"),
-			Description: anthropic.F("Write content to a Go file"),
-			InputSchema: anthropic.F(anthropic.ToolInputSchemaParam{
-				Type: anthropic.F(anthropic.ToolInputSchemaTypeObject),
-				Properties: anthropic.F(map[string]interface{}{
-					"path": map[string]interface{}{
-						"type":        "string",
-						"description": "File path relative to work directory",
+			OfTool: &anthropic.ToolParam{
+				Name:        "write_file",
+				Description: anthropic.String("Write content to a Go file"),
+				InputSchema: anthropic.ToolInputSchemaParam{
+					Properties: map[string]any{
+						"path": map[string]any{
+							"type":        "string",
+							"description": "File path relative to work directory",
+						},
+						"content": map[string]any{
+							"type":        "string",
+							"description": "File content",
+						},
 					},
-					"content": map[string]interface{}{
-						"type":        "string",
-						"description": "File content",
-					},
-				}),
-				Required: anthropic.F([]string{"path", "content"}),
-			}),
+					Required: []string{"path", "content"},
+				},
+			},
 		},
 		{
-			Name:        anthropic.F("read_file"),
-			Description: anthropic.F("Read a file's contents"),
-			InputSchema: anthropic.F(anthropic.ToolInputSchemaParam{
-				Type: anthropic.F(anthropic.ToolInputSchemaTypeObject),
-				Properties: anthropic.F(map[string]interface{}{
-					"path": map[string]interface{}{
-						"type":        "string",
-						"description": "File path relative to work directory",
+			OfTool: &anthropic.ToolParam{
+				Name:        "read_file",
+				Description: anthropic.String("Read a file's contents"),
+				InputSchema: anthropic.ToolInputSchemaParam{
+					Properties: map[string]any{
+						"path": map[string]any{
+							"type":        "string",
+							"description": "File path relative to work directory",
+						},
 					},
-				}),
-				Required: anthropic.F([]string{"path"}),
-			}),
+					Required: []string{"path"},
+				},
+			},
 		},
 		{
-			Name:        anthropic.F("run_lint"),
-			Description: anthropic.F("Run the wetwire-aws linter on the package"),
-			InputSchema: anthropic.F(anthropic.ToolInputSchemaParam{
-				Type: anthropic.F(anthropic.ToolInputSchemaTypeObject),
-				Properties: anthropic.F(map[string]interface{}{
-					"path": map[string]interface{}{
-						"type":        "string",
-						"description": "Package path to lint",
+			OfTool: &anthropic.ToolParam{
+				Name:        "run_lint",
+				Description: anthropic.String("Run the wetwire-aws linter on the package"),
+				InputSchema: anthropic.ToolInputSchemaParam{
+					Properties: map[string]any{
+						"path": map[string]any{
+							"type":        "string",
+							"description": "Package path to lint",
+						},
 					},
-				}),
-				Required: anthropic.F([]string{"path"}),
-			}),
+					Required: []string{"path"},
+				},
+			},
 		},
 		{
-			Name:        anthropic.F("run_build"),
-			Description: anthropic.F("Build the CloudFormation template from the package"),
-			InputSchema: anthropic.F(anthropic.ToolInputSchemaParam{
-				Type: anthropic.F(anthropic.ToolInputSchemaTypeObject),
-				Properties: anthropic.F(map[string]interface{}{
-					"path": map[string]interface{}{
-						"type":        "string",
-						"description": "Package path to build",
+			OfTool: &anthropic.ToolParam{
+				Name:        "run_build",
+				Description: anthropic.String("Build the CloudFormation template from the package"),
+				InputSchema: anthropic.ToolInputSchemaParam{
+					Properties: map[string]any{
+						"path": map[string]any{
+							"type":        "string",
+							"description": "Package path to build",
+						},
 					},
-				}),
-				Required: anthropic.F([]string{"path"}),
-			}),
+					Required: []string{"path"},
+				},
+			},
 		},
 		{
-			Name:        anthropic.F("ask_developer"),
-			Description: anthropic.F("Ask the developer a clarifying question"),
-			InputSchema: anthropic.F(anthropic.ToolInputSchemaParam{
-				Type: anthropic.F(anthropic.ToolInputSchemaTypeObject),
-				Properties: anthropic.F(map[string]interface{}{
-					"question": map[string]interface{}{
-						"type":        "string",
-						"description": "The question to ask",
+			OfTool: &anthropic.ToolParam{
+				Name:        "ask_developer",
+				Description: anthropic.String("Ask the developer a clarifying question"),
+				InputSchema: anthropic.ToolInputSchemaParam{
+					Properties: map[string]any{
+						"question": map[string]any{
+							"type":        "string",
+							"description": "The question to ask",
+						},
 					},
-				}),
-				Required: anthropic.F([]string{"question"}),
-			}),
+					Required: []string{"question"},
+				},
+			},
 		},
 	}
 }
@@ -340,6 +453,11 @@ func (r *RunnerAgent) toolWriteFile(path, content string) string {
 	}
 
 	r.generatedFiles = append(r.generatedFiles, path)
+
+	// Update lint enforcement state: code needs linting
+	r.pendingLint = true
+	r.lintPassed = false
+
 	return fmt.Sprintf("Wrote %d bytes to %s", len(content), path)
 }
 
@@ -358,8 +476,15 @@ func (r *RunnerAgent) toolRunLint(path string) string {
 	output, err := cmd.CombinedOutput()
 
 	result := string(output)
+
+	// Update lint enforcement state
+	r.lintCalled = true
+	r.pendingLint = false
+	r.lintCycles++
+
 	if err != nil {
 		// Lint found issues but didn't crash
+		r.lintPassed = false
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 2 {
 			// Parse issues for session tracking
 			var lintResult struct {
@@ -373,11 +498,15 @@ func (r *RunnerAgent) toolRunLint(path string) string {
 				for i, issue := range lintResult.Issues {
 					issues[i] = issue.Message
 				}
-				r.session.AddLintCycle(issues, 0, false)
+				r.session.AddLintCycle(issues, r.lintCycles, false)
 			}
 		}
-	} else if r.session != nil {
-		r.session.AddLintCycle(nil, 0, true)
+	} else {
+		// Lint passed
+		r.lintPassed = true
+		if r.session != nil {
+			r.session.AddLintCycle(nil, r.lintCycles, true)
+		}
 	}
 
 	return result
@@ -415,12 +544,12 @@ func CreateDeveloperResponder(apiKey string) func(ctx context.Context, systemPro
 
 	return func(ctx context.Context, systemPrompt, message string) (string, error) {
 		resp, err := client.Messages.New(ctx, anthropic.MessageNewParams{
-			Model:     anthropic.F(anthropic.ModelClaudeHaiku3_5Latest),
-			MaxTokens: anthropic.Int(1024),
-			System:    anthropic.F([]anthropic.TextBlockParam{anthropic.NewTextBlock(systemPrompt)}),
-			Messages: anthropic.F([]anthropic.MessageParam{
+			Model:     anthropic.ModelClaude3_5HaikuLatest,
+			MaxTokens: 1024,
+			System:    []anthropic.TextBlockParam{{Text: systemPrompt}},
+			Messages: []anthropic.MessageParam{
 				anthropic.NewUserMessage(anthropic.NewTextBlock(message)),
-			}),
+			},
 		})
 		if err != nil {
 			return "", err
@@ -428,7 +557,7 @@ func CreateDeveloperResponder(apiKey string) func(ctx context.Context, systemPro
 
 		var response strings.Builder
 		for _, block := range resp.Content {
-			if block.Type == anthropic.ContentBlockTypeText {
+			if block.Type == "text" {
 				response.WriteString(block.Text)
 			}
 		}

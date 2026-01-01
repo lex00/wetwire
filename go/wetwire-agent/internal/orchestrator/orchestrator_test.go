@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lex00/wetwire-agent/internal/personas"
+	"github.com/lex00/wetwire-agent/internal/scoring"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -214,11 +215,11 @@ func TestOrchestrator_CalculateScore(t *testing.T) {
 	assert.Equal(t, "test", score.Scenario)
 
 	// Check dimensions are populated
-	assert.Equal(t, 3, score.Completeness.Rating) // All resources
-	assert.Equal(t, 2, score.LintQuality.Rating)  // Passed after cycles
-	assert.Equal(t, 3, score.CodeQuality.Rating)  // No issues
-	assert.Equal(t, 3, score.OutputValidity.Rating)
-	assert.Equal(t, 3, score.QuestionEfficiency.Rating) // 1 question is optimal
+	assert.Equal(t, scoring.Rating(3), score.Completeness.Rating) // All resources
+	assert.Equal(t, scoring.Rating(2), score.LintQuality.Rating)  // Passed after cycles
+	assert.Equal(t, scoring.Rating(3), score.CodeQuality.Rating)  // No issues
+	assert.Equal(t, scoring.Rating(3), score.OutputValidity.Rating)
+	assert.Equal(t, scoring.Rating(3), score.QuestionEfficiency.Rating) // 1 question is optimal
 
 	// Verify score is attached to session
 	assert.Equal(t, score, orch.session.Score)
@@ -246,10 +247,10 @@ func TestOrchestrator_CalculateScore_Partial(t *testing.T) {
 		2, // cfn warnings
 	)
 
-	assert.Less(t, score.Completeness.Rating, 3)
-	assert.Less(t, score.LintQuality.Rating, 3)
-	assert.Less(t, score.CodeQuality.Rating, 3)
-	assert.Less(t, score.OutputValidity.Rating, 3)
+	assert.Less(t, score.Completeness.Rating, scoring.Rating(3))
+	assert.Less(t, score.LintQuality.Rating, scoring.Rating(3))
+	assert.Less(t, score.CodeQuality.Rating, scoring.Rating(3))
+	assert.Less(t, score.OutputValidity.Rating, scoring.Rating(3))
 }
 
 func TestOrchestrator_Session(t *testing.T) {
