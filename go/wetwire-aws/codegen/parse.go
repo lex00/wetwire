@@ -204,8 +204,9 @@ func parseProperty(name string, def Property) ParsedProperty {
 		prop.GoType = "any"
 	}
 
-	// Non-required fields should be pointers (except slices/maps which are nil-able)
-	if !def.Required && !prop.IsList && !prop.IsMap {
+	// Non-required fields should be pointers (except slices/maps/any which are nil-able)
+	// Since all primitives are now `any`, only property type references need pointers
+	if !def.Required && !prop.IsList && !prop.IsMap && prop.GoType != "any" && def.Type != "" {
 		prop.IsPointer = true
 	}
 
@@ -213,23 +214,10 @@ func parseProperty(name string, def Property) ParsedProperty {
 }
 
 // primitiveToGo converts CloudFormation primitive types to Go types.
+// All primitive types map to `any` to allow both literal values and intrinsic
+// functions (Ref, GetAtt, Sub, etc.) to be assigned to any property field.
+// This matches the Python implementation where every field uses Union types.
 func primitiveToGo(cfType string) string {
-	switch cfType {
-	case "String":
-		return "string"
-	case "Integer":
-		return "int"
-	case "Long":
-		return "int64"
-	case "Double":
-		return "float64"
-	case "Boolean":
-		return "bool"
-	case "Timestamp":
-		return "string" // ISO 8601 string
-	case "Json":
-		return "map[string]any"
-	default:
-		return "any"
-	}
+	// All types are `any` to accept intrinsic functions
+	return "any"
 }

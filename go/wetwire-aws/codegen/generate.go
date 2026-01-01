@@ -204,6 +204,10 @@ func generateResource(svc *Service, res ParsedResource) ([]byte, error) {
 		prop := res.Properties[name]
 		goType := resolveTypeReferences(prop.GoType, propTypeNames, prop.IsPointer)
 
+		// Convert property type fields to any to allow both typed structs and map literals
+		// This enables the importer to generate flexible code without knowing exact type names
+		goType = flexiblePropertyType(goType, propTypeNames)
+
 		// Clean up documentation
 		doc := cleanDoc(prop.Documentation)
 
@@ -344,6 +348,51 @@ func resolveTypeReferences(goType string, qualifiedNames map[string]string, isPo
 	// Handle pointers for optional fields (after type resolution)
 	if isPointer {
 		goType = "*" + goType
+	}
+
+	return goType
+}
+
+// flexiblePropertyType converts property type fields to any to allow both typed structs
+// and inline map literals. This enables the importer to generate flexible code.
+func flexiblePropertyType(goType string, propTypeNames map[string]string) string {
+	// If already any or primitive-like, leave it
+	if goType == "any" || goType == "[]any" || goType == "map[string]any" {
+		return goType
+	}
+
+	// Tags field uses []any to allow intrinsics.Tag from dot import
+	if goType == "[]Tag" {
+		return "[]any"
+	}
+
+	// Check if this is a property type reference (contains underscore pattern like "Resource_Type")
+	isPropertyType := func(t string) bool {
+		// Strip slice/pointer prefix
+		base := strings.TrimPrefix(strings.TrimPrefix(t, "*"), "[]")
+		// Check if it's a qualified name (contains underscore) from property types
+		for _, qn := range propTypeNames {
+			if base == qn {
+				return true
+			}
+		}
+		// Also check for underscore pattern indicating a property type
+		return strings.Contains(base, "_")
+	}
+
+	// Handle slice types like []SomeResource_Type -> []any
+	if strings.HasPrefix(goType, "[]") && isPropertyType(goType) {
+		return "[]any"
+	}
+
+	// Handle pointer types like *SomeResource_Type -> any
+	if strings.HasPrefix(goType, "*") && isPropertyType(goType) {
+		return "any"
+	}
+
+	// Handle non-pointer property types -> any
+	if isPropertyType(goType) {
+		return "any"
 	}
 
 	return goType

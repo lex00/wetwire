@@ -107,10 +107,15 @@ Parameters:
     AllowedValues:
       - dev
       - prod
+  UnusedParam:
+    Type: String
+    Description: This param is not referenced
 
 Resources:
   MyBucket:
     Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref Environment
 `)
 
 	ir, err := ParseTemplateContent(content, "test.yaml")
@@ -119,9 +124,15 @@ Resources:
 	files := GenerateCode(ir, "params")
 	code := files["params.go"]
 
-	// Check parameter (no intrinsics. prefix with dot import)
+	// Used parameters ARE generated as typed vars using Param()
 	assert.Contains(t, code, "// Environment - Environment name")
-	assert.Contains(t, code, `var Environment = Ref{"Environment"}`)
+	assert.Contains(t, code, `var Environment = Param("Environment")`)
+
+	// Parameter is referenced by bare identifier
+	assert.Contains(t, code, "BucketName: Environment,")
+
+	// Unused parameters are NOT generated
+	assert.NotContains(t, code, "UnusedParam")
 }
 
 func TestGenerateCode_WithOutputs(t *testing.T) {
@@ -144,12 +155,12 @@ Outputs:
 	files := GenerateCode(ir, "outputs")
 	code := files["outputs.go"]
 
-	// Check output
+	// Check output uses Output type
 	assert.Contains(t, code, "// BucketArnOutput - The ARN of the bucket")
-	assert.Contains(t, code, "var BucketArnOutput = struct {")
-	assert.Contains(t, code, "Value any")
-	assert.Contains(t, code, "Description string")
-	assert.Contains(t, code, "ExportName any")
+	assert.Contains(t, code, "var BucketArnOutput = Output{")
+	assert.Contains(t, code, "Value:")
+	assert.Contains(t, code, "Description:")
+	assert.Contains(t, code, "ExportName:")
 }
 
 func TestGenerateCode_WithConditions(t *testing.T) {
@@ -173,8 +184,8 @@ Resources:
 	files := GenerateCode(ir, "cond")
 	code := files["cond.go"]
 
-	// Check condition (no intrinsics. prefix with dot import)
-	assert.Contains(t, code, "var IsProdCondition = Equals{Environment, \"prod\"}")
+	// Check condition - uses bare parameter identifier (typed via Param())
+	assert.Contains(t, code, `var IsProdCondition = Equals{Environment, "prod"}`)
 }
 
 func TestGenerateCode_WithMappings(t *testing.T) {
@@ -239,7 +250,7 @@ func TestResolveResourceType(t *testing.T) {
 	}{
 		{"AWS::S3::Bucket", "s3", "Bucket"},
 		{"AWS::EC2::VPC", "ec2", "VPC"},
-		{"AWS::Lambda::Function", "lambda_", "Function"},
+		{"AWS::Lambda::Function", "lambda", "Function"},
 		{"AWS::IAM::Role", "iam", "Role"},
 		{"AWS::CloudFormation::Stack", "cloudformation", "Stack"},
 		{"Invalid::Type", "", ""},

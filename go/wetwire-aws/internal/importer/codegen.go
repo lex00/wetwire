@@ -49,6 +49,9 @@ type codegenContext struct {
 	// Each property type instance becomes its own var declaration
 	propertyBlocks []propertyBlock // collected during resource traversal
 	blockNameCount map[string]int  // for generating unique names
+
+	// Track which parameters are directly referenced via Ref
+	usedParameters map[string]bool
 }
 
 // propertyBlock represents a top-level var declaration for a property type instance.
@@ -61,20 +64,16 @@ type propertyBlock struct {
 // knownPropertyTypes maps (service, propertyName) to the typed struct to use.
 // Property types are qualified with their parent resource (e.g., SecurityGroup_Ingress).
 // This enables generating []ec2.SecurityGroup_Ingress{...} instead of []any{map[string]any{...}}.
+// NOTE: Only include types where the parent resource name matches the actual generated type.
+// Many property types are shared across resources (e.g., EC2Fleet_BlockDeviceMapping is used by Instance).
 var knownPropertyTypes = map[string]map[string]string{
 	"ec2": {
 		"SecurityGroupIngress": "SecurityGroup_Ingress",
 		"SecurityGroupEgress":  "SecurityGroup_Egress",
-		"BlockDeviceMappings":  "Instance_BlockDeviceMapping",
-		"Volumes":              "Instance_Volume",
+		// BlockDeviceMappings and Volumes removed - types are shared across resources
 	},
-	"iam": {
-		"Policies": "Role_Policy",
-	},
-	"elasticloadbalancingv2": {
-		"TargetGroupAttributes": "TargetGroup_TargetGroupAttribute",
-		"Actions":               "Listener_Action",
-	},
+	// iam Policies removed - Role_Policy may not exist
+	// elasticloadbalancingv2 types removed - may not match actual generated types
 }
 
 func newCodegenContext(template *IRTemplate, packageName string) *codegenContext {
@@ -83,6 +82,7 @@ func newCodegenContext(template *IRTemplate, packageName string) *codegenContext
 		packageName:    packageName,
 		imports:        make(map[string]bool),
 		blockNameCount: make(map[string]int),
+		usedParameters: make(map[string]bool),
 	}
 
 	// Topologically sort resources
@@ -97,8 +97,34 @@ func generateSingleFile(ctx *codegenContext) string {
 	// Build code sections (to determine needed imports)
 	var codeSections []string
 
-	// Parameters
+	// First pass: generate resources, conditions, and outputs to track parameter usage
+	// Resources (in dependency order)
+	var resourceSections []string
+	for _, resourceID := range ctx.resourceOrder {
+		resource := ctx.template.Resources[resourceID]
+		resourceSections = append(resourceSections, generateResource(ctx, resource))
+	}
+
+	// Conditions (may reference parameters)
+	var conditionSections []string
+	for _, logicalID := range sortedKeys(ctx.template.Conditions) {
+		condition := ctx.template.Conditions[logicalID]
+		conditionSections = append(conditionSections, generateCondition(ctx, condition))
+	}
+
+	// Outputs (may reference parameters)
+	var outputSections []string
+	for _, logicalID := range sortedKeys(ctx.template.Outputs) {
+		output := ctx.template.Outputs[logicalID]
+		outputSections = append(outputSections, generateOutput(ctx, output))
+	}
+
+	// Generate parameters - only those directly referenced via Ref
+	// Uses Param("name") for clarity that it's a parameter
 	for _, logicalID := range sortedKeys(ctx.template.Parameters) {
+		if !ctx.usedParameters[logicalID] {
+			continue // Skip unused parameters
+		}
 		param := ctx.template.Parameters[logicalID]
 		codeSections = append(codeSections, generateParameter(ctx, param))
 	}
@@ -109,23 +135,10 @@ func generateSingleFile(ctx *codegenContext) string {
 		codeSections = append(codeSections, generateMapping(ctx, mapping))
 	}
 
-	// Conditions
-	for _, logicalID := range sortedKeys(ctx.template.Conditions) {
-		condition := ctx.template.Conditions[logicalID]
-		codeSections = append(codeSections, generateCondition(ctx, condition))
-	}
-
-	// Resources (in dependency order)
-	for _, resourceID := range ctx.resourceOrder {
-		resource := ctx.template.Resources[resourceID]
-		codeSections = append(codeSections, generateResource(ctx, resource))
-	}
-
-	// Outputs
-	for _, logicalID := range sortedKeys(ctx.template.Outputs) {
-		output := ctx.template.Outputs[logicalID]
-		codeSections = append(codeSections, generateOutput(ctx, output))
-	}
+	// Add conditions, resources, outputs in proper order
+	codeSections = append(codeSections, conditionSections...)
+	codeSections = append(codeSections, resourceSections...)
+	codeSections = append(codeSections, outputSections...)
 
 	// Package header
 	header := fmt.Sprintf("// Package %s contains CloudFormation resources.\n", ctx.packageName)
@@ -157,8 +170,6 @@ func generateSingleFile(ctx *codegenContext) string {
 }
 
 func generateParameter(ctx *codegenContext, param *IRParameter) string {
-	// Generate a var declaration for parameters
-	// Parameters in Go wetwire-aws are represented as typed values
 	var lines []string
 
 	varName := param.LogicalID
@@ -166,10 +177,9 @@ func generateParameter(ctx *codegenContext, param *IRParameter) string {
 		lines = append(lines, fmt.Sprintf("// %s - %s", varName, param.Description))
 	}
 
-	// For parameters, we generate a simple typed variable
-	// Using dot import, so just Ref{...} without prefix
+	// Use Param() helper for clarity that this is a parameter reference
 	ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
-	lines = append(lines, fmt.Sprintf("var %s = Ref{%q}", varName, param.LogicalID))
+	lines = append(lines, fmt.Sprintf("var %s = Param(%q)", varName, param.LogicalID))
 
 	return strings.Join(lines, "\n")
 }
@@ -394,7 +404,7 @@ func tagsToBlockStyle(ctx *codegenContext, value any) string {
 
 	tags, ok := value.([]any)
 	if !ok || len(tags) == 0 {
-		return "[]Tag{}"
+		return "[]any{}"
 	}
 
 	var varNames []string
@@ -428,10 +438,10 @@ func tagsToBlockStyle(ctx *codegenContext, value any) string {
 	}
 
 	if len(varNames) == 0 {
-		return "[]Tag{}"
+		return "[]any{}"
 	}
 
-	return fmt.Sprintf("[]Tag{%s}", strings.Join(varNames, ", "))
+	return fmt.Sprintf("[]any{%s}", strings.Join(varNames, ", "))
 }
 
 func generateOutput(ctx *codegenContext, output *IROutput) string {
@@ -443,32 +453,22 @@ func generateOutput(ctx *codegenContext, output *IROutput) string {
 		lines = append(lines, fmt.Sprintf("// %s - %s", varName, output.Description))
 	}
 
-	// Outputs are represented as struct values
-	lines = append(lines, fmt.Sprintf("var %s = struct {", varName))
-	lines = append(lines, "\tValue any")
-	if output.Description != "" {
-		lines = append(lines, "\tDescription string")
-	}
-	if output.ExportName != nil {
-		lines = append(lines, "\tExportName any")
-	}
-	if output.Condition != "" {
-		lines = append(lines, "\tCondition string")
-	}
-	lines = append(lines, "}{")
+	// Use the Output type from intrinsics
+	ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
+	lines = append(lines, fmt.Sprintf("var %s = Output{", varName))
 
 	value := valueToGo(ctx, output.Value, 1)
-	lines = append(lines, fmt.Sprintf("\tValue: %s,", value))
+	lines = append(lines, fmt.Sprintf("\tValue:       %s,", value))
 
 	if output.Description != "" {
 		lines = append(lines, fmt.Sprintf("\tDescription: %q,", output.Description))
 	}
 	if output.ExportName != nil {
 		exportValue := valueToGo(ctx, output.ExportName, 1)
-		lines = append(lines, fmt.Sprintf("\tExportName: %s,", exportValue))
+		lines = append(lines, fmt.Sprintf("\tExportName:  %s,", exportValue))
 	}
 	if output.Condition != "" {
-		lines = append(lines, fmt.Sprintf("\tCondition: %q,", output.Condition))
+		lines = append(lines, fmt.Sprintf("\tCondition:   %q,", output.Condition))
 	}
 
 	lines = append(lines, "}")
@@ -626,12 +626,13 @@ func intrinsicToGo(ctx *codegenContext, intrinsic *IRIntrinsic) string {
 		if _, ok := ctx.template.Resources[target]; ok {
 			return target
 		}
-		// Check if it's a parameter - use bare name
+		// Check if it's a parameter - use bare name and track usage
 		if _, ok := ctx.template.Parameters[target]; ok {
+			ctx.usedParameters[target] = true
 			return target
 		}
-		// Unknown reference - use Ref function
-		return fmt.Sprintf("intrinsics.Ref(%q)", target)
+		// Unknown reference - use inline Ref
+		return fmt.Sprintf("Ref{%q}", target)
 
 	case IntrinsicGetAtt:
 		var logicalID, attr string
@@ -819,14 +820,6 @@ func resolveResourceType(cfType string) (module, typeName string) {
 
 	// Map service name to Go module name
 	module = strings.ToLower(service)
-
-	// Handle special cases
-	switch module {
-	case "lambda":
-		module = "lambda_" // lambda is a reserved word in some contexts
-	case "cloudformation":
-		module = "cloudformation"
-	}
 
 	typeName = resource
 

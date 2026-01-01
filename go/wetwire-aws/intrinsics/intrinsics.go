@@ -29,6 +29,17 @@ func (r Ref) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// Param creates a Ref for a CloudFormation parameter.
+// This makes it explicit that the reference is to a parameter, not a resource.
+//
+// Example:
+//
+//	var VpcId = Param("VpcId")     // declare parameter
+//	VpcId: VpcId,                  // use in resource - type-safe
+func Param(name string) Ref {
+	return Ref{LogicalName: name}
+}
+
 // GetAtt represents a CloudFormation Fn::GetAtt intrinsic function.
 // Use this for getting a specific attribute from a resource.
 //
@@ -308,4 +319,37 @@ func (t Transform) MarshalJSON() ([]byte, error) {
 			"Parameters": t.Parameters,
 		},
 	})
+}
+
+// Output represents a CloudFormation stack output.
+//
+// Example:
+//
+//	var BucketArnOutput = Output{
+//	    Value:       MyBucket.Arn,
+//	    Description: "The ARN of the bucket",
+//	    ExportName:  Sub{"${AWS::StackName}-BucketArn"},
+//	}
+type Output struct {
+	Value       any
+	Description string
+	ExportName  any // optional, for cross-stack references
+	Condition   string // optional, conditional output
+}
+
+// MarshalJSON serializes to CloudFormation output syntax.
+func (o Output) MarshalJSON() ([]byte, error) {
+	result := map[string]any{
+		"Value": o.Value,
+	}
+	if o.Description != "" {
+		result["Description"] = o.Description
+	}
+	if o.ExportName != nil {
+		result["Export"] = map[string]any{"Name": o.ExportName}
+	}
+	if o.Condition != "" {
+		result["Condition"] = o.Condition
+	}
+	return json.Marshal(result)
 }

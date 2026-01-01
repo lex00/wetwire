@@ -748,7 +748,7 @@ func analyzeReferences(template *IRTemplate) {
 // reservedPackageNames are resource package names that would conflict with imports.
 // If a template filename matches one of these, we add "_stack" suffix.
 var reservedPackageNames = map[string]bool{
-	"s3": true, "ec2": true, "iam": true, "lambda_": true, "dynamodb": true,
+	"s3": true, "ec2": true, "iam": true, "lambda": true, "dynamodb": true,
 	"sqs": true, "sns": true, "rds": true, "ecs": true, "eks": true,
 	"cloudfront": true, "cloudwatch": true, "route53": true, "apigateway": true,
 	"elasticloadbalancingv2": true, "elasticloadbalancing": true,
