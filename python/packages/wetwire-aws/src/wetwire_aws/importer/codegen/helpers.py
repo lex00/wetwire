@@ -414,7 +414,7 @@ def resolve_property_type(
 
     # Strategy 1: Direct lookup if we have expected class and module
     if expected_class and expected_module:
-        # Try nested module first: s3.bucket.BucketEncryption
+        # Try nested module first: s3.Bucket.BucketEncryption
         for key in _PROPERTY_TYPE_MAP:
             if key[0].startswith(expected_module) and key[1] == expected_class:
                 return (key[0], key[1], _PROPERTY_TYPE_MAP[key])

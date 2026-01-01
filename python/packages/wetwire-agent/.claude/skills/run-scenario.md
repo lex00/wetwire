@@ -55,7 +55,7 @@ class <ResourceName>:
 
 **Module path patterns:**
 - **Resources**: `s3.Bucket`, `ec2.Instance`, `lambda_.Function`
-- **PropertyTypes**: `s3.bucket.ServerSideEncryptionByDefault`, `s3.bucket.PublicAccessBlockConfiguration`
+- **PropertyTypes**: `s3.Bucket.ServerSideEncryptionByDefault`, `s3.Bucket.PublicAccessBlockConfiguration`
 - **Enums**: `s3.ServerSideEncryption.AES256`, `lambda_.Runtime.PYTHON3_12`
 
 **Example S3 bucket with encryption and public access block:**
@@ -63,19 +63,19 @@ class <ResourceName>:
 from . import *
 
 class MyEncryptionDefault:
-    resource: s3.bucket.ServerSideEncryptionByDefault
+    resource: s3.Bucket.ServerSideEncryptionByDefault
     sse_algorithm = s3.ServerSideEncryption.AES256
 
 class MyEncryptionRule:
-    resource: s3.bucket.ServerSideEncryptionRule
+    resource: s3.Bucket.ServerSideEncryptionRule
     server_side_encryption_by_default = MyEncryptionDefault
 
 class MyEncryption:
-    resource: s3.bucket.BucketEncryption
+    resource: s3.Bucket.BucketEncryption
     server_side_encryption_configuration = [MyEncryptionRule]
 
 class MyPublicAccessBlock:
-    resource: s3.bucket.PublicAccessBlockConfiguration
+    resource: s3.Bucket.PublicAccessBlockConfiguration
     block_public_acls = True
     block_public_policy = True
     ignore_public_acls = True

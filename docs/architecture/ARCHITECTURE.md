@@ -96,7 +96,7 @@ Cloud-specific implementations with pre-generated resources.
 from . import *
 
 class MyVersioning:
-    resource: s3.bucket.VersioningConfiguration
+    resource: s3.Bucket.VersioningConfiguration
     status = s3.BucketVersioningStatus.ENABLED
 
 class MyBucket:

@@ -7,11 +7,11 @@ for each AWS service, including enum constants from botocore.
 Structure:
     Each AWS service becomes a package (e.g., dynamodb/) containing:
     - __init__.py: Resource classes, enums, and submodule imports
-    - {resource}.py: PropertyTypes for each resource (e.g., table.py)
+    - {Resource}.py: PropertyTypes for each resource (e.g., Table.py)
 
     This mirrors CloudFormation's type hierarchy:
     - AWS::DynamoDB::Table -> dynamodb.Table
-    - AWS::DynamoDB::Table.AttributeDefinition -> dynamodb.table.AttributeDefinition
+    - AWS::DynamoDB::Table.AttributeDefinition -> dynamodb.Table.AttributeDefinition
 """
 
 import argparse
@@ -469,10 +469,11 @@ def generate_service_package(
     resource_names = {r.name for r in resources}
 
     # Generate PropertyType submodules for each resource
+    # Use PascalCase to match CloudFormation spec naming (e.g., SecurityGroup.Ingress)
     for resource in resources:
         resource_nested = nested_by_resource.get(resource.name, [])
         if resource_nested:
-            submodule_name = to_snake_case(resource.name)
+            submodule_name = resource.name  # Keep PascalCase
             submodules.append(submodule_name)
 
             content = generate_property_type_module(resource, resource_nested)
@@ -482,7 +483,7 @@ def generate_service_package(
     resource_submodule_map: dict[str, str] = {}
     for resource in resources:
         if resource.name in nested_by_resource:
-            resource_submodule_map[resource.name] = "_" + to_snake_case(resource.name)
+            resource_submodule_map[resource.name] = "_" + resource.name  # Keep PascalCase
 
     # Generate __init__.py
     init_lines = [generate_init_file_header(service, cf_spec_version, GENERATOR_VERSION)]
@@ -523,6 +524,20 @@ def generate_service_package(
         submodule = resource_submodule_map.get(resource.name)
         init_lines.append("")
         init_lines.append(generate_resource_class(resource, submodule))
+
+    # Attach PropertyTypes to resource classes so s3.Bucket.BucketEncryption works
+    # This allows users to write: resource: s3.Bucket.BucketEncryption
+    if submodules:
+        init_lines.append("")
+        init_lines.append("")
+        init_lines.append("# Attach PropertyTypes to resource classes for convenient access")
+        init_lines.append("# e.g., s3.Bucket.BucketEncryption instead of s3._Bucket.BucketEncryption")
+        for resource in sorted(resources, key=lambda r: r.name):
+            if resource.name in nested_by_resource:
+                resource_nested = nested_by_resource[resource.name]
+                for nested in sorted(resource_nested, key=lambda n: n.name):
+                    # Attach each PropertyType class to the resource class
+                    init_lines.append(f"{resource.name}.{nested.name} = _{resource.name}.{nested.name}")
 
     init_lines.append("")
 

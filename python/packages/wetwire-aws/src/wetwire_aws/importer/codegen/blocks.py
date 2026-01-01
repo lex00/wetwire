@@ -9,7 +9,7 @@ For example, instead of:
 
 Block mode generates:
     class MyBucketBucketEncryption:
-        resource: s3.bucket.BucketEncryption
+        resource: s3.Bucket.BucketEncryption
         server_side_encryption_configuration = [MyBucketServerSideEncryptionRule]
 
     class MyBucket:
@@ -243,7 +243,7 @@ def _generate_property_type_wrapper_impl(
 
     lines = []
 
-    # Always use qualified module path: resource: s3.bucket.BucketEncryption
+    # Always use qualified module path: resource: s3.Bucket.BucketEncryption
     base_module = pt_module.split(".")[0]
     ctx.add_import("wetwire_aws.resources", base_module)
     lines.append(f"    resource: {pt_module}.{pt_class}")

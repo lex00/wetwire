@@ -60,7 +60,7 @@ pip install wetwire-aws
 from . import *
 
 class DataBucketVersioning:
-    resource: s3.bucket.VersioningConfiguration
+    resource: s3.Bucket.VersioningConfiguration
     status = s3.BucketVersioningStatus.ENABLED
 
 class DataBucket:

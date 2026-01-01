@@ -1256,18 +1256,18 @@ class PropertyTypeAsRef(LintRule):
 
         Returns True for:
         - Name nodes like PolicyDocument, PolicyStatement, DenyStatement
-        - Attribute nodes like s3.bucket.SomePropertyType (nested in a module)
+        - Attribute nodes like s3.Bucket.SomePropertyType (nested in a module)
         """
         if isinstance(annotation, ast.Name):
             return annotation.id in self.PROPERTY_TYPE_BASES
 
         if isinstance(annotation, ast.Attribute):
-            # Check for nested property types like s3.bucket.BucketEncryption
-            # or rds.db_proxy.TagFormat
+            # Check for nested property types like s3.Bucket.BucketEncryption
+            # or rds.DBProxy.TagFormat
             # These have at least one nested module (not just s3.Bucket which is a Resource)
             parts = self._get_attribute_parts(annotation)
             if len(parts) >= 3:
-                # Format: module.submodule.ClassName (e.g., s3.bucket.BucketEncryption)
+                # Format: module.Resource.PropertyType (e.g., s3.Bucket.BucketEncryption)
                 # This is a nested PropertyType
                 return True
             if len(parts) >= 2:
@@ -1280,7 +1280,7 @@ class PropertyTypeAsRef(LintRule):
     def _get_attribute_parts(self, node: ast.expr) -> list[str]:
         """Extract parts from a nested Attribute node.
 
-        For s3.bucket.BucketEncryption, returns ['s3', 'bucket', 'BucketEncryption'].
+        For s3.Bucket.BucketEncryption, returns ['s3', 'Bucket', 'BucketEncryption'].
         """
         parts: list[str] = []
         current = node
@@ -1309,7 +1309,7 @@ class InlineConstructor(LintRule):
     Suggests:
     - Define a wrapper class instead:
       class MyClassName:
-          resource: service.submodule.ClassName
+          resource: service.Resource.PropertyType
           # properties here
 
     This is a common mistake when users try to use constructor syntax instead
@@ -1431,7 +1431,7 @@ class InlineConstructor(LintRule):
 
                     # Check if it's a service module call with arguments
                     if len(parts) >= 2 and parts[0] in self.AWS_SERVICE_MODULES:
-                        # It's something like s3.Something(...) or s3.bucket.Something(...)
+                        # It's something like s3.Something(...) or s3.Bucket.Something(...)
                         # Only flag if there are arguments (empty () is handled by WAW011)
                         if node.args or node.keywords:
                             original = ast.get_source_segment(context.source, node)
@@ -1441,10 +1441,10 @@ class InlineConstructor(LintRule):
 
                                 # Build the suggested wrapper pattern
                                 if len(parts) == 2:
-                                    # s3.Something -> might need s3.bucket.Something
+                                    # s3.Something -> might need s3.Bucket.Something
                                     resource_type = f"{service}.{class_name}"
                                 else:
-                                    # s3.bucket.Something -> correct nesting
+                                    # s3.Bucket.Something -> correct nesting
                                     resource_type = ".".join(parts)
 
                                 issues.append(
@@ -1486,7 +1486,7 @@ class InlineSecurityGroupRules(LintRule):
     """Detect inline security group ingress/egress dicts that should use wrapper classes.
 
     Security group rules should be expressed as wrapper classes with
-    `resource: ec2.security_group.Ingress` or `ec2.security_group.Egress`,
+    `resource: ec2.SecurityGroup.Ingress` or `ec2.SecurityGroup.Egress`,
     not as inline dict literals.
 
     Detects:
@@ -1545,7 +1545,7 @@ class InlineSecurityGroupRules(LintRule):
                                                         suggestion=(
                                                             f"# Define a wrapper class:\n"
                                                             f"# class My{rule_type}Rule:\n"
-                                                            f"#     resource: ec2.security_group.{rule_type}\n"
+                                                            f"#     resource: ec2.SecurityGroup.{rule_type}\n"
                                                             f"#     ip_protocol = ...\n"
                                                             f"#     from_port = ...\n"
                                                             f"#     to_port = ..."

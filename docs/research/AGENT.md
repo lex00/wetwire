@@ -124,7 +124,7 @@ class LogBucket:
     versioning_configuration = BucketVersioning
 
 class BucketVersioning:
-    resource: s3.bucket.VersioningConfiguration
+    resource: s3.Bucket.VersioningConfiguration
     status = s3.BucketVersioningStatus.ENABLED
 ```
 
