@@ -20,7 +20,9 @@ issues:
   # Don't limit issues per linter
   max-issues-per-linter: 0
   max-same-issues: 0
-  # Exclude generated directories
-  exclude-dirs:
-    - resources
-    - examples
+  # Exclude files using exclude-files for glob patterns
+  exclude-files:
+    - "resources/.*\\.go$"
+    - "examples/.*\\.go$"
+  # Exclude generated files (files containing "Code generated" comment)
+  exclude-generated: strict
