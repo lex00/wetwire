@@ -11,9 +11,11 @@ import (
 
 func newImportCmd() *cobra.Command {
 	var (
-		outputDir   string
-		packageName string
-		singleFile  bool
+		outputDir      string
+		packageName    string
+		modulePath     string
+		singleFile     bool
+		withScaffold   bool
 	)
 
 	cmd := &cobra.Command{
@@ -27,6 +29,9 @@ Examples:
 
   # Import with custom package name
   wetwire-aws import template.yaml -o ./infra --package mystack
+
+  # Generate a complete project with go.mod, cmd/main.go, .gitignore, CLAUDE.md
+  wetwire-aws import template.yaml -o ./myproject --scaffold
 
   # Generate a single file instead of a package
   wetwire-aws import template.yaml -o ./infra --single-file`,
@@ -47,6 +52,17 @@ Examples:
 
 			// Generate code
 			files := importer.GenerateCode(ir, packageName)
+
+			// Add scaffold files if requested
+			if withScaffold {
+				if modulePath == "" {
+					modulePath = packageName
+				}
+				scaffoldFiles := importer.GenerateTemplateFiles(packageName, modulePath)
+				for filename, content := range scaffoldFiles {
+					files[filename] = content
+				}
+			}
 
 			// Determine output location
 			if outputDir == "" {
@@ -78,13 +94,20 @@ Examples:
 			fmt.Printf("\nImported %d resources, %d parameters, %d outputs\n",
 				len(ir.Resources), len(ir.Parameters), len(ir.Outputs))
 
+			if withScaffold {
+				fmt.Println("\nScaffold files generated:")
+				fmt.Println("  go.mod, cmd/main.go, .gitignore, CLAUDE.md")
+			}
+
 			return nil
 		},
 	}
 
 	cmd.Flags().StringVarP(&outputDir, "output", "o", "", "Output directory (default: current directory)")
 	cmd.Flags().StringVarP(&packageName, "package", "p", "", "Package name (default: derived from template filename)")
+	cmd.Flags().StringVar(&modulePath, "module", "", "Go module path (default: same as package name)")
 	cmd.Flags().BoolVar(&singleFile, "single-file", false, "Generate a single file instead of a package")
+	cmd.Flags().BoolVar(&withScaffold, "scaffold", false, "Generate scaffold files (go.mod, cmd/main.go, .gitignore, CLAUDE.md)")
 
 	return cmd
 }
