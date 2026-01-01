@@ -36,10 +36,7 @@ jobs:
         run: go mod download
 
       - name: Generate resources
-        run: |
-          go run ./codegen/fetch.go
-          go run ./codegen/parse.go
-          go run ./codegen/main.go
+        run: go run ./codegen
 
       - name: Run tests
         run: go test -v -race -coverprofile=coverage.out ./...
@@ -62,10 +59,7 @@ jobs:
           go-version: '1.22'
 
       - name: Generate resources
-        run: |
-          go run ./codegen/fetch.go
-          go run ./codegen/parse.go
-          go run ./codegen/main.go
+        run: go run ./codegen
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v4
@@ -85,10 +79,7 @@ jobs:
           go-version: '1.22'
 
       - name: Generate resources
-        run: |
-          go run ./codegen/fetch.go
-          go run ./codegen/parse.go
-          go run ./codegen/main.go
+        run: go run ./codegen
 
       - name: Build CLI
         run: go build -v ./cmd/wetwire-aws
@@ -109,14 +100,8 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Download CloudFormation spec
-        run: go run ./codegen/fetch.go
-
-      - name: Parse spec
-        run: go run ./codegen/parse.go
-
       - name: Generate resources
-        run: go run ./codegen/main.go
+        run: go run ./codegen
 
       - name: Verify generated code compiles
         run: go build ./resources/...
