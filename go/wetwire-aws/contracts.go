@@ -132,3 +132,24 @@ type LintIssue struct {
 	Rule     string `json:"rule"`
 	Fixable  bool   `json:"fixable"`
 }
+
+// ValidateResult is the JSON output from `wetwire-aws validate`.
+type ValidateResult struct {
+	Success   bool     `json:"success"`
+	Resources int      `json:"resources"`
+	Errors    []string `json:"errors,omitempty"`
+	Warnings  []string `json:"warnings,omitempty"`
+}
+
+// ListResult is the JSON output from `wetwire-aws list`.
+type ListResult struct {
+	Resources []ListResource `json:"resources"`
+}
+
+// ListResource is a single resource in the list output.
+type ListResource struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+	File string `json:"file"`
+	Line int    `json:"line"`
+}
