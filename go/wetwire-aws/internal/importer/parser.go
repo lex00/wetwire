@@ -745,6 +745,25 @@ func analyzeReferences(template *IRTemplate) {
 	}
 }
 
+// reservedPackageNames are resource package names that would conflict with imports.
+// If a template filename matches one of these, we add "_stack" suffix.
+var reservedPackageNames = map[string]bool{
+	"s3": true, "ec2": true, "iam": true, "lambda_": true, "dynamodb": true,
+	"sqs": true, "sns": true, "rds": true, "ecs": true, "eks": true,
+	"cloudfront": true, "cloudwatch": true, "route53": true, "apigateway": true,
+	"elasticloadbalancingv2": true, "elasticloadbalancing": true,
+	"kms": true, "secretsmanager": true, "ssm": true, "logs": true,
+	"events": true, "kinesis": true, "firehose": true, "glue": true,
+	"athena": true, "redshift": true, "elasticsearch": true, "opensearchservice": true,
+	"cognito": true, "waf": true, "wafv2": true, "acm": true,
+	"cloudformation": true, "config": true, "guardduty": true, "inspector": true,
+	"macie": true, "securityhub": true, "stepfunctions": true, "appsync": true,
+	"amplify": true, "codecommit": true, "codebuild": true, "codepipeline": true,
+	"codedeploy": true, "codestar": true, "ecr": true, "batch": true,
+	"sagemaker": true, "iot": true, "greengrass": true, "mediaconvert": true,
+	"intrinsics": true, // Also reserved
+}
+
 // DerivePackageName creates a valid Go package name from a file path.
 func DerivePackageName(path string) string {
 	base := filepath.Base(path)
@@ -761,6 +780,10 @@ func DerivePackageName(path string) string {
 	}
 	if name == "" {
 		name = "imported"
+	}
+	// Avoid conflicts with resource package names
+	if reservedPackageNames[name] {
+		name = name + "_stack"
 	}
 	return name
 }
