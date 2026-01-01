@@ -1,18 +1,18 @@
 # Go Implementation Decisions
 
 **Purpose:** Unblock parallel agent execution by documenting all human decisions upfront.
-**Status:** DRAFT - Needs human review before agent work begins.
+**Status:** DECISIONS COMPLETE - Ready for agent implementation.
 
 ---
 
 ## Module Paths
 
 ```
-github.com/lex00/wetwire-aws     # AWS domain package
-github.com/lex00/wetwire-agent   # Agent CLI tool
+github.com/lex00/wetwire-aws     # AWS domain package (library + CLI)
+github.com/lex00/wetwire-agent   # Agent CLI tool (CLI only, not importable)
 ```
 
-**Decision needed:** Confirm org/repo naming.
+**Decision:** Module paths confirmed. Matches existing `lex00` GitHub organization.
 
 ---
 
@@ -76,14 +76,14 @@ wetwire-agent/
 ```go
 package wetwire_aws
 
-// Resource represents a CloudFormation resource wrapper
+// Resource represents a CloudFormation resource
 type Resource interface {
     // ResourceType returns the CloudFormation type (e.g., "AWS::S3::Bucket")
     ResourceType() string
-
-    // LogicalName returns the variable name used in user code
-    LogicalName() string
 }
+
+// Note: LogicalName is NOT part of the interface.
+// CLI tracks logical names externally via map[string]DiscoveredResource.
 
 // AttrRef represents a GetAtt reference (e.g., MyRole.Arn)
 type AttrRef struct {
@@ -152,38 +152,30 @@ import (
 
 // Bucket represents AWS::S3::Bucket
 type Bucket struct {
-    // Attrs (for GetAtt) - always present, populated by CLI at build time
-    Arn                       wetwire.AttrRef
-    DomainName                wetwire.AttrRef
-    DualStackDomainName       wetwire.AttrRef
-    RegionalDomainName        wetwire.AttrRef
-    WebsiteURL                wetwire.AttrRef
+    // Attrs (for GetAtt) - always present, zero values until CLI populates
+    Arn                       wetwire.AttrRef `json:"-"`
+    DomainName                wetwire.AttrRef `json:"-"`
+    DualStackDomainName       wetwire.AttrRef `json:"-"`
+    RegionalDomainName        wetwire.AttrRef `json:"-"`
+    WebsiteURL                wetwire.AttrRef `json:"-"`
 
     // Properties - user sets these
-    BucketName                string
-    VersioningConfiguration   *VersioningConfiguration
-    Tags                      []Tag
+    BucketName                string                   `json:"BucketName,omitempty"`
+    VersioningConfiguration   *VersioningConfiguration `json:"VersioningConfiguration,omitempty"`
+    Tags                      []Tag                    `json:"Tags,omitempty"`
     // ... all other properties
 }
 
-// ResourceType implements wetwire.Resource
+// ResourceType returns the CloudFormation type
 func (b Bucket) ResourceType() string {
     return "AWS::S3::Bucket"
 }
-
-// LogicalName is set by the CLI during discovery
-func (b Bucket) LogicalName() string {
-    return b.logicalName
-}
-
-// Private field set by CLI
-var _ wetwire.Resource = Bucket{}
 ```
 
-**Decision needed:** How to store logical name? Options:
-1. Private field set via reflection
-2. Wrapper struct at build time
-3. Separate registry map
+**Notes:**
+- AttrRef fields have `json:"-"` - they're not serialized directly
+- CLI uses separate `map[string]DiscoveredResource` for logical names (see Resolved Questions)
+- No LogicalName() method needed - CLI tracks this externally
 
 ---
 
@@ -547,22 +539,123 @@ var MyRole = iam.Role{
 
 ---
 
-## Open Questions
+## Resolved Questions
 
-1. **Logical name storage:** How does CLI set the logical name on discovered resources?
-   - Option A: Reflection to set private field
-   - Option B: Wrapper struct created at build time
-   - Option C: Separate `map[any]string` registry
+### 1. Logical Name Storage
 
-2. **Cross-file references:** How to handle `MyRole.Arn` when MyRole is in different file?
-   - CLI parses all files, builds dependency graph, validates references
+**Decision: CLI-side map (no struct modification needed)**
 
-3. **Circular dependency detection:** How to report cycles?
-   - Build error with cycle path: "A -> B -> C -> A"
+The CLI discovers resources via AST parsing and already knows variable names. It maintains a `map[string]DiscoveredResource` keyed by logical name. During serialization, the CLI uses this map - no need to store the name on the struct itself.
 
-4. **Enum generation:** Should enums be generated from botocore?
-   - Option A: Yes, as string constants
-   - Option B: No, just use strings
+```go
+// internal/discover/discover.go
+type DiscoveredResource struct {
+    Name         string   // Variable name = logical name (e.g., "MyBucket")
+    Type         string   // Go type (e.g., "s3.Bucket")
+    File         string   // Source file
+    Line         int      // Line number
+    Dependencies []string // Referenced resources (e.g., ["MyRole"])
+}
+
+// CLI maintains: map[string]DiscoveredResource
+// Key is the logical name, used during template serialization
+```
+
+**Rationale:**
+- CLI already has this info from AST parsing
+- No reflection or runtime modification needed
+- Generated types stay simple (no private fields for metadata)
+
+### 2. Cross-File References
+
+**Decision: CLI parses all files in package, builds unified dependency graph**
+
+```bash
+wetwire-aws build ./infra/...
+```
+
+1. CLI discovers all `var X = Type{...}` declarations across all `.go` files in the package
+2. For each resource, extracts field values that reference other resources (e.g., `MyRole.Arn`)
+3. Builds dependency graph: `ProcessorFunction → ProcessorRole → DataBucket`
+4. Validates all references resolve to discovered resources
+5. Serializes in dependency order
+
+**Error example:**
+```
+build error: infra/compute.go:15: ProcessorFunction references undefined resource "MyRole"
+  hint: did you mean "ProcessorRole" (defined in infra/iam.go:8)?
+```
+
+### 3. Circular Dependency Detection
+
+**Decision: Build error with full cycle path**
+
+Uses Tarjan's SCC or Kahn's algorithm to detect cycles during topological sort.
+
+**Error format:**
+```
+build error: circular dependency detected
+  ProcessorFunction (infra/compute.go:15)
+    → ProcessorRole (infra/iam.go:8)
+    → DataBucket (infra/storage.go:5)
+    → ProcessorFunction (infra/compute.go:15)
+```
+
+**Implementation:** `gonum.org/v1/gonum/graph/topo` provides cycle detection.
+
+### 4. Enum Generation
+
+**Decision: Generate typed string constants from botocore**
+
+```go
+// s3/enums.go (generated)
+package s3
+
+// BucketVersioningStatus represents valid values for VersioningConfiguration.Status
+type BucketVersioningStatus string
+
+const (
+    BucketVersioningStatusEnabled   BucketVersioningStatus = "Enabled"
+    BucketVersioningStatusSuspended BucketVersioningStatus = "Suspended"
+)
+
+// BucketAccelerateStatus represents valid values for AccelerateConfiguration.AccelerationStatus
+type BucketAccelerateStatus string
+
+const (
+    BucketAccelerateStatusEnabled  BucketAccelerateStatus = "Enabled"
+    BucketAccelerateStatusSuspended BucketAccelerateStatus = "Suspended"
+)
+```
+
+**Usage in generated types:**
+```go
+type VersioningConfiguration struct {
+    Status BucketVersioningStatus  // Typed for autocomplete
+}
+```
+
+**User code:**
+```go
+var MyBucket = s3.Bucket{
+    VersioningConfiguration: &s3.VersioningConfiguration{
+        Status: s3.BucketVersioningStatusEnabled,  // IDE autocomplete
+    },
+}
+
+// Also accepts raw strings (Go allows this)
+var MyBucket2 = s3.Bucket{
+    VersioningConfiguration: &s3.VersioningConfiguration{
+        Status: "Enabled",  // Works but no autocomplete
+    },
+}
+```
+
+**Rationale:**
+- IDE autocomplete for valid values
+- Some compile-time safety (wrong type = error)
+- Still accepts raw strings for flexibility
+- Matches Python implementation's enum generation
 
 ---
 
