@@ -3,6 +3,8 @@ package main
 import (
 	"sort"
 	"strings"
+
+	"github.com/lex00/cloudformation-schema-go/spec"
 )
 
 // Service represents a group of resources for one AWS service.
@@ -51,11 +53,11 @@ type ParsedAttribute struct {
 }
 
 // parseSpec organizes the CloudFormation spec by service.
-func parseSpec(spec *CFSpec, filterService string) []*Service {
+func parseSpec(cfnSpec *spec.Spec, filterService string) []*Service {
 	services := make(map[string]*Service)
 
 	// Parse resource types
-	for cfType, resDef := range spec.ResourceTypes {
+	for cfType, resDef := range cfnSpec.ResourceTypes {
 		// Parse AWS::S3::Bucket -> service=s3, name=Bucket
 		parts := strings.Split(cfType, "::")
 		if len(parts) != 3 || parts[0] != "AWS" {
@@ -108,7 +110,7 @@ func parseSpec(spec *CFSpec, filterService string) []*Service {
 	}
 
 	// Parse property types and add to services
-	for cfType, propTypeDef := range spec.PropertyTypes {
+	for cfType, propTypeDef := range cfnSpec.PropertyTypes {
 		// Parse AWS::S3::Bucket.VersioningConfiguration
 		parts := strings.Split(cfType, "::")
 		if len(parts) != 3 || parts[0] != "AWS" {
@@ -168,7 +170,7 @@ func parseSpec(spec *CFSpec, filterService string) []*Service {
 }
 
 // parseProperty converts a CloudFormation property definition to our parsed format.
-func parseProperty(name string, def Property) ParsedProperty {
+func parseProperty(name string, def spec.Property) ParsedProperty {
 	prop := ParsedProperty{
 		Name:          name,
 		Documentation: def.Documentation,

@@ -13,10 +13,11 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/lex00/cloudformation-schema-go/spec"
 )
 
 var (
-	specURL    = "https://d1uauaxba7bl26.cloudfront.net/latest/gzip/CloudFormationResourceSpecification.json"
 	outputDir  = ""
 	service    = ""
 	dryRun     = false
@@ -52,17 +53,17 @@ func main() {
 
 	// Step 1: Fetch the CloudFormation spec
 	fmt.Println("Fetching CloudFormation Resource Specification...")
-	spec, err := fetchSpec(specURL, forceRegen)
+	cfnSpec, err := spec.FetchSpec(&spec.FetchOptions{Force: forceRegen})
 	if err != nil {
 		log.Fatalf("fetching spec: %v", err)
 	}
-	fmt.Printf("Spec version: %s\n", spec.ResourceSpecificationVersion)
-	fmt.Printf("Resource types: %d\n", len(spec.ResourceTypes))
-	fmt.Printf("Property types: %d\n", len(spec.PropertyTypes))
+	fmt.Printf("Spec version: %s\n", cfnSpec.ResourceSpecificationVersion)
+	fmt.Printf("Resource types: %d\n", len(cfnSpec.ResourceTypes))
+	fmt.Printf("Property types: %d\n", len(cfnSpec.PropertyTypes))
 
 	// Step 2: Parse and organize by service
 	fmt.Println("\nParsing specification...")
-	services := parseSpec(spec, service)
+	services := parseSpec(cfnSpec, service)
 	fmt.Printf("Services to generate: %d\n", len(services))
 
 	// Step 3: Generate Go code
