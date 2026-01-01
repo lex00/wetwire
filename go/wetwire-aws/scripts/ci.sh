@@ -47,9 +47,9 @@ else
     echo ""
 fi
 
-# Tests
+# Tests (exclude examples directory which contains generated test files)
 echo ">>> Running tests..."
-go test -v -race ./...
+go test -v -race $(go list ./... | grep -v /examples/)
 echo ""
 
 # Build

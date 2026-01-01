@@ -77,18 +77,18 @@ type DiscoveredResource struct {
 
 // Template represents a CloudFormation template.
 type Template struct {
-	AWSTemplateFormatVersion string                 `json:"AWSTemplateFormatVersion"`
-	Description              string                 `json:"Description,omitempty"`
-	Parameters               map[string]Parameter   `json:"Parameters,omitempty"`
-	Resources                map[string]ResourceDef `json:"Resources"`
-	Outputs                  map[string]Output      `json:"Outputs,omitempty"`
+	AWSTemplateFormatVersion string                 `json:"AWSTemplateFormatVersion" yaml:"AWSTemplateFormatVersion"`
+	Description              string                 `json:"Description,omitempty" yaml:"Description,omitempty"`
+	Parameters               map[string]Parameter   `json:"Parameters,omitempty" yaml:"Parameters,omitempty"`
+	Resources                map[string]ResourceDef `json:"Resources" yaml:"Resources"`
+	Outputs                  map[string]Output      `json:"Outputs,omitempty" yaml:"Outputs,omitempty"`
 }
 
 // ResourceDef is a single resource in the CloudFormation template.
 type ResourceDef struct {
-	Type       string         `json:"Type"`
-	Properties map[string]any `json:"Properties,omitempty"`
-	DependsOn  []string       `json:"DependsOn,omitempty"`
+	Type       string         `json:"Type" yaml:"Type"`
+	Properties map[string]any `json:"Properties,omitempty" yaml:"Properties,omitempty"`
+	DependsOn  []string       `json:"DependsOn,omitempty" yaml:"DependsOn,omitempty"`
 }
 
 // Parameter is a CloudFormation template parameter.
