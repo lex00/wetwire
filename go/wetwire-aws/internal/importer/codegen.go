@@ -41,7 +41,8 @@ type codegenContext struct {
 	packageName      string
 	imports          map[string]bool // import path -> true
 	resourceOrder    []string        // topologically sorted resource IDs
-	currentResource  string          // current resource type being generated (e.g., "ec2")
+	currentResource  string          // current resource module being generated (e.g., "ec2", "cloudfront")
+	currentTypeName  string          // current resource type name (e.g., "Distribution", "VPC")
 	currentProperty  string          // current property being generated (e.g., "SecurityGroupIngress")
 	currentLogicalID string          // current resource's logical ID (e.g., "SecurityGroup")
 
@@ -212,6 +213,7 @@ func generateResource(ctx *codegenContext, resource *IRResource) string {
 
 	// Set current resource context for typed property generation
 	ctx.currentResource = module
+	ctx.currentTypeName = typeName
 	ctx.currentLogicalID = resource.LogicalID
 
 	// Clear property blocks for this resource
@@ -230,7 +232,8 @@ func generateResource(ctx *codegenContext, resource *IRResource) string {
 			// Block style: extract items as separate var declarations
 			value = typedArrayToBlockStyle(ctx, prop.Value, typedStruct)
 		} else {
-			value = valueToGo(ctx, prop.Value, 1)
+			// Pass property name for typed struct generation
+			value = valueToGoWithProperty(ctx, prop.Value, 1, propName)
 		}
 		resourceProps[prop.GoName] = value
 	}
@@ -478,6 +481,13 @@ func generateOutput(ctx *codegenContext, output *IROutput) string {
 
 // valueToGo converts an IR value to Go source code.
 func valueToGo(ctx *codegenContext, value any, indent int) string {
+	return valueToGoWithProperty(ctx, value, indent, "")
+}
+
+// valueToGoWithProperty converts an IR value to Go source code, with property context.
+// The propName parameter indicates the property name if this value is a field in a struct,
+// which allows us to determine the typed struct name for nested property types.
+func valueToGoWithProperty(ctx *codegenContext, value any, indent int, propName string) string {
 	indentStr := strings.Repeat("\t", indent)
 	nextIndent := strings.Repeat("\t", indent+1)
 
@@ -520,9 +530,24 @@ func valueToGo(ctx *codegenContext, value any, indent int) string {
 		if len(v) == 0 {
 			return "[]any{}"
 		}
+		// Check if this is an array of objects that should use typed slice
+		if propName != "" && len(v) > 0 {
+			if _, isMap := v[0].(map[string]any); isMap {
+				// Determine the element type name (singular form for arrays)
+				elemTypeName := getArrayElementTypeName(ctx, propName)
+				if elemTypeName != "" {
+					var items []string
+					for _, item := range v {
+						// Pass singular element type name for nested properties
+						items = append(items, nextIndent+valueToGoWithProperty(ctx, item, indent+1, singularize(propName))+",")
+					}
+					return fmt.Sprintf("[]%s.%s{\n%s\n%s}", ctx.currentResource, elemTypeName, strings.Join(items, "\n"), indentStr)
+				}
+			}
+		}
 		var items []string
 		for _, item := range v {
-			items = append(items, nextIndent+valueToGo(ctx, item, indent+1)+",")
+			items = append(items, nextIndent+valueToGoWithProperty(ctx, item, indent+1, "")+",")
 		}
 		return fmt.Sprintf("[]any{\n%s\n%s}", strings.Join(items, "\n"), indentStr)
 
@@ -542,15 +567,122 @@ func valueToGo(ctx *codegenContext, value any, indent int) string {
 				}
 			}
 		}
+
+		// Try to use a typed struct based on property context
+		// But only if all keys are valid Go identifiers
+		typeName := getPropertyTypeName(ctx, propName)
+		if typeName != "" && allKeysValidIdentifiers(v) {
+			var items []string
+			for _, k := range sortedKeys(v) {
+				val := v[k]
+				items = append(items, fmt.Sprintf("%s%s: %s,", nextIndent, k, valueToGoWithProperty(ctx, val, indent+1, k)))
+			}
+			return fmt.Sprintf("%s.%s{\n%s\n%s}", ctx.currentResource, typeName, strings.Join(items, "\n"), indentStr)
+		}
+
+		// Fallback to map[string]any
 		var items []string
 		for _, k := range sortedKeys(v) {
 			val := v[k]
-			items = append(items, fmt.Sprintf("%s%q: %s,", nextIndent, k, valueToGo(ctx, val, indent+1)))
+			items = append(items, fmt.Sprintf("%s%q: %s,", nextIndent, k, valueToGoWithProperty(ctx, val, indent+1, k)))
 		}
 		return fmt.Sprintf("map[string]any{\n%s\n%s}", strings.Join(items, "\n"), indentStr)
 	}
 
 	return fmt.Sprintf("%#v", value)
+}
+
+// getPropertyTypeName returns the typed struct name for a property, if known.
+// CloudFormation property types are always flat: {ResourceType}_{PropertyTypeName}
+// e.g., Distribution_DistributionConfig, Distribution_DefaultCacheBehavior, Distribution_Cookies
+// Returns empty string if the property should use map[string]any.
+func getPropertyTypeName(ctx *codegenContext, propName string) string {
+	if propName == "" || ctx.currentTypeName == "" {
+		return ""
+	}
+
+	// Skip known fields that should remain as map[string]any or are handled specially
+	skipFields := map[string]bool{
+		"Tags":     true,
+		"Metadata": true,
+	}
+	if skipFields[propName] {
+		return ""
+	}
+
+	// CloudFormation property types are flat: {ResourceType}_{PropertyTypeName}
+	// The property type name is typically the same as the property field name
+	return ctx.currentTypeName + "_" + propName
+}
+
+// getArrayElementTypeName returns the typed struct name for array elements.
+// CloudFormation uses singular names for element types: Origins -> Origin
+func getArrayElementTypeName(ctx *codegenContext, propName string) string {
+	if propName == "" || ctx.currentTypeName == "" {
+		return ""
+	}
+
+	// Skip known fields that should remain as []any
+	skipFields := map[string]bool{
+		"Tags": true,
+	}
+	if skipFields[propName] {
+		return ""
+	}
+
+	// Array element types use singular form
+	singular := singularize(propName)
+	return ctx.currentTypeName + "_" + singular
+}
+
+// singularize converts a plural property name to singular for element types.
+// e.g., Origins -> Origin, CacheBehaviors -> CacheBehavior
+func singularize(name string) string {
+	// Handle common CloudFormation patterns
+	if strings.HasSuffix(name, "ies") {
+		// e.g., Policies -> Policy
+		return name[:len(name)-3] + "y"
+	}
+	if strings.HasSuffix(name, "sses") {
+		// e.g., Addresses -> Address (but keep one 's')
+		return name[:len(name)-2]
+	}
+	if strings.HasSuffix(name, "s") && !strings.HasSuffix(name, "ss") {
+		// e.g., Origins -> Origin, but not Address -> Addres
+		return name[:len(name)-1]
+	}
+	return name
+}
+
+// allKeysValidIdentifiers checks if all keys in a map are valid Go identifiers.
+// Returns false if any key contains special characters like ':' or starts with a number.
+func allKeysValidIdentifiers(m map[string]any) bool {
+	for k := range m {
+		if !isValidGoIdentifier(k) {
+			return false
+		}
+	}
+	return true
+}
+
+// isValidGoIdentifier checks if a string is a valid Go identifier.
+func isValidGoIdentifier(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for i, r := range s {
+		if i == 0 {
+			if !unicode.IsLetter(r) && r != '_' {
+				return false
+			}
+		} else {
+			if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' {
+				return false
+			}
+		}
+	}
+	// Also check for Go keywords
+	return !isGoKeyword(s)
 }
 
 // mapToIntrinsic converts a map with an intrinsic key to an IRIntrinsic.
