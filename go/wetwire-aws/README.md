@@ -4,9 +4,13 @@ Generate CloudFormation templates from Go resource declarations using a declarat
 
 ## Status
 
-**Implementation: In Progress**
+**v0.4.0 - All Core Features Complete**
 
-See [Implementation Status](#implementation-status) for details.
+- All CLI commands implemented (build, validate, list, lint, init, import)
+- **184 AWS services** with typed enum constants
+- 254/254 AWS sample templates import successfully (100% success rate)
+
+See [CHANGELOG.md](CHANGELOG.md) for release details.
 
 ## Quick Start
 

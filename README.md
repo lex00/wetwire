@@ -42,7 +42,7 @@ class WebServer:
 |---------|----------|---------|--------|
 | `dataclass-dsl` | Python | Typed references and resource loading | ✅ Published on PyPI |
 | `wetwire-aws` | Python | AWS CloudFormation synthesis | ✅ Published on PyPI |
-| `wetwire-aws` | Go | AWS CloudFormation synthesis | 🚧 Nearly Ready |
+| `wetwire-aws` | Go | AWS CloudFormation synthesis | ✅ v0.4.0 |
 | `wetwire-gcp` | - | GCP Config Connector synthesis | Future |
 | `wetwire-azure` | - | Azure ARM synthesis | Future |
 | `wetwire-k8s` | - | Kubernetes manifest synthesis | Future |

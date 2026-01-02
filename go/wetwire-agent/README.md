@@ -42,7 +42,7 @@ wetwire-agent test --persona all --prompt "log storage bucket"
 ## Installation
 
 ```bash
-go install github.com/lex00/wetwire-agent/cmd/wetwire-agent@latest
+go install github.com/lex00/wetwire/go/wetwire-agent/cmd/wetwire-agent@latest
 ```
 
 **Requires:** `ANTHROPIC_API_KEY` environment variable

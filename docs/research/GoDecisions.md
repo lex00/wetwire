@@ -9,10 +9,10 @@
 
 ```
 github.com/lex00/wetwire/go/wetwire-aws     # AWS domain package (library + CLI)
-github.com/lex00/wetwire-agent   # Agent CLI tool (CLI only, not importable)
+github.com/lex00/wetwire/go/wetwire-agent   # Agent CLI tool (CLI only, not importable)
 ```
 
-**Decision:** Module paths confirmed. Matches existing `lex00` GitHub organization.
+**Decision:** Module paths confirmed. Both packages live in the wetwire monorepo under `go/`.
 
 ---
 
