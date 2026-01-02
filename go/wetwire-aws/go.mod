@@ -3,6 +3,7 @@ module github.com/lex00/wetwire-aws
 go 1.23
 
 require (
+	github.com/lex00/cfn-lint-go v0.7.1
 	github.com/lex00/cloudformation-schema-go v0.5.0
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.9.0

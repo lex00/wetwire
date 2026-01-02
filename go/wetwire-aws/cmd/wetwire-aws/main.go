@@ -39,6 +39,7 @@ Then generate CloudFormation JSON:
 		newValidateCmd(),
 		newListCmd(),
 		newLintCmd(),
+		newCfnLintCmd(),
 		newInitCmd(),
 		newImportCmd(),
 		newVersionCmd(),
