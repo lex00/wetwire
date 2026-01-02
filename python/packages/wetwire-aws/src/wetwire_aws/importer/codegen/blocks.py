@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 from wetwire_aws.importer.ir import IRIntrinsic
 
 from .context import AnnotatedValue
+from .enum_lookup import try_enum_constant
 from .helpers import (
     extract_class_from_type_hint,
     resolve_property_type,
@@ -87,7 +88,12 @@ def property_value_to_python_block(
         return str(value)
 
     if isinstance(value, str):
-        # TODO: Add enum conversion support
+        # Try to use typed enum constant if this property has an enum mapping
+        # Extract the property name from the path (e.g., "runtime" from "lambda.runtime")
+        prop_name = property_path.split(".")[-1] if property_path else ""
+        enum_const = try_enum_constant(ctx, prop_name, value, expected_module)
+        if enum_const:
+            return enum_const
         return escape_string(value)
 
     if isinstance(value, list):
