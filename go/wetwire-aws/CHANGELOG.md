@@ -9,13 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Typed enum constants for AWS services via cloudformation-schema-go/enums:
-  - Lambda: Runtime, Architecture, PackageType
-  - S3: StorageClass, BucketCannedACL, ObjectCannedACL
-  - EC2: InstanceType, VolumeType
-  - DynamoDB: TableClass, BillingMode, StreamViewType
-  - ECS: LaunchType, NetworkMode
-  - RDS: DBInstanceClass, EngineType
+- Typed enum constants for 184 AWS services via cloudformation-schema-go v0.7.0:
+  - Full coverage: Lambda, S3, EC2, DynamoDB, ECS, RDS, IAM, CloudWatch, SQS, SNS, and 174 more
+  - 10,014 enum types with 45,318 total values
+  - Enables type-safe property values (e.g., `lambda.RuntimePython312` instead of `"python3.12"`)
 - Category-based file splitting for imported templates:
   - `security.go` - IAM roles, policies, KMS keys
   - `network.go` - VPC, subnets, security groups, load balancers
