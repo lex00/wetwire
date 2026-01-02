@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	wetwire "github.com/lex00/wetwire-aws"
+	wetwire "github.com/lex00/wetwire/go/wetwire-aws"
 )
 
 // Builder constructs CloudFormation templates from discovered resources.

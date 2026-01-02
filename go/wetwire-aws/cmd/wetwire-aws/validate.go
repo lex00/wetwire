@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	wetwire "github.com/lex00/wetwire-aws"
-	"github.com/lex00/wetwire-aws/internal/discover"
+	wetwire "github.com/lex00/wetwire/go/wetwire-aws"
+	"github.com/lex00/wetwire/go/wetwire-aws/internal/discover"
 )
 
 func newValidateCmd() *cobra.Command {

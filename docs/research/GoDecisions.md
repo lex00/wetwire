@@ -8,7 +8,7 @@
 ## Module Paths
 
 ```
-github.com/lex00/wetwire-aws     # AWS domain package (library + CLI)
+github.com/lex00/wetwire/go/wetwire-aws     # AWS domain package (library + CLI)
 github.com/lex00/wetwire-agent   # Agent CLI tool (CLI only, not importable)
 ```
 
@@ -179,7 +179,7 @@ type LintIssue struct {
 package s3
 
 import (
-    wetwire "github.com/lex00/wetwire-aws"
+    wetwire "github.com/lex00/wetwire/go/wetwire-aws"
 )
 
 // Bucket represents AWS::S3::Bucket
@@ -404,9 +404,9 @@ This code MUST compile and produce valid CloudFormation:
 package main
 
 import (
-    "github.com/lex00/wetwire-aws/iam"
-    "github.com/lex00/wetwire-aws/lambda"
-    "github.com/lex00/wetwire-aws/s3"
+    "github.com/lex00/wetwire/go/wetwire-aws/iam"
+    "github.com/lex00/wetwire/go/wetwire-aws/lambda"
+    "github.com/lex00/wetwire/go/wetwire-aws/s3"
 )
 
 var DataBucket = s3.Bucket{
@@ -495,8 +495,8 @@ class MyBucket:
 package infra
 
 import (
-    "github.com/lex00/wetwire-aws/s3"
-    "github.com/lex00/wetwire-aws/iam"
+    "github.com/lex00/wetwire/go/wetwire-aws/s3"
+    "github.com/lex00/wetwire/go/wetwire-aws/iam"
 )
 
 var MyBucket = s3.Bucket{
@@ -523,14 +523,14 @@ package infra
 
 import (
     // Common AWS services - add/remove as needed
-    "github.com/lex00/wetwire-aws/s3"
-    "github.com/lex00/wetwire-aws/iam"
-    "github.com/lex00/wetwire-aws/ec2"
-    "github.com/lex00/wetwire-aws/lambda"
-    "github.com/lex00/wetwire-aws/dynamodb"
-    "github.com/lex00/wetwire-aws/sqs"
-    "github.com/lex00/wetwire-aws/sns"
-    "github.com/lex00/wetwire-aws/apigateway"
+    "github.com/lex00/wetwire/go/wetwire-aws/s3"
+    "github.com/lex00/wetwire/go/wetwire-aws/iam"
+    "github.com/lex00/wetwire/go/wetwire-aws/ec2"
+    "github.com/lex00/wetwire/go/wetwire-aws/lambda"
+    "github.com/lex00/wetwire/go/wetwire-aws/dynamodb"
+    "github.com/lex00/wetwire/go/wetwire-aws/sqs"
+    "github.com/lex00/wetwire/go/wetwire-aws/sns"
+    "github.com/lex00/wetwire/go/wetwire-aws/apigateway"
 )
 
 // Define your infrastructure resources below
@@ -550,8 +550,8 @@ Imports existing CloudFormation template to Go:
 package infra
 
 import (
-    "github.com/lex00/wetwire-aws/s3"
-    "github.com/lex00/wetwire-aws/iam"
+    "github.com/lex00/wetwire/go/wetwire-aws/s3"
+    "github.com/lex00/wetwire/go/wetwire-aws/iam"
 )
 
 var MyBucket = s3.Bucket{

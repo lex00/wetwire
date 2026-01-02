@@ -7,9 +7,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	wetwire "github.com/lex00/wetwire-aws"
-	"github.com/lex00/wetwire-aws/internal/discover"
-	"github.com/lex00/wetwire-aws/internal/linter"
+	wetwire "github.com/lex00/wetwire/go/wetwire-aws"
+	"github.com/lex00/wetwire/go/wetwire-aws/internal/discover"
+	"github.com/lex00/wetwire/go/wetwire-aws/internal/linter"
 )
 
 func newLintCmd() *cobra.Command {

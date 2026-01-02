@@ -14,10 +14,10 @@ See [Implementation Status](#implementation-status) for details.
 package infra
 
 import (
-    "github.com/lex00/wetwire-aws/resources/s3"
-    "github.com/lex00/wetwire-aws/resources/iam"
-    "github.com/lex00/wetwire-aws/resources/lambda"
-    . "github.com/lex00/wetwire-aws/intrinsics"
+    "github.com/lex00/wetwire/go/wetwire-aws/resources/s3"
+    "github.com/lex00/wetwire/go/wetwire-aws/resources/iam"
+    "github.com/lex00/wetwire/go/wetwire-aws/resources/lambda"
+    . "github.com/lex00/wetwire/go/wetwire-aws/intrinsics"
 )
 
 // Direct type declaration - no wrappers, no registration
@@ -52,7 +52,7 @@ wetwire-aws build ./infra > template.json
 ## Installation
 
 ```bash
-go install github.com/lex00/wetwire-aws/cmd/wetwire-aws@latest
+go install github.com/lex00/wetwire/go/wetwire-aws/cmd/wetwire-aws@latest
 ```
 
 ## CLI Commands

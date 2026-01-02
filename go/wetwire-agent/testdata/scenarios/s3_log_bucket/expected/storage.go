@@ -3,7 +3,7 @@
 package s3_log_bucket
 
 import (
-	"github.com/lex00/wetwire-aws/resources/s3"
+	"github.com/lex00/wetwire/go/wetwire-aws/resources/s3"
 )
 
 // LogBucketServerSideEncryptionByDefault configures AES-256 encryption.

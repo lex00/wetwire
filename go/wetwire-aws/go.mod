@@ -1,4 +1,4 @@
-module github.com/lex00/wetwire-aws
+module github.com/lex00/wetwire/go/wetwire-aws
 
 go 1.23
 

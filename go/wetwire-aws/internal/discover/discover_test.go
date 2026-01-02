@@ -16,7 +16,7 @@ func TestDiscover_SimpleResource(t *testing.T) {
 	// Write a simple Go file with resource declarations
 	code := `package infra
 
-import "github.com/lex00/wetwire-aws/s3"
+import "github.com/lex00/wetwire/go/wetwire-aws/s3"
 
 var MyBucket = s3.Bucket{
 	BucketName: "my-bucket",
@@ -48,9 +48,9 @@ func TestDiscover_WithDependencies(t *testing.T) {
 	code := `package infra
 
 import (
-	"github.com/lex00/wetwire-aws/iam"
-	"github.com/lex00/wetwire-aws/lambda"
-	"github.com/lex00/wetwire-aws/s3"
+	"github.com/lex00/wetwire/go/wetwire-aws/iam"
+	"github.com/lex00/wetwire/go/wetwire-aws/lambda"
+	"github.com/lex00/wetwire/go/wetwire-aws/s3"
 )
 
 var DataBucket = s3.Bucket{
@@ -93,7 +93,7 @@ func TestDiscover_UndefinedReference(t *testing.T) {
 
 	code := `package infra
 
-import "github.com/lex00/wetwire-aws/lambda"
+import "github.com/lex00/wetwire/go/wetwire-aws/lambda"
 
 var ProcessorFunction = lambda.Function{
 	Role: UndefinedRole.Arn,
@@ -117,7 +117,7 @@ func TestDiscover_MultipleFiles(t *testing.T) {
 
 	storageCode := `package infra
 
-import "github.com/lex00/wetwire-aws/s3"
+import "github.com/lex00/wetwire/go/wetwire-aws/s3"
 
 var DataBucket = s3.Bucket{
 	BucketName: "data",
@@ -125,7 +125,7 @@ var DataBucket = s3.Bucket{
 `
 	computeCode := `package infra
 
-import "github.com/lex00/wetwire-aws/lambda"
+import "github.com/lex00/wetwire/go/wetwire-aws/lambda"
 
 var Processor = lambda.Function{
 	FunctionName: "proc",

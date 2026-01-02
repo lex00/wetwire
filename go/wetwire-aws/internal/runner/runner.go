@@ -11,7 +11,7 @@ import (
 	"strings"
 	"text/template"
 
-	wetwire "github.com/lex00/wetwire-aws"
+	wetwire "github.com/lex00/wetwire/go/wetwire-aws"
 )
 
 // runnerTemplate is the Go program template that extracts resources at runtime.
@@ -147,7 +147,7 @@ func ExtractValues(pkgPath string, resources map[string]wetwire.DiscoveredResour
 	replaceDirectives.WriteString(fmt.Sprintf("replace %s => %s\n", modInfo.ModulePath, absPath))
 
 	// Add any replace directives from the target package's go.mod
-	// (e.g., for local development dependencies like github.com/lex00/wetwire-aws)
+	// (e.g., for local development dependencies like github.com/lex00/wetwire/go/wetwire-aws)
 	for _, repl := range modInfo.Replaces {
 		// Resolve relative paths to absolute
 		resolved := resolveReplacePath(repl, modInfo.GoModDir)
