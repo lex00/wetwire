@@ -60,6 +60,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Block-style code generation with typed property types
 - 254/254 AWS sample templates import successfully (100% success rate)
 
-[unreleased]: https://github.com/lex00/wetwire-aws/compare/wetwire-aws-v0.4.0...HEAD
+[unreleased]: https://github.com/lex00/wetwire/go/wetwire-aws/compare/wetwire-aws-v0.4.0...HEAD
 [0.4.0]: https://github.com/lex00/wetwire/releases/tag/wetwire-aws-v0.4.0
-[0.1.0]: https://github.com/lex00/wetwire-aws/releases/tag/v0.1.0
+[0.1.0]: https://github.com/lex00/wetwire/go/wetwire-aws/releases/tag/v0.1.0

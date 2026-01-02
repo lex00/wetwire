@@ -33,7 +33,7 @@ Resources:
 	assert.Contains(t, code, "package mystack")
 
 	// Check import
-	assert.Contains(t, code, `"github.com/lex00/wetwire-aws/resources/s3"`)
+	assert.Contains(t, code, `"github.com/lex00/wetwire/go/wetwire-aws/resources/s3"`)
 
 	// Check resource variable
 	assert.Contains(t, code, "var MyBucket = s3.Bucket{")
@@ -64,8 +64,8 @@ Resources:
 	code := files["network.go"]
 
 	// Check imports - uses dot import for intrinsics
-	assert.Contains(t, code, `"github.com/lex00/wetwire-aws/resources/ec2"`)
-	assert.Contains(t, code, `. "github.com/lex00/wetwire-aws/intrinsics"`)
+	assert.Contains(t, code, `"github.com/lex00/wetwire/go/wetwire-aws/resources/ec2"`)
+	assert.Contains(t, code, `. "github.com/lex00/wetwire/go/wetwire-aws/intrinsics"`)
 
 	// Check VPC
 	assert.Contains(t, code, "var MyVPC = ec2.VPC{")
@@ -93,7 +93,7 @@ Resources:
 	code := files["storage.go"]
 
 	// Check intrinsics import (dot import)
-	assert.Contains(t, code, `. "github.com/lex00/wetwire-aws/intrinsics"`)
+	assert.Contains(t, code, `. "github.com/lex00/wetwire/go/wetwire-aws/intrinsics"`)
 
 	// Check Sub usage (no intrinsics. prefix with dot import)
 	assert.Contains(t, code, `Sub{String: "${AWS::StackName}-bucket-${AWS::Region}"}`)

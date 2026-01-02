@@ -136,7 +136,7 @@ var resourceTemplate = template.Must(template.New("resource").Parse(`// Code gen
 package {{ .PackageName }}
 {{ if .HasAttributes }}
 import (
-	wetwire "github.com/lex00/wetwire-aws"
+	wetwire "github.com/lex00/wetwire/go/wetwire-aws"
 )
 {{ end }}
 {{ if .Documentation }}

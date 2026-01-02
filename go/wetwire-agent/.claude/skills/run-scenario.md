@@ -43,7 +43,7 @@ Create a wetwire-aws Go package that fulfills the prompt:
 package main
 
 import (
-    "github.com/lex00/wetwire-aws/resources/s3"
+    "github.com/lex00/wetwire/go/wetwire-aws/resources/s3"
     // other imports as needed
 )
 
@@ -63,7 +63,7 @@ var MyBucket = s3.Bucket{
 package main
 
 import (
-    "github.com/lex00/wetwire-aws/resources/s3"
+    "github.com/lex00/wetwire/go/wetwire-aws/resources/s3"
 )
 
 var MyEncryption = s3.BucketEncryption{

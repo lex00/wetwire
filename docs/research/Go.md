@@ -1,21 +1,21 @@
 # Wetwire Go Implementation
 
-**Status**: Implementation in progress (feature/go-implementation branch)
+**Status**: ✅ Implementation complete (v0.4.0)
 **Purpose**: Document Go ecosystem mappings, patterns, and architectural decisions for implementing wetwire in Go.
 **Scope**: Go-specific design decisions; see `ImplementationChecklist.md` for feature matrix.
 **Recommendation**: **Viable** - Direct type declaration, direct references.
 
 ---
 
-## IMPLEMENTATION STATUS (2024-12-31)
+## IMPLEMENTATION STATUS (2026-01-02) — ✅ COMPLETE
 
 ### Package Locations
 
 ```
 go/
 ├── wetwire-aws/           # AWS CloudFormation synthesis library + CLI
-│   ├── cmd/wetwire-aws/   # CLI: build, lint, init
-│   ├── internal/          # discover, serialize, template
+│   ├── cmd/wetwire-aws/   # CLI: build, lint, init, validate, list, import
+│   ├── internal/          # discover, serialize, template, importer, linter
 │   ├── intrinsics/        # Ref, GetAtt, Sub, etc. + pseudo-parameters
 │   ├── codegen/           # Generate Go types from CF spec
 │   ├── docs/              # QUICK_START.md, CLI.md
@@ -28,7 +28,7 @@ go/
     └── scripts/           # ci.sh
 ```
 
-### What's Working
+### All Features Complete
 
 | Feature | Status | Location |
 |---------|--------|----------|
@@ -39,28 +39,28 @@ go/
 | Topological sort | ✅ | `internal/template/template.go` |
 | JSON/YAML serialization | ✅ | `internal/serialize/` |
 | CF spec codegen | ✅ | `codegen/` |
+| CF template importer | ✅ | `internal/importer/` |
+| Linter (6 rules, --fix) | ✅ | `internal/linter/` |
 | Agent personas | ✅ | `internal/personas/` |
 | 5-dimension scoring | ✅ | `internal/scoring/` |
 | Session results | ✅ | `internal/results/` |
 | Orchestrator | ✅ | `internal/orchestrator/` |
 | Anthropic SDK integration | ✅ | `internal/agents/` |
 
-### What's Missing or Incomplete
+### CLI Commands — All Complete
 
-| Feature | Issue | Priority |
-|---------|-------|----------|
-| **`import` command** | Not implemented - blocks import_aws_samples.sh | **P0** |
-| **`build` value loading** | Uses empty placeholders (TODO in build.go:65-68) | **P0** |
-| **Full linter** | Only checks discovery errors, no rules/auto-fix | P1 |
-| `validate` command | Not implemented | P1 |
-| `list` command | Not implemented | P1 |
-
-### Critical Path
-
-1. **Implement `import` command** - Parse CF YAML/JSON → Generate Go code
-2. **Fix `build` value loading** - Load actual struct values from Go source
-3. **Run import_aws_samples.sh** - Test against real AWS templates
-4. **Debug and iterate** - Fix issues, add to ignore list as needed
+| Package | Command | Status |
+|---------|---------|--------|
+| wetwire-aws | `build` | ✅ AST discovery, value extraction, JSON/YAML output |
+| wetwire-aws | `lint` | ✅ 6 rules (WAW001-WAW006), --fix support |
+| wetwire-aws | `init` | ✅ Project scaffolding |
+| wetwire-aws | `validate` | ✅ Reference validation |
+| wetwire-aws | `list` | ✅ List discovered resources |
+| wetwire-aws | `import` | ✅ **254/254 AWS samples (100% success)** |
+| wetwire-agent | `design` | ✅ Interactive design session |
+| wetwire-agent | `test` | ✅ Automated persona testing |
+| wetwire-agent | `run-scenario` | ✅ Scenario runner |
+| wetwire-agent | `list` | ✅ List personas/domains |
 
 ### Future Considerations
 

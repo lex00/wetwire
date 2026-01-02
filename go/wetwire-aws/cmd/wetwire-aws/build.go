@@ -7,10 +7,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	wetwire "github.com/lex00/wetwire-aws"
-	"github.com/lex00/wetwire-aws/internal/discover"
-	"github.com/lex00/wetwire-aws/internal/runner"
-	"github.com/lex00/wetwire-aws/internal/template"
+	wetwire "github.com/lex00/wetwire/go/wetwire-aws"
+	"github.com/lex00/wetwire/go/wetwire-aws/internal/discover"
+	"github.com/lex00/wetwire/go/wetwire-aws/internal/runner"
+	"github.com/lex00/wetwire/go/wetwire-aws/internal/template"
 )
 
 func newBuildCmd() *cobra.Command {

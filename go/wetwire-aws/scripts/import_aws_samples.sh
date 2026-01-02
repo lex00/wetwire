@@ -349,7 +349,7 @@ for template in "${TEMPLATES[@]}"; do
 
         # Add replace directive for local development and tidy
         if [ -f "$pkg_output/go.mod" ]; then
-            sed -i '' 's|// replace github.com/lex00/wetwire-aws => ../path/to/wetwire-aws|replace github.com/lex00/wetwire-aws => ../../..|' "$pkg_output/go.mod"
+            sed -i '' 's|// replace github.com/lex00/wetwire/go/wetwire-aws => ../path/to/wetwire-aws|replace github.com/lex00/wetwire/go/wetwire-aws => ../../..|' "$pkg_output/go.mod"
             (cd "$pkg_output" && "$GO_BIN" mod tidy 2>/dev/null) || true
         fi
 

@@ -5,7 +5,7 @@ Get started with `wetwire-agent` for AI-assisted infrastructure design and testi
 ## Installation
 
 ```bash
-go install github.com/lex00/wetwire-agent/cmd/wetwire-agent@latest
+go install github.com/lex00/wetwire/go/wetwire-agent/cmd/wetwire-agent@latest
 ```
 
 ## Overview

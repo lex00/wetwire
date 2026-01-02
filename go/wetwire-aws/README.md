@@ -4,9 +4,13 @@ Generate CloudFormation templates from Go resource declarations using a declarat
 
 ## Status
 
-**Implementation: In Progress**
+**v0.4.0 - All Core Features Complete**
 
-See [Implementation Status](#implementation-status) for details.
+- All CLI commands implemented (build, validate, list, lint, init, import)
+- **184 AWS services** with typed enum constants
+- 254/254 AWS sample templates import successfully (100% success rate)
+
+See [CHANGELOG.md](CHANGELOG.md) for release details.
 
 ## Quick Start
 
@@ -14,10 +18,10 @@ See [Implementation Status](#implementation-status) for details.
 package infra
 
 import (
-    "github.com/lex00/wetwire-aws/resources/s3"
-    "github.com/lex00/wetwire-aws/resources/iam"
-    "github.com/lex00/wetwire-aws/resources/lambda"
-    . "github.com/lex00/wetwire-aws/intrinsics"
+    "github.com/lex00/wetwire/go/wetwire-aws/resources/s3"
+    "github.com/lex00/wetwire/go/wetwire-aws/resources/iam"
+    "github.com/lex00/wetwire/go/wetwire-aws/resources/lambda"
+    . "github.com/lex00/wetwire/go/wetwire-aws/intrinsics"
 )
 
 // Direct type declaration - no wrappers, no registration
@@ -52,7 +56,7 @@ wetwire-aws build ./infra > template.json
 ## Installation
 
 ```bash
-go install github.com/lex00/wetwire-aws/cmd/wetwire-aws@latest
+go install github.com/lex00/wetwire/go/wetwire-aws/cmd/wetwire-aws@latest
 ```
 
 ## CLI Commands

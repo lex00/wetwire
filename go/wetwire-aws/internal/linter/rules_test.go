@@ -50,7 +50,7 @@ var ok = map[string]any{"NotAnIntrinsic": "value"}
 func TestDuplicateResource(t *testing.T) {
 	src := `package test
 
-import "github.com/lex00/wetwire-aws/resources/s3"
+import "github.com/lex00/wetwire/go/wetwire-aws/resources/s3"
 
 var MyBucket = s3.Bucket{BucketName: "first"}
 var MyBucket = s3.Bucket{BucketName: "second"}
@@ -72,7 +72,7 @@ func TestFileTooLarge(t *testing.T) {
 	// Generate a file with many resources
 	src := `package test
 
-import "github.com/lex00/wetwire-aws/resources/s3"
+import "github.com/lex00/wetwire/go/wetwire-aws/resources/s3"
 
 var Bucket1 = s3.Bucket{}
 var Bucket2 = s3.Bucket{}
@@ -164,7 +164,7 @@ func TestInlineStructLiteral(t *testing.T) {
 	// Test inline struct literals in typed slices
 	src := `package test
 
-import "github.com/lex00/wetwire-aws/resources/ec2"
+import "github.com/lex00/wetwire/go/wetwire-aws/resources/ec2"
 
 var MySecurityGroup = ec2.SecurityGroup{
 	GroupDescription: "My SG",
@@ -193,7 +193,7 @@ func TestInlineStructLiteral_ValidBlockStyle(t *testing.T) {
 	// Test that block-style (named var references) doesn't trigger
 	src := `package test
 
-import "github.com/lex00/wetwire-aws/resources/ec2"
+import "github.com/lex00/wetwire/go/wetwire-aws/resources/ec2"
 
 var Port443Ingress = ec2.SecurityGroup_Ingress{
 	CidrIp:   "0.0.0.0/0",
@@ -225,7 +225,7 @@ func TestInvalidEnumValue(t *testing.T) {
 	// Test invalid enum values
 	src := `package test
 
-import "github.com/lex00/wetwire-aws/resources/s3"
+import "github.com/lex00/wetwire/go/wetwire-aws/resources/s3"
 
 var MyBucket = s3.Bucket{
 	StorageClass: "INVALID_CLASS",
@@ -251,7 +251,7 @@ func TestInvalidEnumValue_ValidValue(t *testing.T) {
 	// Test valid enum values don't trigger
 	src := `package test
 
-import "github.com/lex00/wetwire-aws/resources/s3"
+import "github.com/lex00/wetwire/go/wetwire-aws/resources/s3"
 
 var MyBucket = s3.Bucket{
 	StorageClass: "STANDARD",
@@ -271,7 +271,7 @@ func TestInvalidEnumValue_LambdaRuntime(t *testing.T) {
 	// Test Lambda runtime validation
 	src := `package test
 
-import "github.com/lex00/wetwire-aws/resources/lambda_"
+import "github.com/lex00/wetwire/go/wetwire-aws/resources/lambda_"
 
 var MyFunction = lambda_.Function{
 	Runtime: "python2.7",
@@ -295,7 +295,7 @@ func TestInvalidEnumValue_SkipsNonStringValues(t *testing.T) {
 	// Test that non-string values (intrinsics, variables) are skipped
 	src := `package test
 
-import "github.com/lex00/wetwire-aws/resources/lambda_"
+import "github.com/lex00/wetwire/go/wetwire-aws/resources/lambda_"
 
 var runtimeVar = "python3.12"
 
@@ -318,7 +318,7 @@ func TestInvalidEnumValue_DynamoDB(t *testing.T) {
 	// Test DynamoDB BillingMode validation
 	src := `package test
 
-import "github.com/lex00/wetwire-aws/resources/dynamodb"
+import "github.com/lex00/wetwire/go/wetwire-aws/resources/dynamodb"
 
 var MyTable = dynamodb.Table{
 	BillingMode: "INVALID_MODE",

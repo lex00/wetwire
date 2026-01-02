@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	wetwire "github.com/lex00/wetwire-aws"
+	wetwire "github.com/lex00/wetwire/go/wetwire-aws"
 )
 
 // knownResourcePackages maps package names to CloudFormation service prefixes.

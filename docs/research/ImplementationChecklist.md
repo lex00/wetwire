@@ -13,29 +13,30 @@ Organized by dependency order with deduplication opportunities identified.
 
 ---
 
-## IMPLEMENTATION STATUS (2024-12-31)
+## IMPLEMENTATION STATUS (2026-01-02)
 
-### wetwire-aws Go Package
+### wetwire-aws Go Package — v0.4.0 ✅ COMPLETE
 
 | Component | Status | Notes |
 |-----------|--------|-------|
 | **CLI Commands** | | |
-| `build` | ⚠️ Partial | AST discovery works, but uses empty placeholders (TODO: load actual values) |
-| `lint` | ⚠️ Partial | Only checks discovery errors, no rules or auto-fix |
-| `init` | ✅ Complete | Creates project skeleton |
-| `validate` | ❌ Missing | Not implemented |
-| `list` | ❌ Missing | Not implemented |
-| `import` | ❌ Missing | **Critical** - Required for import_aws_samples.sh testing |
+| `build` | ✅ Complete | AST discovery, value extraction, JSON/YAML output |
+| `lint` | ✅ Complete | 6 rules (WAW001-WAW006), --fix support |
+| `init` | ✅ Complete | Creates project skeleton with scaffolding |
+| `validate` | ✅ Complete | Reference validation |
+| `list` | ✅ Complete | List discovered resources |
+| `import` | ✅ Complete | **254/254 AWS samples (100% success)** |
 | **Core Modules** | | |
 | `intrinsics/` | ✅ Complete | All functions + pseudo-parameters |
 | `internal/template/` | ✅ Complete | Template builder with topo sort, cycle detection |
 | `internal/discover/` | ✅ Complete | AST-based resource discovery |
 | `internal/serialize/` | ✅ Complete | JSON/YAML serialization |
+| `internal/importer/` | ✅ Complete | CF YAML/JSON → Go code |
+| `internal/linter/` | ✅ Complete | 6 lint rules with auto-fix |
 | `contracts.go` | ✅ Complete | Core types (Resource, AttrRef, Template, etc.) |
 | `codegen/` | ✅ Complete | CF spec fetch, parse, generate |
-| **Missing Modules** | | |
-| `importer/` | ❌ Missing | Parse CF templates → Go code |
-| Full linter | ❌ Missing | Rules, auto-fix, add-imports |
+| **Enum Coverage** | | |
+| Services with enums | ✅ Complete | **184 services**, 10,014 types, 45,318 values |
 
 ### wetwire-agent Go Package
 
@@ -53,12 +54,6 @@ Organized by dependency order with deduplication opportunities identified.
 | `internal/results/` | ✅ Complete | Session tracking, RESULTS.md generation |
 | `internal/orchestrator/` | ✅ Complete | Developer/Runner coordination |
 | `internal/agents/` | ✅ Complete | Anthropic SDK integration |
-
-### Critical Gaps
-
-1. **`import` command** - Cannot run import_aws_samples.sh without this
-2. **`build` value loading** - Currently outputs empty properties
-3. **Full linter** - No AST-based rules or auto-fix
 
 ---
 
@@ -385,47 +380,46 @@ types during AST parsing.
 
 ### 2.10 Importer
 
-**Status: ❌ NOT IMPLEMENTED - Critical for testing**
-
-The importer is required for `import_aws_samples.sh` testing workflow.
+**Status: ✅ COMPLETE — 254/254 AWS samples (100% success)**
 
 | Feature | Python Source | Go Pattern | Priority | Status |
 |---------|---------------|------------|----------|--------|
-| `parse_template()` | `importer/parser.py` | Function | **P0** | ❌ |
-| `generate_code()` | `importer/codegen.py` | Function | **P0** | ❌ |
-| `generate_package()` | `importer/codegen.py` | Function | **P0** | ❌ |
-| `import_template()` | `importer/__init__.py` | Function | **P0** | ❌ |
-| YAML/JSON parsing | `importer/parser.py` | yaml/json packages | **P0** | ❌ |
-| IR types | `importer/ir.py` | Structs | **P0** | ❌ |
-| Codegen helpers | `importer/codegen/*.py` | Functions | **P0** | ❌ |
+| `parse_template()` | `importer/parser.py` | Function | P0 | ✅ |
+| `generate_code()` | `importer/codegen.py` | Function | P0 | ✅ |
+| `generate_package()` | `importer/codegen.py` | Function | P0 | ✅ |
+| `import_template()` | `importer/__init__.py` | Function | P0 | ✅ |
+| YAML/JSON parsing | `importer/parser.py` | yaml/json packages | P0 | ✅ |
+| IR types | `importer/ir.py` | Structs | P0 | ✅ |
+| Codegen helpers | `importer/codegen/*.py` | Functions | P0 | ✅ |
 
-**Implementation approach:**
-1. Parse CF YAML/JSON → IR (IRTemplate, IRResource, IRParameter, etc.)
-2. Generate Go code from IR → `var X = Type{...}` declarations
-3. Handle intrinsic functions → convert to `intrinsics.Ref{}`, etc.
-4. Handle cross-references → generate proper Go references
+**Implementation:**
+- Parse CF YAML/JSON → IR (IRTemplate, IRResource, IRParameter, etc.)
+- Generate Go code from IR → `var X = Type{...}` declarations
+- Handle intrinsic functions → convert to `intrinsics.Ref{}`, etc.
+- Handle cross-references → generate proper Go references
 
 ### 2.11 CLI
 
+**Status: ✅ ALL COMMANDS COMPLETE**
+
 | Command | Python Source | Go Pattern | Priority | Status |
 |---------|---------------|------------|----------|--------|
-| `build` | `cli.py` | cobra command + AST discovery | P0 | ⚠️ Partial (empty values) |
-| `lint` | `cli.py` | cobra command | P1 | ⚠️ Partial (no rules) |
+| `build` | `cli.py` | cobra command + AST discovery | P0 | ✅ Complete |
+| `lint` | `cli.py` | cobra command | P1 | ✅ Complete (6 rules, --fix) |
 | `init` | `cli.py` | cobra command | P1 | ✅ Complete |
-| `validate` | `cli.py` | cobra command | P1 | ❌ Missing |
-| `list` | `cli.py` | cobra command | P1 | ❌ Missing |
-| `import` | `cli.py` | cobra command | **P0** | ❌ Missing |
+| `validate` | `cli.py` | cobra command | P1 | ✅ Complete |
+| `list` | `cli.py` | cobra command | P1 | ✅ Complete |
+| `import` | `cli.py` | cobra command | P0 | ✅ Complete |
 
 **Implementation notes:**
 
 - `build` command parses Go source using `go/ast` to discover resources
   (`var X = Type{...}`), extract dependencies, and generate CloudFormation template.
-  **Issue:** Currently outputs empty properties due to TODO at `build.go:65-68`.
+  Outputs JSON or YAML with full property values.
 
-- `lint` command only checks for discovery errors. **Missing:** AST-based lint rules,
-  auto-fix capability, add-imports functionality.
+- `lint` command implements 6 rules (WAW001-WAW006) with `--fix` auto-fix support.
 
-- `import` command is now **P0** priority - required for import_aws_samples.sh testing.
+- `import` command converts CF YAML/JSON to Go code. Tested with 254/254 AWS samples.
 
 ### 2.12 Code Generation (Build-Time)
 

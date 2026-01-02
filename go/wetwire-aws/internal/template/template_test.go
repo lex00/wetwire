@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	wetwire "github.com/lex00/wetwire-aws"
+	wetwire "github.com/lex00/wetwire/go/wetwire-aws"
 )
 
 func TestBuilder_Build_SimpleResource(t *testing.T) {
