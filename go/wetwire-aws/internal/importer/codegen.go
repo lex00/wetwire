@@ -7,6 +7,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/lex00/cloudformation-schema-go/enums"
+
 	"github.com/lex00/wetwire-aws/resources"
 )
 
@@ -145,6 +147,102 @@ var pseudoParameterConstants = map[string]string{
 	"AWS::Partition":        "AWS_PARTITION",
 	"AWS::URLSuffix":        "AWS_URL_SUFFIX",
 	"AWS::NotificationARNs": "AWS_NOTIFICATION_ARNS",
+}
+
+// cfServiceToEnumService maps CloudFormation service names (as used in currentResource)
+// to botocore service names used in the enums package.
+var cfServiceToEnumService = map[string]string{
+	"lambda":                 "lambda",
+	"ec2":                    "ec2",
+	"ecs":                    "ecs",
+	"s3":                     "s3",
+	"dynamodb":               "dynamodb",
+	"apigateway":             "apigateway",
+	"elasticloadbalancingv2": "elbv2",
+	"logs":                   "logs",
+	"acm":                    "acm",
+	"events":                 "events",
+}
+
+// tryEnumConstant attempts to convert a string value to an enum constant reference.
+// Returns empty string if no enum mapping exists or the value is not a valid enum value.
+func tryEnumConstant(ctx *codegenContext, value string) string {
+	if ctx.currentResource == "" || ctx.currentProperty == "" {
+		return ""
+	}
+
+	// Map CF service name to enums service name
+	enumService := cfServiceToEnumService[strings.ToLower(ctx.currentResource)]
+	if enumService == "" {
+		return ""
+	}
+
+	// Look up the enum for this property
+	enumName := enums.GetEnumForProperty(enumService, ctx.currentProperty)
+	if enumName == "" {
+		return ""
+	}
+
+	// Check if the value is valid for this enum
+	if !enums.IsValidValue(enumService, enumName, value) {
+		return ""
+	}
+
+	// Generate the constant name: enums.{Service}{EnumName}{ValueName}
+	constName := toEnumConstantName(enumService, enumName, value)
+	ctx.imports["github.com/lex00/cloudformation-schema-go/enums"] = true
+	return "enums." + constName
+}
+
+// toEnumConstantName generates the Go constant name for an enum value.
+// Example: ("lambda", "Runtime", "python3.12") -> "LambdaRuntimePython312"
+func toEnumConstantName(service, enumName, value string) string {
+	// Capitalize service name
+	serviceCap := capitalizeService(service)
+
+	// Normalize value: replace all non-alphanumeric with spaces for word splitting
+	var normalized strings.Builder
+	for _, r := range value {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			normalized.WriteRune(r)
+		} else {
+			normalized.WriteRune(' ')
+		}
+	}
+
+	// Capitalize each word
+	var valuePart strings.Builder
+	for _, word := range strings.Fields(normalized.String()) {
+		if word != "" {
+			valuePart.WriteString(strings.ToUpper(string(word[0])))
+			valuePart.WriteString(strings.ToLower(word[1:]))
+		}
+	}
+
+	return serviceCap + enumName + valuePart.String()
+}
+
+// capitalizeService capitalizes service name for Go constant prefix.
+func capitalizeService(service string) string {
+	switch service {
+	case "ec2":
+		return "Ec2"
+	case "ecs":
+		return "Ecs"
+	case "rds":
+		return "Rds"
+	case "s3":
+		return "S3"
+	case "acm":
+		return "Acm"
+	case "elbv2":
+		return "Elbv2"
+	default:
+		if service == "" {
+			return ""
+		}
+		return strings.ToUpper(string(service[0])) + service[1:]
+	}
 }
 
 // policyDocFields lists fields that contain IAM policy documents.
@@ -794,9 +892,14 @@ func valueToBlockStyleProperty(ctx *codegenContext, value any, propName string, 
 		return fmt.Sprintf("%g", v)
 
 	case string:
+		// Check for pseudo-parameters that should be constants
 		if pseudoConst, ok := pseudoParameterConstants[v]; ok {
 			ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
 			return pseudoConst
+		}
+		// Check for enum constants
+		if enumConst := tryEnumConstant(ctx, v); enumConst != "" {
+			return enumConst
 		}
 		return fmt.Sprintf("%q", v)
 
@@ -975,9 +1078,14 @@ func valueToGoForBlock(ctx *codegenContext, value any, propName string, parentVa
 		return fmt.Sprintf("%g", v)
 
 	case string:
+		// Check for pseudo-parameters that should be constants
 		if pseudoConst, ok := pseudoParameterConstants[v]; ok {
 			ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
 			return pseudoConst
+		}
+		// Check for enum constants
+		if enumConst := tryEnumConstant(ctx, v); enumConst != "" {
+			return enumConst
 		}
 		return fmt.Sprintf("%q", v)
 
@@ -1292,6 +1400,10 @@ func valueToGoWithProperty(ctx *codegenContext, value any, indent int, propName 
 		if pseudoConst, ok := pseudoParameterConstants[v]; ok {
 			ctx.imports["github.com/lex00/wetwire-aws/intrinsics"] = true
 			return pseudoConst
+		}
+		// Check for enum constants
+		if enumConst := tryEnumConstant(ctx, v); enumConst != "" {
+			return enumConst
 		}
 		return fmt.Sprintf("%q", v)
 
