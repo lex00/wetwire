@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.19.0
-	github.com/lex00/cfn-lint-go v0.7.1
+	github.com/lex00/cfn-lint-go v0.7.2
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.9.0
 )
