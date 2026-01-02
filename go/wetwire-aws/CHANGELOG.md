@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-01-02
+
+### Fixed
+
+- Module path alignment: changed from `github.com/lex00/wetwire-aws` to
+  `github.com/lex00/wetwire/go/wetwire-aws` to match actual repository location
+- This enables proper pkg.go.dev indexing and `go install` from the correct path
+
+### Changed
+
+- Updated all import statements (1,268 occurrences) to use new module path
+- Updated documentation across wetwire-aws, wetwire-agent, and research docs
+- Marked all features as complete in ImplementationChecklist.md
+
 ## [0.4.0] - 2026-01-02
 
 ### Added
@@ -60,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Block-style code generation with typed property types
 - 254/254 AWS sample templates import successfully (100% success rate)
 
-[unreleased]: https://github.com/lex00/wetwire/go/wetwire-aws/compare/wetwire-aws-v0.4.0...HEAD
+[unreleased]: https://github.com/lex00/wetwire/compare/wetwire-aws-v0.4.1...HEAD
+[0.4.1]: https://github.com/lex00/wetwire/compare/wetwire-aws-v0.4.0...wetwire-aws-v0.4.1
 [0.4.0]: https://github.com/lex00/wetwire/releases/tag/wetwire-aws-v0.4.0
 [0.1.0]: https://github.com/lex00/wetwire/go/wetwire-aws/releases/tag/v0.1.0
