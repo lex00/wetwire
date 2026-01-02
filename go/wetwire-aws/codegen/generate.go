@@ -836,6 +836,7 @@ func generateEnumsFile(svc *Service, svcDir string, dryRun bool, stats *Generati
 //   - ("Runtime", "python3.12") -> "RuntimePython312"
 //   - ("StorageClass", "STANDARD_IA") -> "StorageClassStandardIa"
 //   - ("BucketCannedACL", "public-read") -> "BucketCannedACLPublicRead"
+//   - ("ServerSideEncryption", "aws:kms") -> "ServerSideEncryptionAwsKms"
 func enumConstName(typeName, value string) string {
 	// Split value by common separators and capitalize each part
 	var result strings.Builder
@@ -845,6 +846,7 @@ func enumConstName(typeName, value string) string {
 	normalized := strings.ReplaceAll(value, "-", " ")
 	normalized = strings.ReplaceAll(normalized, "_", " ")
 	normalized = strings.ReplaceAll(normalized, ".", " ")
+	normalized = strings.ReplaceAll(normalized, ":", " ")
 
 	for _, part := range strings.Fields(normalized) {
 		// Capitalize first letter, lowercase rest
