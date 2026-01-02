@@ -30,11 +30,11 @@ from typing import TYPE_CHECKING, Any
 from wetwire_aws.importer.ir import IRIntrinsic
 
 from .context import AnnotatedValue
+from .enum_lookup import try_enum_constant
 from .helpers import (
     extract_class_from_type_hint,
     resolve_property_type,
 )
-from .enum_lookup import try_enum_constant
 from .values import (
     escape_string,
     intrinsic_to_python,

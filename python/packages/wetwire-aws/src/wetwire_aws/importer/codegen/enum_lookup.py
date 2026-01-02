@@ -77,8 +77,12 @@ CF_TO_BOTOCORE_SERVICE = {
 
 
 @lru_cache(maxsize=1)
-def _load_enums() -> dict:
-    """Load the enums.json file."""
+def _load_enums() -> dict[str, dict[str, dict[str, dict[str, list[dict[str, str]]]]]]:
+    """Load the enums.json file.
+
+    Returns the enums data structure with schema:
+    {services: {service: {enumName: {name: str, values: [{name, value}]}}}}
+    """
     # Find specs directory relative to this file
     # src/wetwire_aws/importer/codegen/enum_lookup.py -> specs/enums.json
     this_file = Path(__file__)
@@ -88,7 +92,10 @@ def _load_enums() -> dict:
     if not enums_path.exists():
         return {"services": {}}
 
-    return json.loads(enums_path.read_text())
+    result: dict[str, dict[str, dict[str, dict[str, list[dict[str, str]]]]]] = (
+        json.loads(enums_path.read_text())
+    )
+    return result
 
 
 def _get_enum_values(botocore_service: str, enum_name: str) -> dict[str, str] | None:
