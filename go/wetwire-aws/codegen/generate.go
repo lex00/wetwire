@@ -837,6 +837,8 @@ func generateEnumsFile(svc *Service, svcDir string, dryRun bool, stats *Generati
 //   - ("StorageClass", "STANDARD_IA") -> "StorageClassStandardIa"
 //   - ("BucketCannedACL", "public-read") -> "BucketCannedACLPublicRead"
 //   - ("ServerSideEncryption", "aws:kms") -> "ServerSideEncryptionAwsKms"
+//   - ("Event", "s3:ObjectCreated:*") -> "EventS3ObjectcreatedAll"
+//   - ("StandardUnit", "Bytes/Second") -> "StandardUnitBytesPerSecond"
 func enumConstName(typeName, value string) string {
 	// Split value by common separators and capitalize each part
 	var result strings.Builder
@@ -847,6 +849,11 @@ func enumConstName(typeName, value string) string {
 	normalized = strings.ReplaceAll(normalized, "_", " ")
 	normalized = strings.ReplaceAll(normalized, ".", " ")
 	normalized = strings.ReplaceAll(normalized, ":", " ")
+	normalized = strings.ReplaceAll(normalized, "(", " ")
+	normalized = strings.ReplaceAll(normalized, ")", " ")
+	// Replace special characters with meaningful words
+	normalized = strings.ReplaceAll(normalized, "*", "All")
+	normalized = strings.ReplaceAll(normalized, "/", "Per")
 
 	for _, part := range strings.Fields(normalized) {
 		// Capitalize first letter, lowercase rest
