@@ -16,6 +16,7 @@
 //	WAW009: Use typed structs instead of map[string]any in resource fields
 //	WAW010: Flatten inline typed struct literals to named var declarations
 //	WAW011: Validate enum property values against allowed values
+//	WAW012: Use typed enum constants instead of raw strings
 package linter
 
 import (
@@ -1176,6 +1177,202 @@ func getAllowedEnumValues(service, enumName string) []string {
 	return nil
 }
 
+// PreferEnumConstant detects raw string literals used for enum properties
+// and suggests using typed enum constants instead.
+//
+// Example:
+//
+//	// Bad - raw string literal
+//	Runtime: "python3.12",
+//	StorageClass: "STANDARD",
+//
+//	// Good - typed enum constants
+//	Runtime: enums.LambdaRuntimePython312,
+//	StorageClass: enums.S3StorageClassStandard,
+type PreferEnumConstant struct{}
+
+func (r PreferEnumConstant) ID() string { return "WAW012" }
+func (r PreferEnumConstant) Description() string {
+	return "Use typed enum constants instead of raw strings"
+}
+
+// enumConstantMap maps (service, enumName, value) to the constant name.
+// This is used to suggest the appropriate constant when a raw string is detected.
+var enumConstantMap = map[string]map[string]map[string]string{
+	"lambda": {
+		"Runtime": {
+			"python3.9":       "LambdaRuntimePython39",
+			"python3.10":      "LambdaRuntimePython310",
+			"python3.11":      "LambdaRuntimePython311",
+			"python3.12":      "LambdaRuntimePython312",
+			"python3.13":      "LambdaRuntimePython313",
+			"nodejs18.x":      "LambdaRuntimeNodejs18X",
+			"nodejs20.x":      "LambdaRuntimeNodejs20X",
+			"nodejs22.x":      "LambdaRuntimeNodejs22X",
+			"java11":          "LambdaRuntimeJava11",
+			"java17":          "LambdaRuntimeJava17",
+			"java21":          "LambdaRuntimeJava21",
+			"dotnet6":         "LambdaRuntimeDotnet6",
+			"dotnet8":         "LambdaRuntimeDotnet8",
+			"ruby3.2":         "LambdaRuntimeRuby32",
+			"ruby3.3":         "LambdaRuntimeRuby33",
+			"provided.al2":    "LambdaRuntimeProvidedAl2",
+			"provided.al2023": "LambdaRuntimeProvidedAl2023",
+		},
+		"PackageType": {
+			"Zip":   "LambdaPackageTypeZip",
+			"Image": "LambdaPackageTypeImage",
+		},
+		"Architecture": {
+			"x86_64": "LambdaArchitectureX8664",
+			"arm64":  "LambdaArchitectureArm64",
+		},
+	},
+	"s3": {
+		"StorageClass": {
+			"STANDARD":            "S3StorageClassStandard",
+			"REDUCED_REDUNDANCY":  "S3StorageClassReducedRedundancy",
+			"STANDARD_IA":         "S3StorageClassStandardIa",
+			"ONEZONE_IA":          "S3StorageClassOnezoneIa",
+			"INTELLIGENT_TIERING": "S3StorageClassIntelligentTiering",
+			"GLACIER":             "S3StorageClassGlacier",
+			"DEEP_ARCHIVE":        "S3StorageClassDeepArchive",
+			"GLACIER_IR":          "S3StorageClassGlacierIr",
+		},
+		"ServerSideEncryption": {
+			"AES256":       "S3ServerSideEncryptionAes256",
+			"aws:kms":      "S3ServerSideEncryptionAwsKms",
+			"aws:kms:dsse": "S3ServerSideEncryptionAwsKmsDsse",
+		},
+	},
+	"ec2": {
+		"VolumeType": {
+			"gp2":      "Ec2VolumeTypeGp2",
+			"gp3":      "Ec2VolumeTypeGp3",
+			"io1":      "Ec2VolumeTypeIo1",
+			"io2":      "Ec2VolumeTypeIo2",
+			"st1":      "Ec2VolumeTypeSt1",
+			"sc1":      "Ec2VolumeTypeSc1",
+			"standard": "Ec2VolumeTypeStandard",
+		},
+	},
+	"ecs": {
+		"LaunchType": {
+			"EC2":      "EcsLaunchTypeEc2",
+			"FARGATE":  "EcsLaunchTypeFargate",
+			"EXTERNAL": "EcsLaunchTypeExternal",
+		},
+		"NetworkMode": {
+			"bridge": "EcsNetworkModeBridge",
+			"host":   "EcsNetworkModeHost",
+			"awsvpc": "EcsNetworkModeAwsvpc",
+			"none":   "EcsNetworkModeNone",
+		},
+		"SchedulingStrategy": {
+			"REPLICA": "EcsSchedulingStrategyReplica",
+			"DAEMON":  "EcsSchedulingStrategyDaemon",
+		},
+	},
+	"dynamodb": {
+		"BillingMode": {
+			"PROVISIONED":     "DynamodbBillingModeProvisioned",
+			"PAY_PER_REQUEST": "DynamodbBillingModePayPerRequest",
+		},
+		"StreamViewType": {
+			"KEYS_ONLY":          "DynamodbStreamViewTypeKeysOnly",
+			"NEW_IMAGE":          "DynamodbStreamViewTypeNewImage",
+			"OLD_IMAGE":          "DynamodbStreamViewTypeOldImage",
+			"NEW_AND_OLD_IMAGES": "DynamodbStreamViewTypeNewAndOldImages",
+		},
+		"TableClass": {
+			"STANDARD":                   "DynamodbTableClassStandard",
+			"STANDARD_INFREQUENT_ACCESS": "DynamodbTableClassStandardInfrequentAccess",
+		},
+	},
+}
+
+// enumFieldToService maps field names to their service for constant lookup.
+var enumFieldToService = map[string]string{
+	"Runtime":            "lambda",
+	"PackageType":        "lambda",
+	"Architectures":      "lambda",
+	"StorageClass":       "s3",
+	"SSEAlgorithm":       "s3",
+	"VolumeType":         "ec2",
+	"LaunchType":         "ecs",
+	"NetworkMode":        "ecs",
+	"SchedulingStrategy": "ecs",
+	"BillingMode":        "dynamodb",
+	"StreamViewType":     "dynamodb",
+	"TableClass":         "dynamodb",
+}
+
+// enumFieldToEnumName maps field names to enum names (for cases where they differ).
+var enumFieldToEnumName = map[string]string{
+	"SSEAlgorithm":  "ServerSideEncryption",
+	"Architectures": "Architecture",
+}
+
+func (r PreferEnumConstant) Check(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		kv, ok := n.(*ast.KeyValueExpr)
+		if !ok {
+			return true
+		}
+
+		// Get field name
+		fieldIdent, ok := kv.Key.(*ast.Ident)
+		if !ok {
+			return true
+		}
+
+		// Check if this is a known enum field
+		service, ok := enumFieldToService[fieldIdent.Name]
+		if !ok {
+			return true
+		}
+
+		// Determine enum name (may differ from field name)
+		enumName := fieldIdent.Name
+		if mapped, ok := enumFieldToEnumName[fieldIdent.Name]; ok {
+			enumName = mapped
+		}
+
+		// Check if value is a string literal
+		lit, ok := kv.Value.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			// Skip non-string values (could be constants, selectors, etc.)
+			return true
+		}
+
+		value := strings.Trim(lit.Value, `"`)
+
+		// Look up the constant name
+		if serviceEnums, ok := enumConstantMap[service]; ok {
+			if enumValues, ok := serviceEnums[enumName]; ok {
+				if constName, ok := enumValues[value]; ok {
+					pos := fset.Position(lit.Pos())
+					issues = append(issues, Issue{
+						RuleID:     r.ID(),
+						Message:    fmt.Sprintf("Use enums.%s instead of %q", constName, value),
+						Suggestion: "enums." + constName,
+						File:       pos.Filename,
+						Line:       pos.Line,
+						Column:     pos.Column,
+						Severity:   "warning",
+					})
+				}
+			}
+		}
+
+		return true
+	})
+
+	return issues
+}
+
 // AllRules returns all available lint rules.
 func AllRules() []Rule {
 	return []Rule{
@@ -1190,5 +1387,6 @@ func AllRules() []Rule {
 		UnflattenedMap{},
 		InlineTypedStruct{},
 		InvalidEnumValue{},
+		PreferEnumConstant{},
 	}
 }
