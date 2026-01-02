@@ -3,7 +3,7 @@ module github.com/lex00/wetwire-aws
 go 1.23
 
 require (
-	github.com/lex00/cloudformation-schema-go v0.5.0
+	github.com/lex00/cloudformation-schema-go v0.6.0
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.9.0
 	gopkg.in/yaml.v3 v3.0.1
