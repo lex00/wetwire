@@ -1,25 +1,20 @@
 // Package validation provides functions to run wetwire-aws and cfn-lint validation.
 //
-// This package shells out to external CLIs to validate infrastructure code:
-//   - wetwire-aws lint: Check code style and patterns
-//   - wetwire-aws build: Generate CloudFormation templates
-//   - cfn-lint: Validate CloudFormation templates (supports both Python cfn-lint and cfn-lint-go)
-//
-// For cfn-lint, the package is compatible with:
-//   - Python cfn-lint: https://github.com/aws-cloudformation/cfn-lint
-//   - cfn-lint-go: https://github.com/lex00/cfn-lint-go (v0.7.0+)
-//
-// Both tools use the same JSON output format and can be used interchangeably.
+// This package validates infrastructure code:
+//   - wetwire-aws lint: Check code style and patterns (shells out to CLI)
+//   - wetwire-aws build: Generate CloudFormation templates (shells out to CLI)
+//   - cfn-lint-go: Validate CloudFormation templates (library dependency)
 package validation
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/lex00/cfn-lint-go/pkg/lint"
 )
 
 // LintResult contains the result of running wetwire-aws lint.
@@ -173,9 +168,8 @@ func RunBuildAndSave(packageDir, outputDir string) (*BuildResult, error) {
 	return result, nil
 }
 
-// RunCfnLint runs cfn-lint on the given template file and parses the JSON output.
-// This function is compatible with both Python cfn-lint and cfn-lint-go, as both
-// use the same JSON output format when invoked with "-f json".
+// RunCfnLint runs cfn-lint-go on the given template file.
+// This uses cfn-lint-go as a library dependency for guaranteed version control.
 func RunCfnLint(templatePath string) (*CfnLintResult, error) {
 	// Check if file exists
 	if _, err := os.Stat(templatePath); err != nil {
@@ -185,41 +179,33 @@ func RunCfnLint(templatePath string) (*CfnLintResult, error) {
 		}, nil
 	}
 
-	// Run cfn-lint with JSON output
-	cmd := exec.Command("cfn-lint", templatePath, "-f", "json")
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	// cfn-lint returns non-zero if there are issues, so we don't treat exit error as fatal
-	_ = cmd.Run()
+	// Create linter and run
+	linter := lint.New(lint.Options{})
+	matches, err := linter.LintFile(templatePath)
+	if err != nil {
+		return &CfnLintResult{
+			Passed: false,
+			Errors: []string{fmt.Sprintf("Linter error: %v", err)},
+		}, nil
+	}
 
 	result := &CfnLintResult{
 		Errors:        []string{},
 		Warnings:      []string{},
 		Informational: []string{},
-		RawOutput:     stdout.String(),
 	}
 
-	// Parse JSON output
-	output := strings.TrimSpace(stdout.String())
-	if output == "" || output == "[]" {
+	// No issues found
+	if len(matches) == 0 {
 		result.Passed = true
 		return result, nil
 	}
 
-	var issues []CfnLintIssue
-	if err := json.Unmarshal([]byte(output), &issues); err != nil {
-		// Fall back to raw parsing if JSON fails
-		return parseCfnLintRaw(stdout.String(), stderr.String())
-	}
-
 	// Categorize issues by level
-	for _, issue := range issues {
-		formatted := formatCfnLintIssue(issue)
+	for _, match := range matches {
+		formatted := formatMatch(match)
 
-		switch issue.Level {
+		switch match.Level {
 		case "Error":
 			result.Errors = append(result.Errors, formatted)
 		case "Warning":
@@ -235,53 +221,22 @@ func RunCfnLint(templatePath string) (*CfnLintResult, error) {
 	return result, nil
 }
 
-// formatCfnLintIssue formats a cfn-lint issue for display.
-func formatCfnLintIssue(issue CfnLintIssue) string {
+// formatMatch formats a cfn-lint-go match for display.
+func formatMatch(match lint.Match) string {
 	// Format path if available
 	pathStr := ""
-	if len(issue.Location.Path) > 0 {
-		parts := make([]string, len(issue.Location.Path))
-		for i, p := range issue.Location.Path {
+	if len(match.Location.Path) > 0 {
+		parts := make([]string, len(match.Location.Path))
+		for i, p := range match.Location.Path {
 			parts[i] = fmt.Sprintf("%v", p)
 		}
 		pathStr = strings.Join(parts, "/")
 	}
 
 	if pathStr != "" {
-		return fmt.Sprintf("%s: %s (at %s)", issue.Rule.ID, issue.Message, pathStr)
+		return fmt.Sprintf("%s: %s (at %s)", match.Rule.ID, match.Message, pathStr)
 	}
-	return fmt.Sprintf("%s: %s", issue.Rule.ID, issue.Message)
-}
-
-// parseCfnLintRaw parses cfn-lint output when JSON parsing fails.
-func parseCfnLintRaw(stdout, stderr string) (*CfnLintResult, error) {
-	result := &CfnLintResult{
-		Errors:        []string{},
-		Warnings:      []string{},
-		Informational: []string{},
-		RawOutput:     stdout,
-	}
-
-	for _, line := range strings.Split(stdout+stderr, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-
-		// Look for error/warning markers
-		lowerLine := strings.ToLower(line)
-		switch {
-		case strings.Contains(line, ":E") || strings.Contains(lowerLine, "error"):
-			result.Errors = append(result.Errors, line)
-		case strings.Contains(line, ":W") || strings.Contains(lowerLine, "warning"):
-			result.Warnings = append(result.Warnings, line)
-		default:
-			result.Informational = append(result.Informational, line)
-		}
-	}
-
-	result.Passed = len(result.Errors) == 0
-	return result, nil
+	return fmt.Sprintf("%s: %s", match.Rule.ID, match.Message)
 }
 
 // ValidatePackage runs the full validation pipeline on a package.
