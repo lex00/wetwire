@@ -9,21 +9,21 @@ import (
 )
 
 func TestRef_MarshalJSON(t *testing.T) {
-	ref := Ref{"MyBucket"}
+	ref := Ref{LogicalName: "MyBucket"}
 	data, err := json.Marshal(ref)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"Ref": "MyBucket"}`, string(data))
 }
 
 func TestGetAtt_MarshalJSON(t *testing.T) {
-	getAtt := GetAtt{"MyRole", "Arn"}
+	getAtt := GetAtt{LogicalName: "MyRole", Attribute: "Arn"}
 	data, err := json.Marshal(getAtt)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"Fn::GetAtt": ["MyRole", "Arn"]}`, string(data))
 }
 
 func TestSub_MarshalJSON(t *testing.T) {
-	sub := Sub{"${AWS::Region}-bucket"}
+	sub := Sub{String: "${AWS::Region}-bucket"}
 	data, err := json.Marshal(sub)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"Fn::Sub": "${AWS::Region}-bucket"}`, string(data))
@@ -33,7 +33,7 @@ func TestSubWithMap_MarshalJSON(t *testing.T) {
 	sub := SubWithMap{
 		String: "${Bucket}-data",
 		Variables: map[string]any{
-			"Bucket": Ref{"MyBucket"},
+			"Bucket": Ref{LogicalName: "MyBucket"},
 		},
 	}
 	data, err := json.Marshal(sub)
@@ -44,14 +44,14 @@ func TestSubWithMap_MarshalJSON(t *testing.T) {
 }
 
 func TestJoin_MarshalJSON(t *testing.T) {
-	join := Join{",", []any{"a", "b", "c"}}
+	join := Join{Delimiter: ",", Values: []any{"a", "b", "c"}}
 	data, err := json.Marshal(join)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"Fn::Join": [",", ["a", "b", "c"]]}`, string(data))
 }
 
 func TestSelect_MarshalJSON(t *testing.T) {
-	sel := Select{0, GetAZs{""}}
+	sel := Select{Index: 0, List: GetAZs{Region: ""}}
 	data, err := json.Marshal(sel)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"Fn::Select"`)
@@ -59,35 +59,35 @@ func TestSelect_MarshalJSON(t *testing.T) {
 }
 
 func TestGetAZs_MarshalJSON(t *testing.T) {
-	azs := GetAZs{""}
+	azs := GetAZs{Region: ""}
 	data, err := json.Marshal(azs)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"Fn::GetAZs": ""}`, string(data))
 
-	azs = GetAZs{"us-east-1"}
+	azs = GetAZs{Region: "us-east-1"}
 	data, err = json.Marshal(azs)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"Fn::GetAZs": "us-east-1"}`, string(data))
 }
 
 func TestIf_MarshalJSON(t *testing.T) {
-	ifExpr := If{"CreateBucket", "yes", "no"}
+	ifExpr := If{Condition: "CreateBucket", ValueIfTrue: "yes", ValueIfFalse: "no"}
 	data, err := json.Marshal(ifExpr)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"Fn::If": ["CreateBucket", "yes", "no"]}`, string(data))
 }
 
 func TestEquals_MarshalJSON(t *testing.T) {
-	eq := Equals{Ref{"Env"}, "prod"}
+	eq := Equals{Value1: Ref{LogicalName: "Env"}, Value2: "prod"}
 	data, err := json.Marshal(eq)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"Fn::Equals"`)
 }
 
 func TestAnd_MarshalJSON(t *testing.T) {
-	and := And{[]any{
-		Equals{Ref{"Env"}, "prod"},
-		Equals{Ref{"Region"}, "us-east-1"},
+	and := And{Conditions: []any{
+		Equals{Value1: Ref{LogicalName: "Env"}, Value2: "prod"},
+		Equals{Value1: Ref{LogicalName: "Region"}, Value2: "us-east-1"},
 	}}
 	data, err := json.Marshal(and)
 	require.NoError(t, err)
@@ -95,9 +95,9 @@ func TestAnd_MarshalJSON(t *testing.T) {
 }
 
 func TestOr_MarshalJSON(t *testing.T) {
-	or := Or{[]any{
-		Equals{Ref{"Env"}, "prod"},
-		Equals{Ref{"Env"}, "staging"},
+	or := Or{Conditions: []any{
+		Equals{Value1: Ref{LogicalName: "Env"}, Value2: "prod"},
+		Equals{Value1: Ref{LogicalName: "Env"}, Value2: "staging"},
 	}}
 	data, err := json.Marshal(or)
 	require.NoError(t, err)
@@ -105,42 +105,42 @@ func TestOr_MarshalJSON(t *testing.T) {
 }
 
 func TestNot_MarshalJSON(t *testing.T) {
-	not := Not{Equals{Ref{"Env"}, "dev"}}
+	not := Not{Condition: Equals{Value1: Ref{LogicalName: "Env"}, Value2: "dev"}}
 	data, err := json.Marshal(not)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"Fn::Not"`)
 }
 
 func TestBase64_MarshalJSON(t *testing.T) {
-	b64 := Base64{"Hello, World!"}
+	b64 := Base64{Value: "Hello, World!"}
 	data, err := json.Marshal(b64)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"Fn::Base64": "Hello, World!"}`, string(data))
 }
 
 func TestImportValue_MarshalJSON(t *testing.T) {
-	imp := ImportValue{"SharedVPC"}
+	imp := ImportValue{ExportName: "SharedVPC"}
 	data, err := json.Marshal(imp)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"Fn::ImportValue": "SharedVPC"}`, string(data))
 }
 
 func TestFindInMap_MarshalJSON(t *testing.T) {
-	fim := FindInMap{"RegionMap", Ref{"AWS::Region"}, "AMI"}
+	fim := FindInMap{MapName: "RegionMap", TopKey: Ref{LogicalName: "AWS::Region"}, SecondKey: "AMI"}
 	data, err := json.Marshal(fim)
 	require.NoError(t, err)
 	assert.Contains(t, string(data), `"Fn::FindInMap"`)
 }
 
 func TestSplit_MarshalJSON(t *testing.T) {
-	split := Split{",", "a,b,c"}
+	split := Split{Delimiter: ",", Source: "a,b,c"}
 	data, err := json.Marshal(split)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"Fn::Split": [",", "a,b,c"]}`, string(data))
 }
 
 func TestCidr_MarshalJSON(t *testing.T) {
-	cidr := Cidr{"10.0.0.0/16", 6, 8}
+	cidr := Cidr{IPBlock: "10.0.0.0/16", Count: 6, CidrBits: 8}
 	data, err := json.Marshal(cidr)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"Fn::Cidr": ["10.0.0.0/16", 6, 8]}`, string(data))
