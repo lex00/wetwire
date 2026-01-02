@@ -15,6 +15,7 @@
 //	WAW008: Use named var declarations instead of inline struct literals (block style)
 //	WAW009: Use typed structs instead of map[string]any in resource fields
 //	WAW010: Flatten inline typed struct literals to named var declarations
+//	WAW011: Validate enum property values against allowed values
 package linter
 
 import (
@@ -976,6 +977,205 @@ func findInlineTypedStructs(expr ast.Expr, fset *token.FileSet, ruleID string, d
 	return issues
 }
 
+// InvalidEnumValue detects invalid enum property values.
+// Uses cloudformation-schema-go/enums to validate values against known enums.
+//
+// Example:
+//
+//	// Bad - invalid enum value
+//	StorageClass: "INVALID_CLASS",
+//
+//	// Good - valid enum value
+//	StorageClass: "STANDARD",
+//	// Or use the constant
+//	StorageClass: enums.S3StorageClassSTANDARD,
+type InvalidEnumValue struct{}
+
+func (r InvalidEnumValue) ID() string { return "WAW011" }
+func (r InvalidEnumValue) Description() string {
+	return "Validate enum property values against allowed values"
+}
+
+// enumFieldInfo holds the service and enum name for a field.
+type enumFieldInfo struct {
+	service  string
+	enumName string
+}
+
+// enumFields maps CloudFormation property names to their enum info.
+// This allows the linter to validate string literals assigned to these fields.
+var enumFields = map[string]enumFieldInfo{
+	// S3 enums
+	"StorageClass": {"s3", "StorageClass"},
+
+	// EC2 enums
+	"InstanceType": {"ec2", "InstanceType"},
+
+	// Lambda enums
+	"Runtime":     {"lambda", "Runtime"},
+	"PackageType": {"lambda", "PackageType"},
+
+	// RDS enums
+	"Engine":        {"rds", "Engine"},
+	"EngineVersion": {"rds", "EngineVersion"},
+
+	// DynamoDB enums
+	"BillingMode":    {"dynamodb", "BillingMode"},
+	"StreamViewType": {"dynamodb", "StreamViewType"},
+	"TableClass":     {"dynamodb", "TableClass"},
+
+	// ECS enums
+	"LaunchType":         {"ecs", "LaunchType"},
+	"NetworkMode":        {"ecs", "NetworkMode"},
+	"SchedulingStrategy": {"ecs", "SchedulingStrategy"},
+}
+
+func (r InvalidEnumValue) Check(file *ast.File, fset *token.FileSet) []Issue {
+	var issues []Issue
+
+	// Check if the enums package is available
+	hasEnumsImport := false
+	for _, imp := range file.Imports {
+		if imp.Path != nil && strings.Contains(imp.Path.Value, "cloudformation-schema-go/enums") {
+			hasEnumsImport = true
+			break
+		}
+	}
+
+	ast.Inspect(file, func(n ast.Node) bool {
+		kv, ok := n.(*ast.KeyValueExpr)
+		if !ok {
+			return true
+		}
+
+		// Get field name
+		fieldIdent, ok := kv.Key.(*ast.Ident)
+		if !ok {
+			return true
+		}
+
+		// Check if this is a known enum field
+		enumInfo, ok := enumFields[fieldIdent.Name]
+		if !ok {
+			return true
+		}
+
+		// Check if value is a string literal
+		lit, ok := kv.Value.(*ast.BasicLit)
+		if !ok || lit.Kind != token.STRING {
+			// Skip non-string values (could be intrinsics, selectors, etc.)
+			return true
+		}
+
+		value := strings.Trim(lit.Value, `"`)
+
+		// Use the enums package to validate
+		if !isValidEnumValue(enumInfo.service, enumInfo.enumName, value) {
+			pos := fset.Position(lit.Pos())
+			allowed := getAllowedEnumValues(enumInfo.service, enumInfo.enumName)
+
+			// Limit displayed values if there are too many
+			displayAllowed := allowed
+			if len(allowed) > 5 {
+				displayAllowed = append(allowed[:5], "...")
+			}
+
+			suggestion := fmt.Sprintf("Use one of: %s", strings.Join(displayAllowed, ", "))
+			if !hasEnumsImport {
+				suggestion += " (or import enums package and use constants)"
+			}
+
+			issues = append(issues, Issue{
+				RuleID:     r.ID(),
+				Message:    fmt.Sprintf("Invalid %s value: %q", fieldIdent.Name, value),
+				Suggestion: suggestion,
+				File:       pos.Filename,
+				Line:       pos.Line,
+				Column:     pos.Column,
+				Severity:   "error",
+			})
+		}
+
+		return true
+	})
+
+	return issues
+}
+
+// isValidEnumValue checks if a value is valid for the given enum.
+// This is a local implementation to avoid import cycles with the enums package.
+func isValidEnumValue(service, enumName, value string) bool {
+	allowed := getAllowedEnumValues(service, enumName)
+	for _, v := range allowed {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}
+
+// getAllowedEnumValues returns the allowed values for an enum.
+// This is embedded here to avoid runtime dependency on the enums package.
+var enumAllowedValues = map[string]map[string][]string{
+	"s3": {
+		"StorageClass": {
+			"STANDARD", "REDUCED_REDUNDANCY", "STANDARD_IA", "ONEZONE_IA",
+			"INTELLIGENT_TIERING", "GLACIER", "DEEP_ARCHIVE", "OUTPOSTS",
+			"GLACIER_IR", "SNOW", "EXPRESS_ONEZONE",
+		},
+	},
+	"ec2": {
+		"InstanceType": {
+			// Common instance types (subset for linting purposes)
+			"t2.micro", "t2.small", "t2.medium", "t2.large", "t2.xlarge", "t2.2xlarge",
+			"t3.micro", "t3.small", "t3.medium", "t3.large", "t3.xlarge", "t3.2xlarge",
+			"t3a.micro", "t3a.small", "t3a.medium", "t3a.large", "t3a.xlarge", "t3a.2xlarge",
+			"m5.large", "m5.xlarge", "m5.2xlarge", "m5.4xlarge", "m5.8xlarge", "m5.12xlarge",
+			"m6i.large", "m6i.xlarge", "m6i.2xlarge", "m6i.4xlarge", "m6i.8xlarge",
+			"c5.large", "c5.xlarge", "c5.2xlarge", "c5.4xlarge", "c5.9xlarge",
+			"r5.large", "r5.xlarge", "r5.2xlarge", "r5.4xlarge", "r5.8xlarge",
+		},
+	},
+	"lambda": {
+		"Runtime": {
+			"nodejs18.x", "nodejs20.x", "nodejs22.x",
+			"python3.9", "python3.10", "python3.11", "python3.12", "python3.13",
+			"java11", "java17", "java21",
+			"dotnet6", "dotnet8",
+			"ruby3.2", "ruby3.3",
+			"provided", "provided.al2", "provided.al2023",
+		},
+		"PackageType":  {"Zip", "Image"},
+		"Architecture": {"x86_64", "arm64"},
+	},
+	"rds": {
+		"Engine": {
+			"mysql", "mariadb", "postgres", "oracle-ee", "oracle-se2",
+			"sqlserver-ee", "sqlserver-se", "sqlserver-ex", "sqlserver-web",
+			"aurora", "aurora-mysql", "aurora-postgresql",
+		},
+	},
+	"dynamodb": {
+		"BillingMode":    {"PROVISIONED", "PAY_PER_REQUEST"},
+		"StreamViewType": {"KEYS_ONLY", "NEW_IMAGE", "OLD_IMAGE", "NEW_AND_OLD_IMAGES"},
+		"TableClass":     {"STANDARD", "STANDARD_INFREQUENT_ACCESS"},
+	},
+	"ecs": {
+		"LaunchType":         {"EC2", "FARGATE", "EXTERNAL"},
+		"NetworkMode":        {"bridge", "host", "awsvpc", "none"},
+		"SchedulingStrategy": {"REPLICA", "DAEMON"},
+	},
+}
+
+func getAllowedEnumValues(service, enumName string) []string {
+	if svc, ok := enumAllowedValues[service]; ok {
+		if vals, ok := svc[enumName]; ok {
+			return vals
+		}
+	}
+	return nil
+}
+
 // AllRules returns all available lint rules.
 func AllRules() []Rule {
 	return []Rule{
@@ -989,5 +1189,6 @@ func AllRules() []Rule {
 		InlineStructLiteral{},
 		UnflattenedMap{},
 		InlineTypedStruct{},
+		InvalidEnumValue{},
 	}
 }

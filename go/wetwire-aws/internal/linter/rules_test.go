@@ -221,6 +221,122 @@ var MySecurityGroup = ec2.SecurityGroup{
 	assert.Len(t, issues, 0)
 }
 
+func TestInvalidEnumValue(t *testing.T) {
+	// Test invalid enum values
+	src := `package test
+
+import "github.com/lex00/wetwire-aws/resources/s3"
+
+var MyBucket = s3.Bucket{
+	StorageClass: "INVALID_CLASS",
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "test.go", src, 0)
+	require.NoError(t, err)
+
+	rule := InvalidEnumValue{}
+	issues := rule.Check(file, fset)
+
+	assert.Len(t, issues, 1)
+	if len(issues) > 0 {
+		assert.Equal(t, "WAW011", issues[0].RuleID)
+		assert.Contains(t, issues[0].Message, "Invalid StorageClass")
+		assert.Contains(t, issues[0].Message, "INVALID_CLASS")
+		assert.Equal(t, "error", issues[0].Severity)
+	}
+}
+
+func TestInvalidEnumValue_ValidValue(t *testing.T) {
+	// Test valid enum values don't trigger
+	src := `package test
+
+import "github.com/lex00/wetwire-aws/resources/s3"
+
+var MyBucket = s3.Bucket{
+	StorageClass: "STANDARD",
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "test.go", src, 0)
+	require.NoError(t, err)
+
+	rule := InvalidEnumValue{}
+	issues := rule.Check(file, fset)
+
+	assert.Len(t, issues, 0)
+}
+
+func TestInvalidEnumValue_LambdaRuntime(t *testing.T) {
+	// Test Lambda runtime validation
+	src := `package test
+
+import "github.com/lex00/wetwire-aws/resources/lambda_"
+
+var MyFunction = lambda_.Function{
+	Runtime: "python2.7",
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "test.go", src, 0)
+	require.NoError(t, err)
+
+	rule := InvalidEnumValue{}
+	issues := rule.Check(file, fset)
+
+	// python2.7 is deprecated and not in our allowed list
+	assert.Len(t, issues, 1)
+	if len(issues) > 0 {
+		assert.Contains(t, issues[0].Message, "Invalid Runtime")
+	}
+}
+
+func TestInvalidEnumValue_SkipsNonStringValues(t *testing.T) {
+	// Test that non-string values (intrinsics, variables) are skipped
+	src := `package test
+
+import "github.com/lex00/wetwire-aws/resources/lambda_"
+
+var runtimeVar = "python3.12"
+
+var MyFunction = lambda_.Function{
+	Runtime: runtimeVar,
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "test.go", src, 0)
+	require.NoError(t, err)
+
+	rule := InvalidEnumValue{}
+	issues := rule.Check(file, fset)
+
+	// Should not trigger - Runtime is assigned a variable, not a string literal
+	assert.Len(t, issues, 0)
+}
+
+func TestInvalidEnumValue_DynamoDB(t *testing.T) {
+	// Test DynamoDB BillingMode validation
+	src := `package test
+
+import "github.com/lex00/wetwire-aws/resources/dynamodb"
+
+var MyTable = dynamodb.Table{
+	BillingMode: "INVALID_MODE",
+}
+`
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "test.go", src, 0)
+	require.NoError(t, err)
+
+	rule := InvalidEnumValue{}
+	issues := rule.Check(file, fset)
+
+	assert.Len(t, issues, 1)
+	if len(issues) > 0 {
+		assert.Contains(t, issues[0].Message, "Invalid BillingMode")
+	}
+}
+
 func TestAllRules(t *testing.T) {
 	rules := AllRules()
 	assert.GreaterOrEqual(t, len(rules), 5)
@@ -230,4 +346,11 @@ func TestAllRules(t *testing.T) {
 		assert.NotEmpty(t, r.ID())
 		assert.NotEmpty(t, r.Description())
 	}
+
+	// Verify WAW011 is included
+	ruleIDs := make([]string, len(rules))
+	for i, r := range rules {
+		ruleIDs[i] = r.ID()
+	}
+	assert.Contains(t, ruleIDs, "WAW011")
 }
